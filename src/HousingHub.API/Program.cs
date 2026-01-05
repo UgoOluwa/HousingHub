@@ -1,12 +1,13 @@
 using Asp.Versioning;
 using HousingHub.API.Common;
-using Microsoft.Extensions.Options;
-using Serilog;
-using Swashbuckle.AspNetCore.SwaggerGen;
+using HousingHub.API.Common.Middlewares;
 using HousingHub.Application;
 using HousingHub.Repository;
 using HousingHub.Service;
-using HousingHub.API.Common.Middlewares;
+using Microsoft.Extensions.Options;
+using Scalar.AspNetCore;
+using Serilog;
+using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace HousingHub.API
 {
@@ -55,7 +56,6 @@ namespace HousingHub.API
 
             builder.Services.AddTransient<ExceptionHandlingMiddleware>();
 
-
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.
@@ -64,17 +64,21 @@ namespace HousingHub.API
                 app.UseSwagger();
                 app.UseSwaggerUI(
                     options =>
-                {
-                    var descriptions = app.DescribeApiVersions();
-
-                    // build a swagger endpoint for each discovered API version
-                    foreach (var description in descriptions.Select(x => x.GroupName))
                     {
-                        var url = $"/swagger/{description}/swagger.json";
-                        var name = description.ToUpperInvariant();
-                        options.SwaggerEndpoint(url, name);
+                        var descriptions = app.DescribeApiVersions();
+
+                        // build a swagger endpoint for each discovered API version
+                        foreach (var description in descriptions.Select(x => x.GroupName))
+                        {
+                            var url = $"/swagger/{description}/swagger.json";
+                            var name = description.ToUpperInvariant();
+                            options.SwaggerEndpoint(url, name);
+                        }
                     }
-                });
+                );
+
+                app.MapSwagger("/openapi/{documentName}.json");
+                app.MapScalarApiReference();
             }
 
             app.UseHttpsRedirection();

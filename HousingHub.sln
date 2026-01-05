@@ -22,7 +22,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		.editorconfig = .editorconfig
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HousingHub.Test", "HousingHub.Test\HousingHub.Test.csproj", "{E476AF68-5FC8-4E43-9D6F-5C4293F1C4BC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HousingHub.Test", "src\HousingHub.Test\HousingHub.Test.csproj", "{260ACCAB-7038-481A-806C-3FAD22D65DC6}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -58,12 +58,15 @@ Global
 		{8462D183-3D60-491A-B457-53DC2FE7C121}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8462D183-3D60-491A-B457-53DC2FE7C121}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8462D183-3D60-491A-B457-53DC2FE7C121}.Release|Any CPU.Build.0 = Release|Any CPU
-		{E476AF68-5FC8-4E43-9D6F-5C4293F1C4BC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{E476AF68-5FC8-4E43-9D6F-5C4293F1C4BC}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{E476AF68-5FC8-4E43-9D6F-5C4293F1C4BC}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{E476AF68-5FC8-4E43-9D6F-5C4293F1C4BC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{260ACCAB-7038-481A-806C-3FAD22D65DC6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{260ACCAB-7038-481A-806C-3FAD22D65DC6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{260ACCAB-7038-481A-806C-3FAD22D65DC6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{260ACCAB-7038-481A-806C-3FAD22D65DC6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {1933496B-4E95-487A-9AB1-67A520711E99}
 	EndGlobalSection
 EndGlobal

@@ -7,17 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AutoMapper" Version="13.0.1" />
+    <PackageReference Include="AutoMapper" Version="16.0.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.3" />
-    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.6.0.109712">
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.17.0.131074">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\HousingHub.Model\HousingHub.Model.csproj" />
-    <ProjectReference Include="..\HousingHub.Repository\HousingHub.Repository.csproj" />
   </ItemGroup>
 
 </Project>

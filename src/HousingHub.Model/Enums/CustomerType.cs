@@ -9,6 +9,6 @@ public enum CustomerType
     HouseOwner = 1,
     [Description("Agent")]
     Agent = 2,
-    [Description("Renter")]
-    Renter = 4
+    [Description("Customer")]
+    Customer = 4
 }

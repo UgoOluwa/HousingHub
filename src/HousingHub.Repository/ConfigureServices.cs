@@ -14,10 +14,20 @@ public static class ConfigureServices
     {
         services.AddScoped<AppDbContext>();
         services.AddScoped<IUnitOfWOrk, UnitOfWork>();
-        services.AddScoped<IWeatherForcastCommadRepository, WeatherForcastCommandRepository>();
-        services.AddScoped<IWeatherForcastQueryRepository, WeatherForcastQueryRepository>();
         services.AddScoped(typeof(IGenericCommandRepository<>), typeof(GenericCommandRepository<>));
         services.AddScoped(typeof(IGenericQueryRepository<>), typeof(GenericQueryRepository<>));
+        services.AddScoped<IPropertyQueryRepository, PropertyQueryRepository>();
+        services.AddScoped<IPropertyAddressQueryRepository, PropertyAddressQueryRepository>();
+        services.AddScoped<IPropertyFileQueryRepository, PropertyFileQueryRepository>();
+        services.AddScoped<IPropertyInterestQueryRepository, PropertyInterestQueryRepository>();
+        services.AddScoped<IPropertyCommandRepository, PropertyCommandRepository>();
+        services.AddScoped<IPropertyAddressCommandRepository, PropertyAddressCommandRepository>();
+        services.AddScoped<IPropertyFileCommandRepository, PropertyFileCommandRepository>();
+        services.AddScoped<IPropertyInterestCommandRepository, PropertyInterestCommandRepository>();
+        services.AddScoped<ICustomerAddressCommandRepository, CustomerAddressCommandRepository>();
+        services.AddScoped<ICustomerCommandRepository, CustomerCommandRepository>();
+        services.AddScoped<ICustomerQueryRepository, CustomerQueryRepository>();
+        services.AddScoped<ICustomerAddressQueryRepository, CustomerAddressQueryRepository>();
 
         return services;
     }

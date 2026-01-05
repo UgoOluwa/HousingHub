@@ -1,10 +1,11 @@
 ﻿namespace HousingHub.API.Common;
 
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
-using System.Text.Json;
 
 /// <summary>
 /// Represents the OpenAPI/Swashbuckle operation filter used to document information provided, but not used.
@@ -56,10 +57,10 @@ public class SwaggerDefaultValues : IOperationFilter
             {
                 // REF: https://github.com/Microsoft/aspnet-api-versioning/issues/429#issuecomment-605402330
                 var json = JsonSerializer.Serialize(description.DefaultValue, modelMetadata.ModelType);
-                parameter.Schema.Default = OpenApiAnyFactory.CreateFromJson(json);
+               // parameter.Schema = JsonNode.Parse(json);
             }
 
-            parameter.Required |= description.IsRequired;
+           // parameter.Required |= description.IsRequired;
         }
     }
 }

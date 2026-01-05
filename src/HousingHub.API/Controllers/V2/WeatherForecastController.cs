@@ -8,12 +8,12 @@ namespace HousingHub.API.Controllers.V2
     [ApiVersion("2.0")]
     [Route("api/v{version:apiVersion}/[Controller]")]
 
-    public class WeatherForecastController : ControllerBase
+    public class CustomerController : ControllerBase
     {
-        private readonly ILogger<WeatherForecastController> _logger;
+        private readonly ILogger<CustomerController> _logger;
         private readonly IMediator _mediator;
 
-        public WeatherForecastController(ILogger<WeatherForecastController> logger, IMediator mediator)
+        public CustomerController(ILogger<CustomerController> logger, IMediator mediator)
         {
             _logger = logger;
             _mediator = mediator;

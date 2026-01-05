@@ -16,7 +16,7 @@ public class AppDbContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        optionsBuilder.UseNpgsql("Server=localhost;Database=fastapi;Username=postgres;Password=admin;");
+        optionsBuilder.UseNpgsql("Server=localhost;Database=housing;Username=postgres;Password=admin;");
     }
 
     public DbSet<PropertyFile> PropertyFiles { get; set; } = default!;

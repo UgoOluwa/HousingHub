@@ -21,7 +21,7 @@ public class CustomerAddress : BaseEntity
 
     public CustomerAddress(){}
 
-    public CustomerAddress(string street, string city, string state, string country, string postalCode)
+    public CustomerAddress(string street, string city, string state, string country, string postalCode, Guid customerId)
     {
         Id = Guid.NewGuid();
         DateCreated = DateTime.UtcNow;
@@ -31,5 +31,6 @@ public class CustomerAddress : BaseEntity
         State = state;
         Country = country;
         PostalCode = postalCode;
+        CustomerId = customerId;
     }
 }

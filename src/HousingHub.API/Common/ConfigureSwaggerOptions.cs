@@ -4,7 +4,7 @@ using Asp.Versioning.ApiExplorer;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
 using System.Text;
 
@@ -36,10 +36,10 @@ public class ConfigureSwaggerOptions : IConfigureOptions<SwaggerGenOptions>
 
     private static OpenApiInfo CreateInfoForApiVersion(ApiVersionDescription description)
     {
-        var text = new StringBuilder("This is the template service for TechHost services.");
+        var text = new StringBuilder("This is the Housing Hub Documentation.");
         var info = new OpenApiInfo()
         {
-            Title = "TechHost Service Template API",
+            Title = "Housing Hub API",
             Version = description.ApiVersion.ToString(),
             Contact = new OpenApiContact() { Name = "Ugochukwu Odunukwe", Email = "ugoluwa@gmail.com" },
             // License = new OpenApiLicense() { Name = "MIT", Url = new Uri("https://opensource.org/licenses/MIT") }

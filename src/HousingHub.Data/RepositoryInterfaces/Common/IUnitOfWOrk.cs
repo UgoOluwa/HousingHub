@@ -5,10 +5,18 @@ namespace HousingHub.Data.RepositoryInterfaces.Common;
 
 public interface IUnitOfWOrk : IDisposable
 {
-    #region Weather Forcast Repository
-    IWeatherForcastCommadRepository WeatherForcastCommadRepository { get; }
-    IWeatherForcastQueryRepository WeatherForcastQueryRepository { get; }
-    #endregion
+    ICustomerAddressCommandRepository CustomerAddressCommands { get; }
+    ICustomerAddressQueryRepository CustomerAddressQueries { get; }
+    ICustomerCommandRepository CustomerCommands { get; }
+    ICustomerQueryRepository CustomerQueries { get; }
+    IPropertyInterestCommandRepository PropertyInterestCommands { get; }
+    IPropertyInterestQueryRepository PropertyInterestQueries { get; }
+    IPropertyAddressCommandRepository PropertyAddressCommands { get; }
+    IPropertyAddressQueryRepository PropertyAddressQueries { get; }
+    IPropertyFileCommandRepository PropertyFileCommands { get; }
+    IPropertyFileQueryRepository PropertyFileQueries { get; }
+    IPropertyCommandRepository PropertyCommands { get; }
+    IPropertyQueryRepository PropertyQueries { get; }
 
     Task SaveAsync();
 }
