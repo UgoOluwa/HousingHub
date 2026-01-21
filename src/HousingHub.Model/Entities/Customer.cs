@@ -50,7 +50,7 @@ public class Customer : BaseEntity
     // Relationships
     public ICollection<Property> Properties { get; set; } = new List<Property>();
     public ICollection<PropertyInterest> Interests { get; set; } = new List<PropertyInterest>();
-    public Guid AddressId { get; set; }
+    public Guid? AddressId { get; set; }
     public CustomerAddress? Address { get; set; } = null!;
 
     public Customer() { }
@@ -58,8 +58,6 @@ public class Customer : BaseEntity
     public Customer(string firstName, string lastName, string email, string phoneNumber, CustomerType customerType, DateTime? dateOfBirth)
     {
         Id = Guid.NewGuid();
-        DateCreated = DateTime.UtcNow;
-        DateModified = DateTime.UtcNow;
         FirstName = firstName;
         LastName = lastName;
         Email = email;
@@ -71,7 +69,6 @@ public class Customer : BaseEntity
     public void UpdateKycStatus(bool isVerified)
     {
         IsKycVerified = isVerified;
-        DateModified = DateTime.UtcNow;
     }
 
     public void AddKYCDetails(DateTime? dateOfBirth, string? nationalIdNumber, IDType idType, string? idDocumentUrl, DateTime submittedAt, string? jobTitle, string? companyName, string? industry)
@@ -84,6 +81,5 @@ public class Customer : BaseEntity
         JobTitle = jobTitle;
         CompanyName = companyName;
         Industry = industry;
-        DateModified = DateTime.UtcNow;
     }
 }

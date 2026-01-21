@@ -46,6 +46,7 @@ namespace HousingHub.API.Controllers.V1
         [HttpGet("all")]
         [ProducesResponseType(typeof(BaseResponse<List<CustomerDto>>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll()
+
         {
             var response = await _mediator.Send(new GetAllCustomersQuery());
             return Ok(response);

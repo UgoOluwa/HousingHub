@@ -24,8 +24,6 @@ public class CustomerAddress : BaseEntity
     public CustomerAddress(string street, string city, string state, string country, string postalCode, Guid customerId)
     {
         Id = Guid.NewGuid();
-        DateCreated = DateTime.UtcNow;
-        DateModified = DateTime.UtcNow;
         Street = street;
         City = city;
         State = state;

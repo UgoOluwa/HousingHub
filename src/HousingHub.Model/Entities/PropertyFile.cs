@@ -19,8 +19,6 @@ public class PropertyFile : BaseEntity
     public PropertyFile(string fileUrl, PropertyFileType type)
     {
         Id = Guid.NewGuid();
-        DateCreated = DateTime.UtcNow;
-        DateModified = DateTime.UtcNow;
         FileUrl = fileUrl;
         Type = type;
         DateUploaded = DateTime.UtcNow;

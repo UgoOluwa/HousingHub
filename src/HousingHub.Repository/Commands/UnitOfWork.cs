@@ -2,6 +2,9 @@
 using HousingHub.Data.RepositoryInterfaces.Commands;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Data.RepositoryInterfaces.Queries;
+using HousingHub.Model.Entities;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace HousingHub.Repository.Commands;
 
@@ -41,8 +44,31 @@ public class UnitOfWork : IUnitOfWOrk
 
     public async Task SaveAsync()
     {
+        var entries = _applicationContext.ChangeTracker
+            .Entries<BaseEntity>()
+            .Where(e =>
+                e.State == EntityState.Added ||
+                e.State == EntityState.Modified);
+
+        var utcNow = DateTime.UtcNow;
+
+        foreach (var entry in entries)
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.DateCreated = utcNow;
+                entry.Entity.DateModified = utcNow;
+                entry.Entity.IsActive = true;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.DateModified = utcNow;
+            }
+        }
+
         await _applicationContext.SaveChangesAsync();
     }
+
     public void Dispose()
     {
         Dispose(true);

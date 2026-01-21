@@ -13,8 +13,6 @@ public class PropertyInterest : BaseEntity
     public PropertyInterest(Guid customerId, Guid propertyId)
     {
         Id = Guid.NewGuid();
-        DateCreated = DateTime.UtcNow;
-        DateModified = DateTime.UtcNow;
         CustomerId = customerId;
         PropertyId = propertyId;
     }

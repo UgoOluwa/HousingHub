@@ -7,13 +7,10 @@ public class BaseEntity
 {
     [Required]
     [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public Guid Id { get; set; }
     [Required]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public DateTime DateCreated { get; set; }
     [Required]
-    [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
     public DateTime DateModified { get; set; }
     [Required]
     public bool IsActive { get; set; }

@@ -24,8 +24,6 @@ public class PropertyAddress : BaseEntity
     public PropertyAddress(string place, string city, string state, string country, string postalCode)
     {
         Id = Guid.NewGuid();
-        DateCreated = DateTime.UtcNow;
-        DateModified = DateTime.UtcNow;
         Place = place;
         City = city;
         State = state;

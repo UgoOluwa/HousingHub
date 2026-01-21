@@ -28,8 +28,6 @@ public class Property : BaseEntity
     public Property(string title, string description, PropertyType propertyType, decimal price, bool isAvailable, PropertyLeaseType propertyLeaseType)
     {
         Id = Guid.NewGuid();
-        DateCreated = DateTime.UtcNow;
-        DateModified = DateTime.UtcNow;
         Title = title;
         Description = description;
         PropertyType = propertyType;
