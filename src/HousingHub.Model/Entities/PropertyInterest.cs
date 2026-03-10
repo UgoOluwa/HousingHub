@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using HousingHub.Model.Enums;
 
 namespace HousingHub.Model.Entities;

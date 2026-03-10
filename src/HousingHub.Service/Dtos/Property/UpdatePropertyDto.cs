@@ -1,6 +1,18 @@
+using HousingHub.Model.Enums;
 using HousingHub.Service.Dtos.PropertyAddress;
-using HousingHub.Service.Dtos.PropertyFile;
 
 namespace HousingHub.Service.Dtos.Property;
 
-public record UpdatePropertyDto(string? Title, string? Description, int? PropertyType, decimal? Price, bool? IsAvailable, int? PropertyLeaseType, Guid? OwnerId, UpdatePropertyAddressDto? propertyAddress, UpdatePropertyFileDto? propertyFile);
+public record UpdatePropertyDto(
+    Guid Id,
+    string? Title,
+    string? Description,
+    PropertyType? PropertyType,
+    decimal? Price,
+    PropertyAvailability? Availability,
+    PropertyLeaseType? PropertyLeaseType,
+    PropertyFeature? Features,
+    string? ContactPersonName,
+    string? ContactPersonEmail,
+    string? ContactPersonPhoneNumber,
+    UpdatePropertyAddressDto? PropertyAddress);

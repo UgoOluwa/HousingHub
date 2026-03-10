@@ -2,6 +2,7 @@
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
+using HousingHub.Service.Commons.Authentication;
 using HousingHub.Service.CustomerService.Interfaces;
 using HousingHub.Service.Dtos.Customer;
 using HousingHub.Service.RepositoryInterfaces.Common;
@@ -15,26 +16,30 @@ public class CustomerCommandService : ICustomerCommandService
     private readonly ILogger<CustomerCommandService> _logger;
     private const string ClassName = "customer";
     private readonly IMapper _mapper;
+    private readonly IPasswordHasher _passwordHasher;
+    private readonly ITokenProvider _tokenProvider;
 
-    public CustomerCommandService(ILogger<CustomerCommandService> logger, IUnitOfWOrk unitOfWOrk, IMapper mapper)
+    public CustomerCommandService(ILogger<CustomerCommandService> logger, IUnitOfWOrk unitOfWOrk, IMapper mapper, IPasswordHasher passwordHasher, ITokenProvider tokenProvider)
     {
         _logger = logger;
         _unitOfWOrk = unitOfWOrk;
         _mapper = mapper;
+        _passwordHasher = passwordHasher;
+        _tokenProvider = tokenProvider;
     }
 
     public async Task<BaseResponse<CustomerDto>> CreateCustomer(CreateCustomerDto request)
     {
         try
         {
-            // Check for existing customer with same email or phone number could be added here
             bool existingCustomer = await _unitOfWOrk.CustomerQueries.AnyAsync(x => x.Email == request.Email || x.PhoneNumber == request.PhoneNumber);
             if (existingCustomer)
             {
                 return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.CustomerAlreadyExists);
             }
 
-            var newEntity = new Customer(request.FirstName, request.LastName, request.Email, request.PhoneNumber, request.CustomerType, request.DateOfBirth);
+            var newEntity = _mapper.Map<Customer>(request);
+            newEntity.Id = Guid.NewGuid();
             bool isSuccessful = await _unitOfWOrk.CustomerCommands.InsertAsync(newEntity);
             if (!isSuccessful)
             {
@@ -52,6 +57,63 @@ public class CustomerCommandService : ICustomerCommandService
             return new BaseResponse<CustomerDto>(null, false, string.Empty, ex.Message);
         }
     }
+
+    public async Task<BaseResponse<CustomerDto>> RegisterCustomer(RegisterCustomerDto request)
+    {
+        try
+        {
+            // Check for existing customer with same email or phone number could be added here
+            bool existingCustomer = await _unitOfWOrk.CustomerQueries.AnyAsync(x => x.Email == request.Email || x.PhoneNumber == request.PhoneNumber);
+            if (existingCustomer)
+            {
+                return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.CustomerAlreadyExists);
+            }
+
+            string passwordHash = _passwordHasher.Hash(request.Password);
+
+            var newEntity = new Customer(request.FirstName, request.LastName, request.Email, request.PhoneNumber, request.CustomerType, passwordHash);
+            bool isSuccessful = await _unitOfWOrk.CustomerCommands.InsertAsync(newEntity);
+            if (!isSuccessful)
+            {
+                return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.SetCreationFailureMessage(ClassName));
+            }
+
+            await _unitOfWOrk.SaveAsync();
+
+            CustomerDto response = _mapper.Map<CustomerDto>(newEntity);
+            return new BaseResponse<CustomerDto>(response, true, string.Empty, ResponseMessages.SetCreationSuccessMessage(ClassName));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in CreateCustomer: {Message}", ex.Message);
+            return new BaseResponse<CustomerDto>(null, false, string.Empty, ex.Message);
+        }
+    }
+
+    // login customer
+    public async Task<BaseResponse<LoginCustomerResponseDto>> LoginCustomer(LoginCustomerDto request)
+    {
+        try
+        {
+            var existingCustomer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Email == request.Email, findOptions: new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+        if (existingCustomer == null || !_passwordHasher.Verify(request.Password, existingCustomer.PasswordHash))
+            {
+                return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidCredentials);
+            }
+
+            string token = _tokenProvider.Create(existingCustomer);
+
+            LoginCustomerResponseDto response = _mapper.Map<LoginCustomerResponseDto>(existingCustomer);
+            response = response with { token = token };
+            return new BaseResponse<LoginCustomerResponseDto>(response, true, string.Empty, ResponseMessages.LoginSuccess);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in LoginCustomer: {Message}", ex.Message);
+            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+        }
+    }
+
 
     // Update Customer
     public async Task<BaseResponse<CustomerDto>> UpdateCustomer(UpdateCustomerDto request)

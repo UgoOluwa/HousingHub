@@ -57,4 +57,24 @@ public class CustomerQueryService : ICustomerQueryService
             return new BaseResponse<List<CustomerDto>>(new List<CustomerDto>(), false, string.Empty, ex.Message);
         }
     }
+
+    public async Task<BaseResponse<PaginatedResult<CustomerDto>>> GetAllCustomersPaginatedAsync(int pageNumber, int pageSize)
+    {
+        try
+        {
+            var (customers, totalCount) = await _unitOfWOrk.CustomerQueries.GetPagedAsync(
+                pageNumber, pageSize,
+                findOptions: new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+
+            var mappedItems = _mapper.Map<List<CustomerDto>>(customers);
+            var paginatedResult = new PaginatedResult<CustomerDto>(mappedItems, totalCount, pageNumber, pageSize);
+
+            return new BaseResponse<PaginatedResult<CustomerDto>>(paginatedResult, true, string.Empty, ResponseMessages.Successful);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in GetAllCustomersPaginatedAsync: {Message}", ex.Message);
+            return new BaseResponse<PaginatedResult<CustomerDto>>(null, false, string.Empty, ex.Message);
+        }
+    }
 }

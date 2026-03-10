@@ -1,10 +1,19 @@
+using System.Text;
 using Asp.Versioning;
+using HealthChecks.UI.Client;
 using HousingHub.API.Common;
+using HousingHub.API.Common.Extensions;
 using HousingHub.API.Common.Middlewares;
 using HousingHub.Application;
 using HousingHub.Repository;
 using HousingHub.Service;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using Serilog;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -48,10 +57,50 @@ namespace HousingHub.API
                 options.SubstituteApiVersionInUrl = true; //This will help us to resolve the ambiguity when there is a routing conflict due to routing template one or more end points are same.
             });
 
+            builder.Services.AddAuthorization(options =>
+            {
+                options.AddPolicy("PropertyOwnerOrAgent", policy =>
+                    policy.RequireAssertion(context =>
+                    {
+                        var customerType = context.User.FindFirst("customer_type")?.Value;
+                        if (string.IsNullOrEmpty(customerType)) return false;
+                        return customerType.Contains("HouseOwner") || customerType.Contains("Agent");
+                    }));
+            });
+            builder.Services.AddAuthentication(options =>
+                {
+                    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+                })
+                .AddJwtBearer(o =>
+                {
+                    o.RequireHttpsMetadata = false;
+                    o.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"]!)),
+                        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+                        ValidAudience = builder.Configuration["Jwt:Audience"],
+                        ClockSkew = TimeSpan.Zero
+                    };
+                })
+                .AddCookie("ExternalAuth", o =>
+                {
+                    o.Cookie.SameSite = SameSiteMode.Lax;
+                    o.Cookie.HttpOnly = true;
+                    o.ExpireTimeSpan = TimeSpan.FromMinutes(10);
+                })
+                .AddGoogle(GoogleDefaults.AuthenticationScheme, o =>
+                {
+                    o.ClientId = builder.Configuration["Google:ClientId"]!;
+                    o.ClientSecret = builder.Configuration["Google:ClientSecret"]!;
+                    o.SignInScheme = "ExternalAuth";
+                    o.SaveTokens = true;
+                });
+
             //Add methods Extensions
-            builder.Services.AddInjectionRepository();
-            builder.Services.AddInjectionService();
-            builder.Services.AddInjectionApplication();
+            builder.Services.AddInjectionRepository()
+                .AddInjectionService()
+                .AddInjectionApplication();
 
 
             builder.Services.AddTransient<ExceptionHandlingMiddleware>();
@@ -61,31 +110,23 @@ namespace HousingHub.API
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
             {
-                app.UseSwagger();
-                app.UseSwaggerUI(
-                    options =>
-                    {
-                        var descriptions = app.DescribeApiVersions();
+                app.UseDocWithUi();
 
-                        // build a swagger endpoint for each discovered API version
-                        foreach (var description in descriptions.Select(x => x.GroupName))
-                        {
-                            var url = $"/swagger/{description}/swagger.json";
-                            var name = description.ToUpperInvariant();
-                            options.SwaggerEndpoint(url, name);
-                        }
-                    }
-                );
-
-                app.MapSwagger("/openapi/{documentName}.json");
-                app.MapScalarApiReference();
+                app.ApplyMigrations();               
             }
 
+            app.MapHealthChecks("health", new HealthCheckOptions
+            {
+                ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+            });
+
             app.UseHttpsRedirection();
+            app.UseAppExceptionMiddleware();
+
+            app.UseAuthentication();
 
             app.UseAuthorization();
-
-            app.UseAppExceptionMiddleware();
+            
 
             app.MapControllers();
 

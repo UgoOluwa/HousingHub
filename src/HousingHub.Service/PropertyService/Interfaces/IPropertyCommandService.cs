@@ -5,5 +5,7 @@ namespace HousingHub.Service.PropertyService.Interfaces;
 
 public interface IPropertyCommandService
 {
-    Task<BaseResponse<PropertyDto>> CreateProperty(CreatePropertyDto request);
+    Task<BaseResponse<PropertyDto>> CreateProperty(CreatePropertyDto request, Guid authenticatedUserId);
+    Task<BaseResponse<PropertyDto>> UpdateProperty(UpdatePropertyDto request, Guid authenticatedUserId);
+    Task<BaseResponse<bool>> DeleteProperty(Guid propertyId, Guid authenticatedUserId);
 }

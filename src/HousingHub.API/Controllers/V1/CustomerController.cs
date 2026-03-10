@@ -44,11 +44,10 @@ namespace HousingHub.API.Controllers.V1
         }
 
         [HttpGet("all")]
-        [ProducesResponseType(typeof(BaseResponse<List<CustomerDto>>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetAll()
-
+        [ProducesResponseType(typeof(BaseResponsePagination<HousingHub.Core.CustomResponses.PaginatedResult<CustomerDto>>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetAll([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
         {
-            var response = await _mediator.Send(new GetAllCustomersQuery());
+            var response = await _mediator.Send(new GetAllCustomersQuery(pageNumber, pageSize));
             return Ok(response);
         }
         

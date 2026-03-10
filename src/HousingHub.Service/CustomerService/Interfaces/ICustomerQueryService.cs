@@ -7,4 +7,5 @@ public interface ICustomerQueryService
 {
     Task<BaseResponse<CustomerWithDetailsDto?>> GetCustomerAsync(Guid id);
     Task<BaseResponse<List<CustomerDto>>> GetAllCustomersAsync();
+    Task<BaseResponse<PaginatedResult<CustomerDto>>> GetAllCustomersPaginatedAsync(int pageNumber, int pageSize);
 }
