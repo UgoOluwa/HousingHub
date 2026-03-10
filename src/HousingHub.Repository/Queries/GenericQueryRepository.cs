@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using HousingHub.Data.Contexts;
 using HousingHub.Data.RepositoryInterfaces.Queries;
@@ -35,6 +35,22 @@ public partial class GenericQueryRepository<T> : IGenericQueryRepository<T> wher
     public async Task<int> CountAsync(Expression<Func<T, bool>> predicate)
     {
         return await _applicationContext.Set<T>().CountAsync(predicate);
+    }
+
+    public async Task<(IEnumerable<T> Items, int TotalCount)> GetPagedAsync(int pageNumber, int pageSize, Expression<Func<T, bool>>? predicate = null, FindOptions? findOptions = null)
+    {
+        IQueryable<T> query = Get(findOptions);
+
+        if (predicate != null)
+            query = query.Where(predicate);
+
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (items, totalCount);
     }
 
     private DbSet<T> Get(FindOptions? findOptions = null)

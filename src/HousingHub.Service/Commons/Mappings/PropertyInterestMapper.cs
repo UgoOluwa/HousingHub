@@ -1,15 +1,15 @@
-﻿using AutoMapper;
+using AutoMapper;
 using HousingHub.Model.Entities;
-using HousingHub.Service.Dtos.PropertyInterest;
+using HousingHub.Service.Dtos.Inspection;
+using HousingHub.Service.Dtos.Notification;
 
 namespace HousingHub.Service.Commons.Mappings;
 
-public class PropertyInterestMapper : Profile
+public class InspectionMapper : Profile
 {
-    public PropertyInterestMapper()
+    public InspectionMapper()
     {
-        CreateMap<PropertyInterest, PropertyInterestDto>().ReverseMap();
-        CreateMap<CreatePropertyInterestDto, PropertyInterest>();
-        CreateMap<UpdatePropertyInterestDto, PropertyInterest>();
+        CreateMap<PropertyInspection, InspectionDto>();
+        CreateMap<Notification, NotificationDto>();
     }
 }

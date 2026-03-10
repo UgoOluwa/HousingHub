@@ -4,9 +4,9 @@ using HousingHub.Model.Entities;
 
 namespace HousingHub.Repository.Commands;
 
-public class PropertyInterestCommandRepository : GenericCommandRepository<PropertyInterest>, IPropertyInterestCommandRepository
+public class PropertyInspectionCommandRepository : GenericCommandRepository<PropertyInspection>, IPropertyInspectionCommandRepository
 {
-    public PropertyInterestCommandRepository(AppDbContext dbContext)
+    public PropertyInspectionCommandRepository(AppDbContext dbContext)
         : base(dbContext)
     {
         

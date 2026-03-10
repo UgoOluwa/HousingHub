@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using HousingHub.Data.Contexts;
 using HousingHub.Data.RepositoryInterfaces.Commands;
 using HousingHub.Data.RepositoryInterfaces.Common;
@@ -19,11 +19,13 @@ public static class ConfigureServices
         services.AddScoped<IPropertyQueryRepository, PropertyQueryRepository>();
         services.AddScoped<IPropertyAddressQueryRepository, PropertyAddressQueryRepository>();
         services.AddScoped<IPropertyFileQueryRepository, PropertyFileQueryRepository>();
-        services.AddScoped<IPropertyInterestQueryRepository, PropertyInterestQueryRepository>();
+        services.AddScoped<IPropertyInspectionQueryRepository, PropertyInspectionQueryRepository>();
         services.AddScoped<IPropertyCommandRepository, PropertyCommandRepository>();
         services.AddScoped<IPropertyAddressCommandRepository, PropertyAddressCommandRepository>();
         services.AddScoped<IPropertyFileCommandRepository, PropertyFileCommandRepository>();
-        services.AddScoped<IPropertyInterestCommandRepository, PropertyInterestCommandRepository>();
+        services.AddScoped<IPropertyInspectionCommandRepository, PropertyInspectionCommandRepository>();
+        services.AddScoped<INotificationCommandRepository, NotificationCommandRepository>();
+        services.AddScoped<INotificationQueryRepository, NotificationQueryRepository>();
         services.AddScoped<ICustomerAddressCommandRepository, CustomerAddressCommandRepository>();
         services.AddScoped<ICustomerCommandRepository, CustomerCommandRepository>();
         services.AddScoped<ICustomerQueryRepository, CustomerQueryRepository>();

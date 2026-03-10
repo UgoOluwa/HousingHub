@@ -4,9 +4,9 @@ using HousingHub.Model.Entities;
 
 namespace HousingHub.Repository.Queries;
 
-public class PropertyInterestQueryRepository : GenericQueryRepository<PropertyInterest>, IPropertyInterestQueryRepository
+public class PropertyInspectionQueryRepository : GenericQueryRepository<PropertyInspection>, IPropertyInspectionQueryRepository
 {
-    public PropertyInterestQueryRepository(AppDbContext dbContext)
+    public PropertyInspectionQueryRepository(AppDbContext dbContext)
         : base(dbContext)
     {
         
