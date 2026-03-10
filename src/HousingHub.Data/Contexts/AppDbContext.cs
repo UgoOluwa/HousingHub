@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using HousingHub.Data.EntityConfigurations;
 using HousingHub.Model.Entities;
 
@@ -22,7 +22,8 @@ public class AppDbContext : DbContext
     public DbSet<PropertyFile> PropertyFiles { get; set; } = default!;
     public DbSet<Property> Properties { get; set; } = default!;
     public DbSet<PropertyAddress> PropertyAddresses { get; set; } = default!;
-    public DbSet<PropertyInterest> PropertyInterests { get; set; } = default!;
+    public DbSet<PropertyInspection> PropertyInspections { get; set; } = default!;
+    public DbSet<Notification> Notifications { get; set; } = default!;
 
     public DbSet<Customer> Customers { get; set; } = default!;
     public DbSet<CustomerAddress> CustomerAddresses { get; set; } = default!;

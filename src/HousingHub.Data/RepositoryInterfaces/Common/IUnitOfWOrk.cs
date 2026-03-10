@@ -1,4 +1,4 @@
-﻿using HousingHub.Data.RepositoryInterfaces.Commands;
+using HousingHub.Data.RepositoryInterfaces.Commands;
 using HousingHub.Data.RepositoryInterfaces.Queries;
 
 namespace HousingHub.Data.RepositoryInterfaces.Common;
@@ -9,14 +9,16 @@ public interface IUnitOfWOrk : IDisposable
     ICustomerAddressQueryRepository CustomerAddressQueries { get; }
     ICustomerCommandRepository CustomerCommands { get; }
     ICustomerQueryRepository CustomerQueries { get; }
-    IPropertyInterestCommandRepository PropertyInterestCommands { get; }
-    IPropertyInterestQueryRepository PropertyInterestQueries { get; }
+    IPropertyInspectionCommandRepository PropertyInspectionCommands { get; }
+    IPropertyInspectionQueryRepository PropertyInspectionQueries { get; }
     IPropertyAddressCommandRepository PropertyAddressCommands { get; }
     IPropertyAddressQueryRepository PropertyAddressQueries { get; }
     IPropertyFileCommandRepository PropertyFileCommands { get; }
     IPropertyFileQueryRepository PropertyFileQueries { get; }
     IPropertyCommandRepository PropertyCommands { get; }
     IPropertyQueryRepository PropertyQueries { get; }
+    INotificationCommandRepository NotificationCommands { get; }
+    INotificationQueryRepository NotificationQueries { get; }
 
     Task SaveAsync();
 }

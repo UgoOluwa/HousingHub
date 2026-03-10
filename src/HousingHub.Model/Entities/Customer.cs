@@ -1,10 +1,18 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using HousingHub.Model.Enums;
 
 namespace HousingHub.Model.Entities;
 
 public class Customer : BaseEntity
 {
+    // Authentication
+    public string? EmailVerificationToken { get; set; }
+    public DateTime? EmailVerificationTokenExpiry { get; set; }
+    public string? PasswordResetToken { get; set; }
+    public DateTime? PasswordResetTokenExpiry { get; set; }
+    public string? GoogleId { get; set; }
+    public AuthProvider AuthProvider { get; set; } = AuthProvider.Local;
+
     [StringLength(1000)]
     public string FirstName { get; set; } = null!;
 
@@ -13,6 +21,9 @@ public class Customer : BaseEntity
 
     [StringLength(1000)]
     public string Email { get; set; } = null!;
+
+    public string PasswordHash { get; set; }
+
     public bool EmailVerified { get; set; } = false;
 
     [StringLength(50)]
@@ -31,7 +42,7 @@ public class Customer : BaseEntity
     public IDType IdType { get; set; }
 
     [StringLength(1000)]
-    public string? IdDocumentUrl { get; set; } = null!;   // Link to uploaded ID doc (Passport, Driver’s License, etc.)
+    public string? IdDocumentUrl { get; set; } = null!;   // Link to uploaded ID doc (Passport, Driver's License, etc.)
     public DateTime? KycSubmittedAt { get; set; }
     public bool IsKycVerified { get; set; } = false;
 
@@ -49,13 +60,14 @@ public class Customer : BaseEntity
 
     // Relationships
     public ICollection<Property> Properties { get; set; } = new List<Property>();
-    public ICollection<PropertyInterest> Interests { get; set; } = new List<PropertyInterest>();
+    public ICollection<PropertyInspection> Inspections { get; set; } = new List<PropertyInspection>();
+    public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
     public Guid? AddressId { get; set; }
     public CustomerAddress? Address { get; set; } = null!;
 
     public Customer() { }
 
-    public Customer(string firstName, string lastName, string email, string phoneNumber, CustomerType customerType, DateTime? dateOfBirth)
+    public Customer(string firstName, string lastName, string email, string phoneNumber, CustomerType customerType, string passwordHash)
     {
         Id = Guid.NewGuid();
         FirstName = firstName;
@@ -63,7 +75,7 @@ public class Customer : BaseEntity
         Email = email;
         PhoneNumber = phoneNumber;
         CustomerType = customerType;
-        DateOfBirth = dateOfBirth;
+        PasswordHash = passwordHash;
     }
 
     public void UpdateKycStatus(bool isVerified)
