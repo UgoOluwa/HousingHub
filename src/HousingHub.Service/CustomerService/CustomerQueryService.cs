@@ -4,7 +4,6 @@ using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Service.CustomerService.Interfaces;
 using HousingHub.Service.Dtos.Customer;
-using HousingHub.Service.RepositoryInterfaces.Common;
 using Microsoft.Extensions.Logging;
 
 namespace HousingHub.Service.CustomerService;
@@ -27,7 +26,7 @@ public class CustomerQueryService : ICustomerQueryService
     {
         try
         {
-            Customer? customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == id, new FindOptions() { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+            Customer? customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == id);
             if (customer is null) {
                 return new BaseResponse<CustomerWithDetailsDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
             }
@@ -44,7 +43,7 @@ public class CustomerQueryService : ICustomerQueryService
     {
         try
         {
-            IEnumerable<Customer> customers = await _unitOfWOrk.CustomerQueries.GetAllAsync(new FindOptions() { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+            IEnumerable<Customer> customers = await _unitOfWOrk.CustomerQueries.GetAllAsync();
             if (!customers.Any())
             {
                 return new BaseResponse<List<CustomerDto>>(new List<CustomerDto>(), false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
@@ -63,8 +62,7 @@ public class CustomerQueryService : ICustomerQueryService
         try
         {
             var (customers, totalCount) = await _unitOfWOrk.CustomerQueries.GetPagedAsync(
-                pageNumber, pageSize,
-                findOptions: new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                pageNumber, pageSize);
 
             var mappedItems = _mapper.Map<List<CustomerDto>>(customers);
             var paginatedResult = new PaginatedResult<CustomerDto>(mappedItems, totalCount, pageNumber, pageSize);

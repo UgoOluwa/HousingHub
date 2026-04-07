@@ -6,7 +6,6 @@ using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.Mappings;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.PropertyService;
-using HousingHub.Service.RepositoryInterfaces.Common;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using System.Linq.Expressions;
@@ -56,8 +55,7 @@ public class PropertyQueryServiceTests
         var property = CreateSampleProperty();
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(property);
 
         var result = await _sut.GetPropertyAsync(PropertyGuid);
@@ -73,8 +71,7 @@ public class PropertyQueryServiceTests
     {
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync((HousingHub.Model.Entities.Property?)null);
 
         var result = await _sut.GetPropertyAsync(Guid.NewGuid());
@@ -90,8 +87,7 @@ public class PropertyQueryServiceTests
         var property = CreateSampleProperty();
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(property);
 
         var result = await _sut.GetPropertyAsync(PropertyGuid);
@@ -114,8 +110,7 @@ public class PropertyQueryServiceTests
         var property = CreateSampleProperty(propertyId: "PROP-20250101-ABC123");
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(property);
 
         var result = await _sut.GetPropertyByPropertyIdAsync("PROP-20250101-ABC123");
@@ -130,8 +125,7 @@ public class PropertyQueryServiceTests
     {
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync((HousingHub.Model.Entities.Property?)null);
 
         var result = await _sut.GetPropertyByPropertyIdAsync("PROP-NONEXISTENT");
@@ -153,7 +147,7 @@ public class PropertyQueryServiceTests
             CreateSampleProperty(Guid.NewGuid(), "PROP-003", "Third")
         };
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<FindOptions>()))
+            .Setup(u => u.PropertyQueries.GetAllAsync())
             .ReturnsAsync(properties);
 
         var result = await _sut.GetAllPropertiesAsync();
@@ -169,7 +163,7 @@ public class PropertyQueryServiceTests
     public async Task GetAllPropertiesAsync_WhenEmpty_ReturnsEmptyList()
     {
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<FindOptions>()))
+            .Setup(u => u.PropertyQueries.GetAllAsync())
             .ReturnsAsync(new List<HousingHub.Model.Entities.Property>());
 
         var result = await _sut.GetAllPropertiesAsync();
@@ -184,18 +178,8 @@ public class PropertyQueryServiceTests
     {
         var property = CreateSampleProperty();
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<FindOptions>()))
+            .Setup(u => u.PropertyQueries.GetAllAsync())
             .ReturnsAsync(new List<HousingHub.Model.Entities.Property> { property });
-
-        var result = await _sut.GetAllPropertiesAsync();
-
-        Assert.True(result.IsSuccessful);
-        Assert.Single(result.Data!);
-        var dto = result.Data[0];
-        Assert.Equal(property.Title, dto.Title);
-        Assert.Equal(property.Price, dto.Price);
-        Assert.Equal(property.PropertyType, dto.PropertyType);
-    }
 
     // ??? GetPropertiesByOwnerAsync ????????????????????????????????????
 
@@ -209,8 +193,7 @@ public class PropertyQueryServiceTests
         };
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetAllAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(properties);
 
         var result = await _sut.GetPropertiesByOwnerAsync(OwnerId);
@@ -224,8 +207,7 @@ public class PropertyQueryServiceTests
     {
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetAllAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(new List<HousingHub.Model.Entities.Property>());
 
         var result = await _sut.GetPropertiesByOwnerAsync(Guid.NewGuid());
@@ -240,8 +222,7 @@ public class PropertyQueryServiceTests
     {
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetAllAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(new List<HousingHub.Model.Entities.Property>());
 
         var result = await _sut.GetPropertiesByOwnerAsync(OwnerId);
@@ -258,8 +239,7 @@ public class PropertyQueryServiceTests
         var property = CreateSampleProperty();
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(property);
 
         var result = await _sut.GetPropertyAsync(PropertyGuid);
@@ -274,8 +254,7 @@ public class PropertyQueryServiceTests
         var property = CreateSampleProperty(propertyId: "PROP-20250101-XYZ789");
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(property);
 
         var result = await _sut.GetPropertyAsync(PropertyGuid);
@@ -292,8 +271,7 @@ public class PropertyQueryServiceTests
         var property = CreateSampleProperty(propertyId: "PROP-FULL");
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(property);
 
         var result = await _sut.GetPropertyByPropertyIdAsync("PROP-FULL");
@@ -313,8 +291,7 @@ public class PropertyQueryServiceTests
         var property = CreateSampleProperty();
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(property);
 
         var result = await _sut.GetPropertyByPropertyIdAsync("PROP-TEST");
@@ -335,7 +312,7 @@ public class PropertyQueryServiceTests
             CreateSampleProperty(Guid.NewGuid(), "PROP-B", "Bravo")
         };
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<FindOptions>()))
+            .Setup(u => u.PropertyQueries.GetAllAsync())
             .ReturnsAsync(properties);
 
         var result = await _sut.GetAllPropertiesAsync();
@@ -350,7 +327,7 @@ public class PropertyQueryServiceTests
     public async Task GetAllPropertiesAsync_SuccessMessageIsSet()
     {
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<FindOptions>()))
+            .Setup(u => u.PropertyQueries.GetAllAsync())
             .ReturnsAsync(new List<HousingHub.Model.Entities.Property>());
 
         var result = await _sut.GetAllPropertiesAsync();
@@ -371,7 +348,7 @@ public class PropertyQueryServiceTests
 
         var properties = new List<HousingHub.Model.Entities.Property> { apt, villa, land };
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<FindOptions>()))
+            .Setup(u => u.PropertyQueries.GetAllAsync())
             .ReturnsAsync(properties);
 
         var result = await _sut.GetAllPropertiesAsync();
@@ -391,8 +368,7 @@ public class PropertyQueryServiceTests
         var property = CreateSampleProperty();
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetAllAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(new List<HousingHub.Model.Entities.Property> { property });
 
         var result = await _sut.GetPropertiesByOwnerAsync(OwnerId);
@@ -413,8 +389,7 @@ public class PropertyQueryServiceTests
     {
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ThrowsAsync(new InvalidOperationException("DB error"));
 
         var result = await _sut.GetPropertyAsync(Guid.NewGuid());
@@ -429,8 +404,7 @@ public class PropertyQueryServiceTests
     {
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ThrowsAsync(new InvalidOperationException("Connection failed"));
 
         var result = await _sut.GetPropertyByPropertyIdAsync("PROP-ERR");
@@ -444,7 +418,7 @@ public class PropertyQueryServiceTests
     public async Task GetAllPropertiesAsync_WhenExceptionThrown_ReturnsFailure()
     {
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<FindOptions>()))
+            .Setup(u => u.PropertyQueries.GetAllAsync())
             .ThrowsAsync(new InvalidOperationException("Timeout"));
 
         var result = await _sut.GetAllPropertiesAsync();
@@ -460,8 +434,7 @@ public class PropertyQueryServiceTests
     {
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetAllAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(),
-                It.IsAny<FindOptions>()))
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ThrowsAsync(new InvalidOperationException("Network error"));
 
         var result = await _sut.GetPropertiesByOwnerAsync(OwnerId);

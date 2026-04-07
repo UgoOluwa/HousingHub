@@ -6,7 +6,6 @@ using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.FileStorage;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.PropertyService.Interfaces;
-using HousingHub.Service.RepositoryInterfaces.Common;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
@@ -48,8 +47,7 @@ public class PropertyCommandService : IPropertyCommandService
         try
         {
             var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == authenticatedUserId);
 
             if (owner == null)
                 return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
@@ -69,7 +67,9 @@ public class PropertyCommandService : IPropertyCommandService
                 Features = request.Features,
                 ContactPersonName = request.ContactPersonName,
                 ContactPersonEmail = request.ContactPersonEmail,
-                ContactPersonPhoneNumber = request.ContactPersonPhoneNumber
+                ContactPersonPhoneNumber = request.ContactPersonPhoneNumber,
+                Latitude = request.Latitude,
+                Longitude = request.Longitude
             };
 
             if (request.PropertyAddress != null)
@@ -142,8 +142,7 @@ public class PropertyCommandService : IPropertyCommandService
         try
         {
             var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == authenticatedUserId);
 
             if (owner == null)
                 return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
@@ -152,8 +151,7 @@ public class PropertyCommandService : IPropertyCommandService
                 return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
 
             var property = await _unitOfWOrk.PropertyQueries.GetByAsync(
-                x => x.Id == request.Id,
-                new FindOptions { IsAsNoTracking = false, IsIgnoreAutoIncludes = true });
+                x => x.Id == request.Id);
 
             if (property == null)
                 return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
@@ -171,8 +169,10 @@ public class PropertyCommandService : IPropertyCommandService
             if (request.ContactPersonName != null) property.ContactPersonName = request.ContactPersonName;
             if (request.ContactPersonEmail != null) property.ContactPersonEmail = request.ContactPersonEmail;
             if (request.ContactPersonPhoneNumber != null) property.ContactPersonPhoneNumber = request.ContactPersonPhoneNumber;
+            if (request.Latitude.HasValue) property.Latitude = request.Latitude.Value;
+            if (request.Longitude.HasValue) property.Longitude = request.Longitude.Value;
 
-            _unitOfWOrk.PropertyCommands.Update(property);
+            await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
             await _unitOfWOrk.SaveAsync();
 
             PropertyDto response = _mapper.Map<PropertyDto>(property);
@@ -190,8 +190,7 @@ public class PropertyCommandService : IPropertyCommandService
         try
         {
             var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == authenticatedUserId);
 
             if (owner == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
@@ -200,8 +199,7 @@ public class PropertyCommandService : IPropertyCommandService
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
 
             var property = await _unitOfWOrk.PropertyQueries.GetByAsync(
-                x => x.Id == propertyId,
-                new FindOptions { IsAsNoTracking = false, IsIgnoreAutoIncludes = true });
+                x => x.Id == propertyId);
 
             if (property == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
@@ -209,7 +207,7 @@ public class PropertyCommandService : IPropertyCommandService
             if (property.OwnerId != authenticatedUserId)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.PropertyNotOwnedByUser);
 
-            _unitOfWOrk.PropertyCommands.Delete(property);
+            await _unitOfWOrk.PropertyCommands.DeleteAsync(property);
             await _unitOfWOrk.SaveAsync();
 
             return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.SetDeletedSuccessMessage(ClassName));

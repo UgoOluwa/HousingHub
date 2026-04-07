@@ -1,22 +1,24 @@
-using System.ComponentModel.DataAnnotations;
+using Amazon.DynamoDBv2.DataModel;
 using HousingHub.Model.Enums;
 
 namespace HousingHub.Model.Entities;
 
+[DynamoDBTable("Notifications")]
 public class Notification : BaseEntity
 {
+    [DynamoDBGlobalSecondaryIndexHashKey("RecipientId-index")]
     public Guid RecipientId { get; set; }
+    [DynamoDBIgnore]
     public Customer Recipient { get; set; } = null!;
 
     public Guid? InspectionId { get; set; }
+    [DynamoDBIgnore]
     public PropertyInspection? Inspection { get; set; }
 
     public NotificationType Type { get; set; }
 
-    [StringLength(500)]
     public string Title { get; set; } = null!;
 
-    [StringLength(2000)]
     public string Message { get; set; } = null!;
 
     public bool IsRead { get; set; } = false;

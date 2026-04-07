@@ -1,8 +1,9 @@
-using System.ComponentModel.DataAnnotations;
+using Amazon.DynamoDBv2.DataModel;
 using HousingHub.Model.Enums;
 
 namespace HousingHub.Model.Entities;
 
+[DynamoDBTable("Customers")]
 public class Customer : BaseEntity
 {
     // Authentication
@@ -10,23 +11,21 @@ public class Customer : BaseEntity
     public DateTime? EmailVerificationTokenExpiry { get; set; }
     public string? PasswordResetToken { get; set; }
     public DateTime? PasswordResetTokenExpiry { get; set; }
+
     public string? GoogleId { get; set; }
     public AuthProvider AuthProvider { get; set; } = AuthProvider.Local;
 
-    [StringLength(1000)]
     public string FirstName { get; set; } = null!;
-
-    [StringLength(1000)]
     public string LastName { get; set; } = null!;
 
-    [StringLength(1000)]
+    [DynamoDBGlobalSecondaryIndexHashKey("Email-index")]
     public string Email { get; set; } = null!;
 
     public string PasswordHash { get; set; }
 
     public bool EmailVerified { get; set; } = false;
 
-    [StringLength(50)]
+    [DynamoDBGlobalSecondaryIndexHashKey("PhoneNumber-index")]
     public string PhoneNumber { get; set; } = null!;
     public bool PhoneNumberVerified { get; set; } = false;
     public CustomerType CustomerType { get; set; }
@@ -36,13 +35,11 @@ public class Customer : BaseEntity
     // KYC Details
     // ----------------------------
 
-    [StringLength(100)]
-    public string? NationalIdNumber { get; set; } = null!; // NIN or equivalent
+    public string? NationalIdNumber { get; set; } = null!;
 
     public IDType IdType { get; set; }
 
-    [StringLength(1000)]
-    public string? IdDocumentUrl { get; set; } = null!;   // Link to uploaded ID doc (Passport, Driver's License, etc.)
+    public string? IdDocumentUrl { get; set; } = null!;
     public DateTime? KycSubmittedAt { get; set; }
     public bool IsKycVerified { get; set; } = false;
 
@@ -50,19 +47,20 @@ public class Customer : BaseEntity
     // Occupation Details
     // ----------------------------
 
-    [StringLength(500)]
-    public string? JobTitle { get; set; } = null!;        // e.g., "Software Engineer"
-    [StringLength(1000)]
-    public string? CompanyName { get; set; } = null!;     // e.g., "Kuda Microfinance Bank"
-    [StringLength(500)]
-    public string? Industry { get; set; } = null!;    
+    public string? JobTitle { get; set; } = null!;
+    public string? CompanyName { get; set; } = null!;
+    public string? Industry { get; set; } = null!;
 
 
-    // Relationships
+    // Relationships (foreign keys only, navigation properties ignored by DynamoDB)
+    [DynamoDBIgnore]
     public ICollection<Property> Properties { get; set; } = new List<Property>();
+    [DynamoDBIgnore]
     public ICollection<PropertyInspection> Inspections { get; set; } = new List<PropertyInspection>();
+    [DynamoDBIgnore]
     public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
     public Guid? AddressId { get; set; }
+    [DynamoDBIgnore]
     public CustomerAddress? Address { get; set; } = null!;
 
     public Customer() { }

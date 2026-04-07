@@ -6,7 +6,6 @@ using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.FileStorage;
 using HousingHub.Service.Dtos.PropertyFile;
 using HousingHub.Service.PropertyFileService.Interfaces;
-using HousingHub.Service.RepositoryInterfaces.Common;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
@@ -79,8 +78,7 @@ public class PropertyFileCommandService : IPropertyFileCommandService
         try
         {
             var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == authenticatedUserId);
 
             if (owner == null)
                 return new BaseResponse<List<PropertyFileDto>>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
@@ -89,8 +87,7 @@ public class PropertyFileCommandService : IPropertyFileCommandService
                 return new BaseResponse<List<PropertyFileDto>>(null, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
 
             var property = await _unitOfWOrk.PropertyQueries.GetByAsync(
-                x => x.Id == propertyId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == propertyId);
 
             if (property == null)
                 return new BaseResponse<List<PropertyFileDto>>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("property"));
@@ -134,8 +131,7 @@ public class PropertyFileCommandService : IPropertyFileCommandService
         try
         {
             var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == authenticatedUserId);
 
             if (owner == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
@@ -148,14 +144,13 @@ public class PropertyFileCommandService : IPropertyFileCommandService
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
             var property = await _unitOfWOrk.PropertyQueries.GetByAsync(
-                x => x.Id == file.PropertyId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == file.PropertyId);
 
             if (property == null || property.OwnerId != authenticatedUserId)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.PropertyNotOwnedByUser);
 
             await _fileStorageService.DeleteFileAsync(file.FileUrl);
-            _unitOfWOrk.PropertyFileCommands.Delete(file);
+            await _unitOfWOrk.PropertyFileCommands.DeleteAsync(file);
             await _unitOfWOrk.SaveAsync();
 
             return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.SetDeletedSuccessMessage(ClassName));

@@ -5,7 +5,6 @@ using HousingHub.Model.Entities;
 using HousingHub.Service.Commons.Authentication;
 using HousingHub.Service.CustomerService.Interfaces;
 using HousingHub.Service.Dtos.Customer;
-using HousingHub.Service.RepositoryInterfaces.Common;
 using Microsoft.Extensions.Logging;
 
 namespace HousingHub.Service.CustomerService;
@@ -95,7 +94,7 @@ public class CustomerCommandService : ICustomerCommandService
     {
         try
         {
-            var existingCustomer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Email == request.Email, findOptions: new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+            var existingCustomer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Email == request.Email);
         if (existingCustomer == null || !_passwordHasher.Verify(request.Password, existingCustomer.PasswordHash))
             {
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidCredentials);
@@ -120,7 +119,7 @@ public class CustomerCommandService : ICustomerCommandService
     {
         try
         {
-            var existingCustomer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == request.Id, findOptions: new FindOptions { IsAsNoTracking = false, IsIgnoreAutoIncludes = true });
+            var existingCustomer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == request.Id);
             if (existingCustomer == null)
             {
                 return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
@@ -135,7 +134,7 @@ public class CustomerCommandService : ICustomerCommandService
             existingCustomer.DateOfBirth = request.DateOfBirth;
 
 
-            _unitOfWOrk.CustomerCommands.Update(existingCustomer);
+            await _unitOfWOrk.CustomerCommands.UpdateAsync(existingCustomer);
             await _unitOfWOrk.SaveAsync();
 
             CustomerDto response = _mapper.Map<CustomerDto>(existingCustomer);
@@ -153,13 +152,13 @@ public class CustomerCommandService : ICustomerCommandService
     {
         try
         {
-            var existingCustomer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == customerId, findOptions: new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+            var existingCustomer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == customerId);
             if (existingCustomer == null)
             {
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
             }
 
-            _unitOfWOrk.CustomerCommands.Delete(existingCustomer);
+            await _unitOfWOrk.CustomerCommands.DeleteAsync(existingCustomer);
             await _unitOfWOrk.SaveAsync();
 
             return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.SetDeletedSuccessMessage(ClassName));

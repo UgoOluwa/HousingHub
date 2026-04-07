@@ -9,6 +9,9 @@ using HousingHub.Application.Property.Commands.UploadFiles;
 using HousingHub.Application.Property.Queries.GetAll;
 using HousingHub.Application.Property.Queries.GetById;
 using HousingHub.Application.Property.Queries.GetFiles;
+using HousingHub.Application.Property.Queries.GetNearby;
+using HousingHub.Application.Property.Queries.GetNew;
+using HousingHub.Application.Property.Queries.GetTrending;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.Dtos.PropertyFile;
 using MediatR;
@@ -85,7 +88,37 @@ public class PropertyController : ControllerBase
         return Ok(response);
     }
 
-    // ??? Property Files ??????????????????????????????????????????????
+    // ─── Discovery Endpoints ──────────────────────────────────────────
+
+    [HttpGet("new")]
+    [ProducesResponseType(typeof(BaseResponse<List<PropertyDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetNewProperties([FromQuery] int count = 10)
+    {
+        var response = await _mediator.Send(new GetNewPropertiesQuery(count));
+        return Ok(response);
+    }
+
+    [HttpGet("trending")]
+    [ProducesResponseType(typeof(BaseResponse<List<PropertyDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetTrendingProperties([FromQuery] int count = 10)
+    {
+        var response = await _mediator.Send(new GetTrendingPropertiesQuery(count));
+        return Ok(response);
+    }
+
+    [HttpGet("nearby")]
+    [ProducesResponseType(typeof(BaseResponse<List<PropertyDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetNearbyProperties(
+        [FromQuery] double latitude,
+        [FromQuery] double longitude,
+        [FromQuery] double radiusKm = 10,
+        [FromQuery] int count = 10)
+    {
+        var response = await _mediator.Send(new GetNearbyPropertiesQuery(latitude, longitude, radiusKm, count));
+        return Ok(response);
+    }
+
+    // ─── Property Files ──────────────────────────────────────────────
 
     [HttpGet("{id:guid}/files")]
     [ProducesResponseType(typeof(BaseResponse<List<PropertyFileDto>>), StatusCodes.Status200OK)]

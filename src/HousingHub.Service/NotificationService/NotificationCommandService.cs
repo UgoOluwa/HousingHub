@@ -2,7 +2,6 @@ using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Service.NotificationService.Interfaces;
-using HousingHub.Service.RepositoryInterfaces.Common;
 using Microsoft.Extensions.Logging;
 
 namespace HousingHub.Service.NotificationService;
@@ -23,8 +22,7 @@ public class NotificationCommandService : INotificationCommandService
         try
         {
             var notification = await _unitOfWOrk.NotificationQueries.GetByAsync(
-                x => x.Id == notificationId,
-                new FindOptions { IsAsNoTracking = false, IsIgnoreAutoIncludes = true });
+                x => x.Id == notificationId);
 
             if (notification == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("notification"));
@@ -33,7 +31,7 @@ public class NotificationCommandService : INotificationCommandService
                 return new BaseResponse<bool>(false, false, string.Empty, "You can only mark your own notifications as read.");
 
             notification.IsRead = true;
-            _unitOfWOrk.NotificationCommands.Update(notification);
+            await _unitOfWOrk.NotificationCommands.UpdateAsync(notification);
             await _unitOfWOrk.SaveAsync();
 
             return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.Successful);
@@ -50,15 +48,14 @@ public class NotificationCommandService : INotificationCommandService
         try
         {
             var unread = await _unitOfWOrk.NotificationQueries.GetAllAsync(
-                x => x.RecipientId == authenticatedUserId && !x.IsRead,
-                new FindOptions { IsAsNoTracking = false, IsIgnoreAutoIncludes = true });
+                x => x.RecipientId == authenticatedUserId && !x.IsRead);
 
             foreach (var notification in unread)
             {
                 notification.IsRead = true;
             }
 
-            _unitOfWOrk.NotificationCommands.UpdateRange(unread);
+            await _unitOfWOrk.NotificationCommands.UpdateRangeAsync(unread);
             await _unitOfWOrk.SaveAsync();
 
             return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.Successful);

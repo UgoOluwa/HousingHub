@@ -1,10 +1,6 @@
-using HousingHub.Data.Contexts;
 using HousingHub.Data.RepositoryInterfaces.Commands;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Data.RepositoryInterfaces.Queries;
-using HousingHub.Model.Entities;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace HousingHub.Repository.Commands;
 
@@ -24,12 +20,23 @@ public class UnitOfWork : IUnitOfWOrk
     public IPropertyQueryRepository PropertyQueries { get; }
     public INotificationCommandRepository NotificationCommands { get; }
     public INotificationQueryRepository NotificationQueries { get; }
-    private readonly AppDbContext _applicationContext;
 
-
-    public UnitOfWork(AppDbContext applicationContext, ICustomerAddressCommandRepository customerAddressCommands, ICustomerAddressQueryRepository customerAddressQueries, ICustomerCommandRepository customerCommands, ICustomerQueryRepository customerQueries, IPropertyInspectionCommandRepository propertyInspectionCommands, IPropertyInspectionQueryRepository propertyInspectionQueries, IPropertyAddressCommandRepository propertyAddressCommands, IPropertyAddressQueryRepository propertyAddressQueries, IPropertyFileCommandRepository propertyFileCommands, IPropertyFileQueryRepository propertyFileQueries, IPropertyCommandRepository propertyCommands, IPropertyQueryRepository propertyQueries, INotificationCommandRepository notificationCommands, INotificationQueryRepository notificationQueries)
+    public UnitOfWork(
+        ICustomerAddressCommandRepository customerAddressCommands,
+        ICustomerAddressQueryRepository customerAddressQueries,
+        ICustomerCommandRepository customerCommands,
+        ICustomerQueryRepository customerQueries,
+        IPropertyInspectionCommandRepository propertyInspectionCommands,
+        IPropertyInspectionQueryRepository propertyInspectionQueries,
+        IPropertyAddressCommandRepository propertyAddressCommands,
+        IPropertyAddressQueryRepository propertyAddressQueries,
+        IPropertyFileCommandRepository propertyFileCommands,
+        IPropertyFileQueryRepository propertyFileQueries,
+        IPropertyCommandRepository propertyCommands,
+        IPropertyQueryRepository propertyQueries,
+        INotificationCommandRepository notificationCommands,
+        INotificationQueryRepository notificationQueries)
     {
-        _applicationContext = applicationContext;
         CustomerAddressCommands = customerAddressCommands;
         CustomerAddressQueries = customerAddressQueries;
         CustomerCommands = customerCommands;
@@ -46,31 +53,11 @@ public class UnitOfWork : IUnitOfWOrk
         NotificationQueries = notificationQueries;
     }
 
-    public async Task SaveAsync()
+    public Task SaveAsync()
     {
-        var entries = _applicationContext.ChangeTracker
-            .Entries<BaseEntity>()
-            .Where(e =>
-                e.State == EntityState.Added ||
-                e.State == EntityState.Modified);
-
-        var utcNow = DateTime.UtcNow;
-
-        foreach (var entry in entries)
-        {
-            if (entry.State == EntityState.Added)
-            {
-                entry.Entity.DateCreated = utcNow;
-                entry.Entity.DateModified = utcNow;
-                entry.Entity.IsActive = true;
-            }
-            else if (entry.State == EntityState.Modified)
-            {
-                entry.Entity.DateModified = utcNow;
-            }
-        }
-
-        await _applicationContext.SaveChangesAsync();
+        // DynamoDB operations are persisted immediately in each repository method.
+        // Timestamps are set in GenericCommandRepository. This method is kept for interface compatibility.
+        return Task.CompletedTask;
     }
 
     public void Dispose()
@@ -78,12 +65,9 @@ public class UnitOfWork : IUnitOfWOrk
         Dispose(true);
         GC.SuppressFinalize(this);
     }
+
     protected virtual void Dispose(bool disposing)
     {
-        if (disposing)
-        {
-            _applicationContext.Dispose();
-        }
+        // No unmanaged resources to dispose; IDynamoDBContext is managed by DI container.
     }
-
 }

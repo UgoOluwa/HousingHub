@@ -4,7 +4,6 @@ using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Service.Dtos.Notification;
 using HousingHub.Service.NotificationService.Interfaces;
-using HousingHub.Service.RepositoryInterfaces.Common;
 using Microsoft.Extensions.Logging;
 
 namespace HousingHub.Service.NotificationService;
@@ -32,8 +31,7 @@ public class NotificationQueryService : INotificationQueryService
 
             var (notifications, totalCount) = await _unitOfWOrk.NotificationQueries.GetPagedAsync(
                 pageNumber, pageSize,
-                predicate: predicate,
-                findOptions: new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                predicate: predicate);
 
             var mappedItems = _mapper.Map<List<NotificationDto>>(notifications);
             var paginatedResult = new PaginatedResult<NotificationDto>(mappedItems, totalCount, pageNumber, pageSize);

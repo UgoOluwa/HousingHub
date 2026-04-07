@@ -10,7 +10,6 @@ using HousingHub.Service.Commons.Authentication;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Dtos.Auth;
 using HousingHub.Service.Dtos.Customer;
-using HousingHub.Service.RepositoryInterfaces.Common;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -89,8 +88,7 @@ public class AuthService : IAuthService
         try
         {
             var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Email == request.Email,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Email == request.Email);
 
             if (customer == null || string.IsNullOrEmpty(customer.PasswordHash)
                 || !_passwordHasher.Verify(request.Password, customer.PasswordHash))
@@ -120,8 +118,7 @@ public class AuthService : IAuthService
         try
         {
             var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Email == request.Email,
-                new FindOptions { IsAsNoTracking = false, IsIgnoreAutoIncludes = true });
+                x => x.Email == request.Email);
 
             if (customer == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
@@ -138,7 +135,7 @@ public class AuthService : IAuthService
             customer.EmailVerificationToken = null;
             customer.EmailVerificationTokenExpiry = null;
 
-            _unitOfWork.CustomerCommands.Update(customer);
+            await _unitOfWork.CustomerCommands.UpdateAsync(customer);
             await _unitOfWork.SaveAsync();
 
             return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.EmailVerificationSuccess);
@@ -155,8 +152,7 @@ public class AuthService : IAuthService
         try
         {
             var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Email == request.Email,
-                new FindOptions { IsAsNoTracking = false, IsIgnoreAutoIncludes = true });
+                x => x.Email == request.Email);
 
             if (customer == null)
                 return new BaseResponse<string>(null, true, string.Empty, ResponseMessages.PasswordResetTokenSent);
@@ -167,7 +163,7 @@ public class AuthService : IAuthService
             customer.PasswordResetToken = GenerateSecureToken();
             customer.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
 
-            _unitOfWork.CustomerCommands.Update(customer);
+            await _unitOfWork.CustomerCommands.UpdateAsync(customer);
             await _unitOfWork.SaveAsync();
 
             await _emailService.SendPasswordResetAsync(customer.Email, customer.FirstName, customer.PasswordResetToken!);
@@ -186,8 +182,7 @@ public class AuthService : IAuthService
         try
         {
             var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Email == request.Email,
-                new FindOptions { IsAsNoTracking = false, IsIgnoreAutoIncludes = true });
+                x => x.Email == request.Email);
 
             if (customer == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
@@ -201,7 +196,7 @@ public class AuthService : IAuthService
             customer.PasswordResetToken = null;
             customer.PasswordResetTokenExpiry = null;
 
-            _unitOfWork.CustomerCommands.Update(customer);
+            await _unitOfWork.CustomerCommands.UpdateAsync(customer);
             await _unitOfWork.SaveAsync();
 
             return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.PasswordResetSuccess);
@@ -218,8 +213,7 @@ public class AuthService : IAuthService
         try
         {
             var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Id == request.CustomerId,
-                new FindOptions { IsAsNoTracking = false, IsIgnoreAutoIncludes = true });
+                x => x.Id == request.CustomerId);
 
             if (customer == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
@@ -232,7 +226,7 @@ public class AuthService : IAuthService
 
             customer.PasswordHash = _passwordHasher.Hash(request.NewPassword);
 
-            _unitOfWork.CustomerCommands.Update(customer);
+            await _unitOfWork.CustomerCommands.UpdateAsync(customer);
             await _unitOfWork.SaveAsync();
 
             return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.PasswordChangeSuccess);
@@ -264,8 +258,7 @@ public class AuthService : IAuthService
             }
 
             var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Email == payload.Email,
-                new FindOptions { IsAsNoTracking = false, IsIgnoreAutoIncludes = true });
+                x => x.Email == payload.Email);
 
             if (customer != null && customer.AuthProvider != AuthProvider.Google)
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.AccountUsesLocalAuth);
@@ -311,8 +304,7 @@ public class AuthService : IAuthService
         try
         {
             var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Email == claims.Email,
-                new FindOptions { IsAsNoTracking = false, IsIgnoreAutoIncludes = true });
+                x => x.Email == claims.Email);
 
             if (customer != null && customer.AuthProvider != AuthProvider.Google)
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.AccountUsesLocalAuth);

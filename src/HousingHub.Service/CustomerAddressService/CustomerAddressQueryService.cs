@@ -1,7 +1,6 @@
 ﻿using AutoMapper;
 using Microsoft.Extensions.Logging;
 using HousingHub.Core.CustomResponses;
-using HousingHub.Service.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Service.CustomerAddressService.Interfaces;
 using HousingHub.Service.Dtos.CustomerAddress;
@@ -27,7 +26,7 @@ public class CustomerAddressQueryService : ICustomerAddressQueryService
     {
         try
         {
-            CustomerAddress? customerAddress = await _unitOfWOrk.CustomerAddressQueries.GetByAsync(x => x.Id == id, new FindOptions() { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+            CustomerAddress? customerAddress = await _unitOfWOrk.CustomerAddressQueries.GetByAsync(x => x.Id == id);
             if (customerAddress is null) {
                 return new BaseResponse<CustomerAddressDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
             }
@@ -44,7 +43,7 @@ public class CustomerAddressQueryService : ICustomerAddressQueryService
     {
         try
         {
-            IEnumerable<CustomerAddress> customerAddresses = await _unitOfWOrk.CustomerAddressQueries.GetAllAsync(new FindOptions() { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+            IEnumerable<CustomerAddress> customerAddresses = await _unitOfWOrk.CustomerAddressQueries.GetAllAsync();
             if (!customerAddresses.Any())
             {
                 return new BaseResponse<List<CustomerAddressDto>>(new List<CustomerAddressDto>(), false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
@@ -63,7 +62,7 @@ public class CustomerAddressQueryService : ICustomerAddressQueryService
     {
         try
         {
-            CustomerAddress? customerAddress = await _unitOfWOrk.CustomerAddressQueries.GetByAsync(x => x.CustomerId == customerId, new FindOptions() { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+            CustomerAddress? customerAddress = await _unitOfWOrk.CustomerAddressQueries.GetByAsync(x => x.CustomerId == customerId);
             if (customerAddress is null)
             {
                 return new BaseResponse<CustomerAddressDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));

@@ -20,4 +20,7 @@ public record PropertyDto(
     string? ContactPersonPhoneNumber,
     Guid OwnerId,
     Guid AddressId,
+    double? Latitude,
+    double? Longitude,
+    long ViewCount,
     List<PropertyFileDto>? Files = null);

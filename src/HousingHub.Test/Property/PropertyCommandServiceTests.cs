@@ -9,7 +9,6 @@ using HousingHub.Service.Commons.Mappings;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.Dtos.PropertyAddress;
 using HousingHub.Service.PropertyService;
-using HousingHub.Service.RepositoryInterfaces.Common;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using System.Linq.Expressions;
@@ -55,7 +54,9 @@ public class PropertyCommandServiceTests
         ContactPersonEmail: "smith@agency.com",
         ContactPersonPhoneNumber: "08099887766",
         OwnerId: OwnerId,
-        PropertyAddress: new CreatePropertyAddressDto("10 Main St", "Lagos", "Lagos", "Nigeria", "100001", Guid.Empty));
+        PropertyAddress: new CreatePropertyAddressDto("10 Main St", "Lagos", "Lagos", "Nigeria", "100001", Guid.Empty),
+        Latitude: null,
+        Longitude: null);
 
     // ??? Create ???????????????????????????????????????????????????????
 
@@ -151,7 +152,7 @@ public class PropertyCommandServiceTests
             OwnerId = OwnerId
         });
 
-        var dto = new UpdatePropertyDto(PropertyId, "New Title", null, null, 600000m, null, null, null, null, null, null, null);
+        var dto = new UpdatePropertyDto(PropertyId, "New Title", null, null, 600000m, null, null, null, null, null, null, null, null, null);
         var result = await _sut.UpdateProperty(dto, OwnerId);
 
         Assert.True(result.IsSuccessful);
@@ -173,7 +174,7 @@ public class PropertyCommandServiceTests
             OwnerId = Guid.NewGuid() // different owner
         });
 
-        var dto = new UpdatePropertyDto(PropertyId, "Hacked", null, null, null, null, null, null, null, null, null, null);
+        var dto = new UpdatePropertyDto(PropertyId, "Hacked", null, null, null, null, null, null, null, null, null, null, null, null);
         var result = await _sut.UpdateProperty(dto, OwnerId);
 
         Assert.False(result.IsSuccessful);
@@ -185,7 +186,7 @@ public class PropertyCommandServiceTests
     {
         SetupOwnerLookup(CreateOwner(CustomerType.Customer));
 
-        var dto = new UpdatePropertyDto(PropertyId, "Title", null, null, null, null, null, null, null, null, null, null);
+        var dto = new UpdatePropertyDto(PropertyId, "Title", null, null, null, null, null, null, null, null, null, null, null, null);
         var result = await _sut.UpdateProperty(dto, OwnerId);
 
         Assert.False(result.IsSuccessful);
@@ -198,7 +199,7 @@ public class PropertyCommandServiceTests
         SetupOwnerLookup(CreateOwner(CustomerType.HouseOwner));
         SetupPropertyLookup(null);
 
-        var dto = new UpdatePropertyDto(PropertyId, "Title", null, null, null, null, null, null, null, null, null, null);
+        var dto = new UpdatePropertyDto(PropertyId, "Title", null, null, null, null, null, null, null, null, null, null, null, null);
         var result = await _sut.UpdateProperty(dto, OwnerId);
 
         Assert.False(result.IsSuccessful);
@@ -280,7 +281,7 @@ public class PropertyCommandServiceTests
             OwnerId = OwnerId
         });
 
-        var dto = new UpdatePropertyDto(PropertyId, null, "New Desc", null, null, null, null, null, null, null, null, null);
+        var dto = new UpdatePropertyDto(PropertyId, null, "New Desc", null, null, null, null, null, null, null, null, null, null, null);
         var result = await _sut.UpdateProperty(dto, OwnerId);
 
         Assert.True(result.IsSuccessful);
@@ -304,7 +305,7 @@ public class PropertyCommandServiceTests
         });
 
         var dto = new UpdatePropertyDto(PropertyId, null, null, null, null, null, null,
-            PropertyFeature.Parking | PropertyFeature.Security, null, null, null, null);
+            PropertyFeature.Parking | PropertyFeature.Security, null, null, null, null, null, null);
         var result = await _sut.UpdateProperty(dto, OwnerId);
 
         Assert.True(result.IsSuccessful);
@@ -317,14 +318,14 @@ public class PropertyCommandServiceTests
     {
         SetupOwnerLookup(null);
 
-        var dto = new UpdatePropertyDto(PropertyId, "Title", null, null, null, null, null, null, null, null, null, null);
+        var dto = new UpdatePropertyDto(PropertyId, "Title", null, null, null, null, null, null, null, null, null, null, null, null);
         var result = await _sut.UpdateProperty(dto, OwnerId);
 
         Assert.False(result.IsSuccessful);
         Assert.Contains("Not Found", result.Message);
     }
 
-    // ??? Delete ???????????????????????????????????????????????????????
+    // ??? Delete
 
     [Fact]
     public async Task DeleteProperty_ByOwner_Succeeds()
@@ -433,7 +434,7 @@ public class PropertyCommandServiceTests
 
         await _sut.DeleteProperty(PropertyId, OwnerId);
 
-        _unitOfWorkMock.Verify(u => u.PropertyCommands.Delete(property), Times.Once);
+        _unitOfWorkMock.Verify(u => u.PropertyCommands.DeleteAsync(property), Times.Once);
         _unitOfWorkMock.Verify(u => u.SaveAsync(), Times.Once);
     }
 
@@ -522,6 +523,8 @@ public class PropertyCommandServiceTests
             "New Agent",
             "new@agency.com",
             "08011112222",
+            null,
+            null,
             null);
 
         var result = await _sut.UpdateProperty(dto, OwnerId);
@@ -554,10 +557,10 @@ public class PropertyCommandServiceTests
             OwnerId = OwnerId
         });
 
-        var dto = new UpdatePropertyDto(PropertyId, "Updated", null, null, null, null, null, null, null, null, null, null);
+        var dto = new UpdatePropertyDto(PropertyId, "Updated", null, null, null, null, null, null, null, null, null, null, null, null);
         await _sut.UpdateProperty(dto, OwnerId);
 
-        _unitOfWorkMock.Verify(u => u.PropertyCommands.Update(It.IsAny<HousingHub.Model.Entities.Property>()), Times.Once);
+        _unitOfWorkMock.Verify(u => u.PropertyCommands.UpdateAsync(It.IsAny<HousingHub.Model.Entities.Property>()), Times.Once);
         _unitOfWorkMock.Verify(u => u.SaveAsync(), Times.Once);
     }
 
@@ -574,7 +577,7 @@ public class PropertyCommandServiceTests
             OwnerId = OwnerId
         });
 
-        var dto = new UpdatePropertyDto(PropertyId, "Agent Updated", null, null, null, null, null, null, null, null, null, null);
+        var dto = new UpdatePropertyDto(PropertyId, "Agent Updated", null, null, null, null, null, null, null, null, null, null, null, null);
         var result = await _sut.UpdateProperty(dto, OwnerId);
 
         Assert.True(result.IsSuccessful);
@@ -594,7 +597,7 @@ public class PropertyCommandServiceTests
             OwnerId = OwnerId
         });
 
-        var dto = new UpdatePropertyDto(PropertyId, "Updated", null, null, null, null, null, null, null, null, null, null);
+        var dto = new UpdatePropertyDto(PropertyId, "Updated", null, null, null, null, null, null, null, null, null, null, null, null);
         var result = await _sut.UpdateProperty(dto, OwnerId);
 
         Assert.True(result.IsSuccessful);
@@ -628,7 +631,7 @@ public class PropertyCommandServiceTests
     public async Task CreateProperty_WhenExceptionThrown_ReturnsFailure()
     {
         _unitOfWorkMock
-            .Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>(), It.IsAny<FindOptions>()))
+            .Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>()))
             .ThrowsAsync(new InvalidOperationException("DB error"));
 
         var result = await _sut.CreateProperty(CreateValidDto(), OwnerId);
@@ -641,10 +644,10 @@ public class PropertyCommandServiceTests
     public async Task UpdateProperty_WhenExceptionThrown_ReturnsFailure()
     {
         _unitOfWorkMock
-            .Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>(), It.IsAny<FindOptions>()))
+            .Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>()))
             .ThrowsAsync(new InvalidOperationException("DB error"));
 
-        var dto = new UpdatePropertyDto(PropertyId, "Title", null, null, null, null, null, null, null, null, null, null);
+        var dto = new UpdatePropertyDto(PropertyId, "Title", null, null, null, null, null, null, null, null, null, null, null, null);
         var result = await _sut.UpdateProperty(dto, OwnerId);
 
         Assert.False(result.IsSuccessful);
@@ -655,7 +658,7 @@ public class PropertyCommandServiceTests
     public async Task DeleteProperty_WhenExceptionThrown_ReturnsFailure()
     {
         _unitOfWorkMock
-            .Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>(), It.IsAny<FindOptions>()))
+            .Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>()))
             .ThrowsAsync(new InvalidOperationException("DB error"));
 
         var result = await _sut.DeleteProperty(PropertyId, OwnerId);
@@ -680,14 +683,14 @@ public class PropertyCommandServiceTests
     private void SetupOwnerLookup(Customer? customer)
     {
         _unitOfWorkMock
-            .Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>(), It.IsAny<FindOptions>()))
+            .Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>()))
             .ReturnsAsync(customer);
     }
 
     private void SetupPropertyLookup(HousingHub.Model.Entities.Property? property)
     {
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(), It.IsAny<FindOptions>()))
+            .Setup(u => u.PropertyQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(property);
     }
 

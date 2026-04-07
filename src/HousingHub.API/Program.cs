@@ -1,10 +1,14 @@
 using System.Text;
+using Amazon;
+using Amazon.DynamoDBv2;
+using Amazon.DynamoDBv2.DataModel;
 using Asp.Versioning;
 using HealthChecks.UI.Client;
 using HousingHub.API.Common;
 using HousingHub.API.Common.Extensions;
 using HousingHub.API.Common.Middlewares;
 using HousingHub.Application;
+using HousingHub.Data.Contexts;
 using HousingHub.Repository;
 using HousingHub.Service;
 using Microsoft.AspNetCore.Authentication;
@@ -22,7 +26,7 @@ namespace HousingHub.API
 {
     public static class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
@@ -97,6 +101,28 @@ namespace HousingHub.API
                     o.SaveTokens = true;
                 });
 
+            // DynamoDB
+            builder.Services.AddSingleton<IAmazonDynamoDB>(sp =>
+            {
+                var config = new AmazonDynamoDBConfig
+                {
+                    RegionEndpoint = RegionEndpoint.GetBySystemName(
+                        builder.Configuration["AWS:DynamoDB:Region"] ?? "us-east-1")
+                };
+
+                var serviceUrl = builder.Configuration["AWS:DynamoDB:ServiceURL"];
+                if (!string.IsNullOrEmpty(serviceUrl))
+                    config.ServiceURL = serviceUrl;
+
+                return new AmazonDynamoDBClient(config);
+            });
+            builder.Services.AddSingleton<IDynamoDBContext>(sp =>
+            {
+                var client = sp.GetRequiredService<IAmazonDynamoDB>();
+                return new DynamoDBContext(client);
+            });
+            builder.Services.AddTransient<DynamoDbTableInitializer>();
+
             //Add methods Extensions
             builder.Services.AddInjectionRepository()
                 .AddInjectionService()
@@ -111,9 +137,9 @@ namespace HousingHub.API
             if (app.Environment.IsDevelopment())
             {
                 app.UseDocWithUi();
-
-                app.ApplyMigrations();               
             }
+
+            await app.InitializeDynamoDbAsync();
 
             app.MapHealthChecks("health", new HealthCheckOptions
             {

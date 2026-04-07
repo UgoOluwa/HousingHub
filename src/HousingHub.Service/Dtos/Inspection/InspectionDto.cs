@@ -4,6 +4,7 @@ namespace HousingHub.Service.Dtos.Inspection;
 
 public record InspectionDto(
     Guid Id,
+    string InspectionId,
     DateTime DateCreated,
     DateTime DateModified,
     Guid CustomerId,

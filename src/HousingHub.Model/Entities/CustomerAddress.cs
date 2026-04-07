@@ -1,22 +1,20 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using Amazon.DynamoDBv2.DataModel;
 
 namespace HousingHub.Model.Entities;
 
+[DynamoDBTable("CustomerAddresses")]
 public class CustomerAddress : BaseEntity
 {
-    [StringLength(1000)]
     public string Street { get; set; } = null!;
-    [StringLength(100)]
     public string City { get; set; } = null!;
-    [StringLength(100)]
     public string State { get; set; } = null!;
-    [StringLength(100)]
     public string Country { get; set; } = null!;
-    [StringLength(20)]
     public string PostalCode { get; set; } = null!;
 
     // Relationship
+    [DynamoDBIgnore]
     public Customer Customer { get; set; } = null!;
+    [DynamoDBGlobalSecondaryIndexHashKey("CustomerId-index")]
     public Guid CustomerId { get; set; }
 
     public CustomerAddress(){}

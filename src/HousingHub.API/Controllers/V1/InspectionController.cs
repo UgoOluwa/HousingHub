@@ -8,6 +8,7 @@ using HousingHub.Application.Inspection.Commands.RespondReschedule;
 using HousingHub.Application.Inspection.Commands.Schedule;
 using HousingHub.Application.Inspection.Queries.GetByCustomer;
 using HousingHub.Application.Inspection.Queries.GetById;
+using HousingHub.Application.Inspection.Queries.GetByOwner;
 using HousingHub.Application.Inspection.Queries.GetByProperty;
 using HousingHub.Model.Enums;
 using HousingHub.Service.Dtos.Inspection;
@@ -67,6 +68,21 @@ public class InspectionController : ControllerBase
         if (userId == null) return Unauthorized();
 
         var response = await _mediator.Send(new GetInspectionsByCustomerQuery(userId.Value, pageNumber, pageSize, status));
+        return Ok(response);
+    }
+
+    [HttpGet("owner")]
+    [Authorize(Policy = "PropertyOwnerOrAgent")]
+    [ProducesResponseType(typeof(BaseResponsePagination<HousingHub.Core.CustomResponses.PaginatedResult<OwnerInspectionDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetOwnerInspections(
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] InspectionStatus? status = null)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId == null) return Unauthorized();
+
+        var response = await _mediator.Send(new GetInspectionsByOwnerQuery(userId.Value, pageNumber, pageSize, status));
         return Ok(response);
     }
 

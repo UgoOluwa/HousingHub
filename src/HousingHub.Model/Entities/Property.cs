@@ -1,17 +1,16 @@
-using System.ComponentModel.DataAnnotations;
+using Amazon.DynamoDBv2.DataModel;
 using HousingHub.Model.Enums;
 
 namespace HousingHub.Model.Entities;
 
+[DynamoDBTable("Properties")]
 public class Property : BaseEntity
 {
-    [StringLength(20)]
+    [DynamoDBGlobalSecondaryIndexHashKey("PropertyId-index")]
     public string PropertyId { get; set; } = null!;
 
-    [StringLength(500)]
     public string Title { get; set; } = null!;
 
-    [StringLength(1000)]
     public string Description { get; set; } = null!;
 
     public PropertyType PropertyType { get; set; }
@@ -21,22 +20,29 @@ public class Property : BaseEntity
     public PropertyFeature Features { get; set; } = PropertyFeature.None;
 
     // Contact person
-    [StringLength(200)]
     public string? ContactPersonName { get; set; }
-
-    [StringLength(200)]
     public string? ContactPersonEmail { get; set; }
-
-    [StringLength(50)]
     public string? ContactPersonPhoneNumber { get; set; }
 
-    // Relationships
+    // Relationships (foreign keys only, navigation properties ignored by DynamoDB)
+    [DynamoDBGlobalSecondaryIndexHashKey("OwnerId-index")]
     public Guid OwnerId { get; set; }
+    [DynamoDBIgnore]
     public Customer Owner { get; set; } = null!;
+    [DynamoDBIgnore]
     public ICollection<PropertyFile> Files { get; set; } = new List<PropertyFile>();
+    [DynamoDBIgnore]
     public ICollection<PropertyInspection> Inspections { get; set; } = new List<PropertyInspection>();
+    [DynamoDBIgnore]
     public PropertyAddress Address { get; set; } = null!;
     public Guid AddressId { get; set; }
+
+    // Geolocation
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+
+    // Analytics
+    public long ViewCount { get; set; }
 
     public Property() { }
 

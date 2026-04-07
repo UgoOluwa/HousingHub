@@ -1,17 +1,14 @@
 ﻿using HousingHub.Data.Contexts;
-using Microsoft.EntityFrameworkCore;
 
 namespace HousingHub.API.Common.Extensions;
 
 public static class MigrationExtensions
 {
-    public static void ApplyMigrations(this IApplicationBuilder app)
+    public static async Task InitializeDynamoDbAsync(this IApplicationBuilder app)
     {
         using IServiceScope scope = app.ApplicationServices.CreateScope();
 
-        using AppDbContext dbContext =
-            scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        dbContext.Database.Migrate();
+        var initializer = scope.ServiceProvider.GetRequiredService<DynamoDbTableInitializer>();
+        await initializer.InitializeAsync();
     }
 }

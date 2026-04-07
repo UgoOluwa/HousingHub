@@ -17,4 +17,6 @@ public record CreatePropertyDto(
     string? ContactPersonPhoneNumber,
     Guid OwnerId,
     CreatePropertyAddressDto? PropertyAddress,
+    double? Latitude,
+    double? Longitude,
     IList<IFormFile>? Files = null);

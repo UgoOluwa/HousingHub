@@ -1,92 +1,127 @@
 ﻿using System.Linq.Expressions;
-using Microsoft.EntityFrameworkCore;
-using HousingHub.Data.Contexts;
+using Amazon.DynamoDBv2.DataModel;
 using HousingHub.Data.RepositoryInterfaces.Commands;
+using HousingHub.Model.Entities;
 
 namespace HousingHub.Repository.Commands;
 
 public class GenericCommandRepository<T> : IGenericCommandRepository<T> where T : class
 {
-    private readonly AppDbContext _applicationContext;
+    protected readonly IDynamoDBContext _context;
 
-    public GenericCommandRepository(AppDbContext applicationContext)
+    public GenericCommandRepository(IDynamoDBContext context)
     {
-        _applicationContext = applicationContext;
+        _context = context;
     }
 
     public async Task<bool> InsertAsync(T entity)
     {
-        var response = await _applicationContext.Set<T>().AddAsync(entity);
-        return response.State == EntityState.Added;
+        SetTimestamps(entity, isNew: true);
+        await _context.SaveAsync(entity);
+        return true;
     }
 
-    public void Update(T entity)
+    public async Task UpdateAsync(T entity)
     {
-        _applicationContext.Set<T>().Update(entity);
+        SetTimestamps(entity, isNew: false);
+        await _context.SaveAsync(entity);
     }
 
-    public void Delete(T entity)
+    public async Task DeleteAsync(T entity)
     {
-        _applicationContext.Set<T>().Remove(entity);
-    }
-
-    public async Task<int> SaveChangesAsync()
-    {
-        return await _applicationContext.SaveChangesAsync();
+        await _context.DeleteAsync(entity);
     }
 
     public async Task InsertRangeAsync(IEnumerable<T> entities)
     {
-        await _applicationContext.Set<T>().AddRangeAsync(entities);
+        var batch = _context.CreateBatchWrite<T>();
+        foreach (var entity in entities)
+        {
+            SetTimestamps(entity, isNew: true);
+            batch.AddPutItem(entity);
+        }
+        await batch.ExecuteAsync();
     }
 
-    public void UpdateRange(IEnumerable<T> entities)
+    public async Task UpdateRangeAsync(IEnumerable<T> entities)
     {
-        _applicationContext.Set<T>().UpdateRange(entities);
+        var batch = _context.CreateBatchWrite<T>();
+        foreach (var entity in entities)
+        {
+            SetTimestamps(entity, isNew: false);
+            batch.AddPutItem(entity);
+        }
+        await batch.ExecuteAsync();
     }
 
-    public void DeleteRange(IEnumerable<T> entities)
+    public async Task DeleteRangeAsync(IEnumerable<T> entities)
     {
-        _applicationContext.Set<T>().RemoveRange(entities);
+        var batch = _context.CreateBatchWrite<T>();
+        foreach (var entity in entities)
+        {
+            batch.AddDeleteItem(entity);
+        }
+        await batch.ExecuteAsync();
     }
 
     public async Task<bool> ExistAsync(Expression<Func<T, bool>> predicate)
     {
-        return await _applicationContext.Set<T>().AnyAsync(predicate);
+        var items = await ScanAllAsync();
+        return items.AsQueryable().Any(predicate);
     }
 
     public async Task<int> CountAsync(Expression<Func<T, bool>> predicate)
     {
-        return await _applicationContext.Set<T>().CountAsync(predicate);
+        var items = await ScanAllAsync();
+        return items.AsQueryable().Count(predicate);
     }
 
     public async Task<IEnumerable<T>> GetWhereAsync(Expression<Func<T, bool>> predicate)
     {
-        return await _applicationContext.Set<T>().Where(predicate).ToListAsync();
+        var items = await ScanAllAsync();
+        return items.AsQueryable().Where(predicate).ToList();
     }
 
     public async Task<T?> GetSingleAsync(Expression<Func<T, bool>> predicate)
     {
-        return await _applicationContext.Set<T>().FirstOrDefaultAsync(predicate);
+        var items = await ScanAllAsync();
+        return items.AsQueryable().FirstOrDefault(predicate);
     }
 
     public async Task<T?> GetByIdAsync(Guid id)
     {
-        return await _applicationContext.Set<T>().FindAsync(id);
+        return await _context.LoadAsync<T>(id);
     }
 
     public async Task<IEnumerable<T>> GetAllAsync(Expression<Func<T, bool>>? predicate = null)
     {
-        return predicate == null ? await _applicationContext.Set<T>().ToListAsync() : await _applicationContext.Set<T>().Where(predicate).ToListAsync();
+        var items = await ScanAllAsync();
+        return predicate == null ? items : items.AsQueryable().Where(predicate).ToList();
     }
 
     public async Task<List<T>> GetListAsync(Expression<Func<T, bool>>? predicate = null)
     {
-        return predicate == null ? await _applicationContext.Set<T>().ToListAsync() : await _applicationContext.Set<T>().Where(predicate).ToListAsync();
+        var items = await ScanAllAsync();
+        return predicate == null ? items : items.AsQueryable().Where(predicate).ToList();
     }
 
-    public IQueryable<T> GetQueryable(Expression<Func<T, bool>>? predicate = null)
+    private async Task<List<T>> ScanAllAsync()
     {
-        return predicate == null ? _applicationContext.Set<T>() : _applicationContext.Set<T>().Where(predicate);
+        var search = _context.ScanAsync<T>(new List<ScanCondition>());
+        return await search.GetRemainingAsync();
+    }
+
+    private static void SetTimestamps(T entity, bool isNew)
+    {
+        if (entity is BaseEntity baseEntity)
+        {
+            var utcNow = DateTime.UtcNow;
+            if (isNew)
+            {
+                baseEntity.DateCreated = utcNow;
+                baseEntity.IsActive = true;
+            }
+            baseEntity.DateModified = utcNow;
+        }
     }
 }

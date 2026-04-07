@@ -5,7 +5,6 @@ using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.PropertyService.Interfaces;
-using HousingHub.Service.RepositoryInterfaces.Common;
 using Microsoft.Extensions.Logging;
 
 namespace HousingHub.Service.PropertyService;
@@ -29,11 +28,13 @@ public class PropertyQueryService : IPropertyQueryService
         try
         {
             Property? property = await _unitOfWOrk.PropertyQueries.GetByAsync(
-                x => x.Id == id,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == id);
 
             if (property is null)
                 return new BaseResponse<PropertyDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            property.ViewCount++;
+            await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
 
             return new BaseResponse<PropertyDto?>(_mapper.Map<PropertyDto>(property), true, string.Empty, ResponseMessages.Successful);
         }
@@ -49,8 +50,7 @@ public class PropertyQueryService : IPropertyQueryService
         try
         {
             Property? property = await _unitOfWOrk.PropertyQueries.GetByAsync(
-                x => x.PropertyId == propertyId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.PropertyId == propertyId);
 
             if (property is null)
                 return new BaseResponse<PropertyDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
@@ -68,8 +68,7 @@ public class PropertyQueryService : IPropertyQueryService
     {
         try
         {
-            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync();
 
             return new BaseResponse<List<PropertyDto>>(
                 _mapper.Map<List<PropertyDto>>(properties), true, string.Empty, ResponseMessages.Successful);
@@ -109,8 +108,7 @@ public class PropertyQueryService : IPropertyQueryService
 
             var (properties, totalCount) = await _unitOfWOrk.PropertyQueries.GetPagedAsync(
                 filter.PageNumber, filter.PageSize,
-                predicate: predicate,
-                findOptions: new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                predicate: predicate);
 
             var mappedItems = _mapper.Map<List<PropertyDto>>(properties);
             var paginatedResult = new PaginatedResult<PropertyDto>(mappedItems, totalCount, filter.PageNumber, filter.PageSize);
@@ -129,8 +127,7 @@ public class PropertyQueryService : IPropertyQueryService
         try
         {
             var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(
-                x => x.OwnerId == ownerId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.OwnerId == ownerId);
 
             return new BaseResponse<List<PropertyDto>>(
                 _mapper.Map<List<PropertyDto>>(properties), true, string.Empty, ResponseMessages.Successful);
@@ -141,4 +138,89 @@ public class PropertyQueryService : IPropertyQueryService
             return new BaseResponse<List<PropertyDto>>(new List<PropertyDto>(), false, string.Empty, ex.Message);
         }
     }
+
+    public async Task<BaseResponse<List<PropertyDto>>> GetNewPropertiesAsync(int count = 10)
+    {
+        try
+        {
+            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync();
+
+            var newProperties = properties
+                .OrderByDescending(p => p.DateCreated)
+                .Take(count)
+                .ToList();
+
+            return new BaseResponse<List<PropertyDto>>(
+                _mapper.Map<List<PropertyDto>>(newProperties), true, string.Empty, ResponseMessages.Successful);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in GetNewPropertiesAsync: {Message}", ex.Message);
+            return new BaseResponse<List<PropertyDto>>(new List<PropertyDto>(), false, string.Empty, ex.Message);
+        }
+    }
+
+    public async Task<BaseResponse<List<PropertyDto>>> GetTrendingPropertiesAsync(int count = 10)
+    {
+        try
+        {
+            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync();
+
+            var trending = properties
+                .OrderByDescending(p => p.ViewCount)
+                .Take(count)
+                .ToList();
+
+            return new BaseResponse<List<PropertyDto>>(
+                _mapper.Map<List<PropertyDto>>(trending), true, string.Empty, ResponseMessages.Successful);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in GetTrendingPropertiesAsync: {Message}", ex.Message);
+            return new BaseResponse<List<PropertyDto>>(new List<PropertyDto>(), false, string.Empty, ex.Message);
+        }
+    }
+
+    public async Task<BaseResponse<List<PropertyDto>>> GetNearbyPropertiesAsync(double latitude, double longitude, double radiusKm = 10, int count = 10)
+    {
+        try
+        {
+            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(
+                p => p.Latitude.HasValue && p.Longitude.HasValue);
+
+            var nearby = properties
+                .Select(p => new
+                {
+                    Property = p,
+                    Distance = HaversineDistanceKm(latitude, longitude, p.Latitude!.Value, p.Longitude!.Value)
+                })
+                .Where(x => x.Distance <= radiusKm)
+                .OrderBy(x => x.Distance)
+                .Take(count)
+                .Select(x => x.Property)
+                .ToList();
+
+            return new BaseResponse<List<PropertyDto>>(
+                _mapper.Map<List<PropertyDto>>(nearby), true, string.Empty, ResponseMessages.Successful);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in GetNearbyPropertiesAsync: {Message}", ex.Message);
+            return new BaseResponse<List<PropertyDto>>(new List<PropertyDto>(), false, string.Empty, ex.Message);
+        }
+    }
+
+    private static double HaversineDistanceKm(double lat1, double lon1, double lat2, double lon2)
+    {
+        const double earthRadiusKm = 6371.0;
+        var dLat = DegreesToRadians(lat2 - lat1);
+        var dLon = DegreesToRadians(lon2 - lon1);
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(DegreesToRadians(lat1)) * Math.Cos(DegreesToRadians(lat2)) *
+                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        return earthRadiusKm * c;
+    }
+
+    private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180.0;
 }

@@ -1,74 +1,67 @@
 using System.Linq.Expressions;
-using Microsoft.EntityFrameworkCore;
-using HousingHub.Data.Contexts;
+using Amazon.DynamoDBv2.DataModel;
 using HousingHub.Data.RepositoryInterfaces.Queries;
-using HousingHub.Service.RepositoryInterfaces.Common;
 
 namespace HousingHub.Repository.Queries;
 
 public partial class GenericQueryRepository<T> : IGenericQueryRepository<T> where T : class
 {
-    private readonly AppDbContext _applicationContext;
+    protected readonly IDynamoDBContext _context;
 
-    public GenericQueryRepository(AppDbContext applicationContext)
+    public GenericQueryRepository(IDynamoDBContext context)
     {
-        _applicationContext = applicationContext;
+        _context = context;
     }
-    
-    public async Task<T?> GetByAsync(Expression<Func<T, bool>> predicate, FindOptions? findOptions = null)
+
+    public async Task<T?> GetByAsync(Expression<Func<T, bool>> predicate)
     {
-        return await Get(findOptions).FirstOrDefaultAsync(predicate)!;
+        var items = await ScanAllAsync();
+        return items.AsQueryable().FirstOrDefault(predicate);
     }
-    public async Task<IEnumerable<T>> GetAllAsync(Expression<Func<T, bool>> predicate, FindOptions? findOptions = null)
+
+    public async Task<IEnumerable<T>> GetAllAsync(Expression<Func<T, bool>> predicate)
     {
-        return await Get(findOptions).Where(predicate).ToListAsync();
+        var items = await ScanAllAsync();
+        return items.AsQueryable().Where(predicate).ToList();
     }
-    public async Task<IEnumerable<T>> GetAllAsync(FindOptions? findOptions = null)
+
+    public async Task<IEnumerable<T>> GetAllAsync()
     {
-        return await Get(findOptions).ToListAsync();
+        return await ScanAllAsync();
     }
-    
+
     public async Task<bool> AnyAsync(Expression<Func<T, bool>> predicate)
     {
-        return await _applicationContext.Set<T>().AnyAsync(predicate);
-    }
-    public async Task<int> CountAsync(Expression<Func<T, bool>> predicate)
-    {
-        return await _applicationContext.Set<T>().CountAsync(predicate);
+        var items = await ScanAllAsync();
+        return items.AsQueryable().Any(predicate);
     }
 
-    public async Task<(IEnumerable<T> Items, int TotalCount)> GetPagedAsync(int pageNumber, int pageSize, Expression<Func<T, bool>>? predicate = null, FindOptions? findOptions = null)
+    public async Task<int> CountAsync(Expression<Func<T, bool>> predicate)
     {
-        IQueryable<T> query = Get(findOptions);
+        var items = await ScanAllAsync();
+        return items.AsQueryable().Count(predicate);
+    }
+
+    public async Task<(IEnumerable<T> Items, int TotalCount)> GetPagedAsync(int pageNumber, int pageSize, Expression<Func<T, bool>>? predicate = null)
+    {
+        var items = await ScanAllAsync();
+        IQueryable<T> query = items.AsQueryable();
 
         if (predicate != null)
             query = query.Where(predicate);
 
-        var totalCount = await query.CountAsync();
-        var items = await query
+        var totalCount = query.Count();
+        var pagedItems = query
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
-            .ToListAsync();
+            .ToList();
 
-        return (items, totalCount);
+        return (pagedItems, totalCount);
     }
 
-    private DbSet<T> Get(FindOptions? findOptions = null)
+    private async Task<List<T>> ScanAllAsync()
     {
-        findOptions ??= new FindOptions();
-        var entity = _applicationContext.Set<T>();
-        if (findOptions.IsAsNoTracking && findOptions.IsIgnoreAutoIncludes)
-        {
-            entity.IgnoreAutoIncludes().AsNoTracking();
-        }
-        else if (findOptions.IsIgnoreAutoIncludes)
-        {
-            entity.IgnoreAutoIncludes();
-        }
-        else if (findOptions.IsAsNoTracking)
-        {
-            entity.AsNoTracking();
-        }
-        return entity;
+        var search = _context.ScanAsync<T>(new List<ScanCondition>());
+        return await search.GetRemainingAsync();
     }
 }

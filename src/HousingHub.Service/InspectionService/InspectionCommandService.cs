@@ -6,7 +6,6 @@ using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Dtos.Inspection;
 using HousingHub.Service.InspectionService.Interfaces;
-using HousingHub.Service.RepositoryInterfaces.Common;
 using Microsoft.Extensions.Logging;
 
 namespace HousingHub.Service.InspectionService;
@@ -36,15 +35,13 @@ public class InspectionCommandService : IInspectionCommandService
         try
         {
             var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == authenticatedUserId);
 
             if (customer == null)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
 
             var property = await _unitOfWOrk.PropertyQueries.GetByAsync(
-                x => x.Id == request.PropertyId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == request.PropertyId);
 
             if (property == null)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("property"));
@@ -60,8 +57,7 @@ public class InspectionCommandService : IInspectionCommandService
 
             // Notify property owner (in-app)
             var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == property.OwnerId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == property.OwnerId);
 
             if (owner != null)
             {
@@ -100,15 +96,13 @@ public class InspectionCommandService : IInspectionCommandService
         try
         {
             var inspection = await _unitOfWOrk.PropertyInspectionQueries.GetByAsync(
-                x => x.Id == request.InspectionId,
-                new FindOptions { IsAsNoTracking = false, IsIgnoreAutoIncludes = true });
+                x => x.Id == request.InspectionId);
 
             if (inspection == null)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
             var property = await _unitOfWOrk.PropertyQueries.GetByAsync(
-                x => x.Id == inspection.PropertyId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == inspection.PropertyId);
 
             if (property == null)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("property"));
@@ -129,16 +123,14 @@ public class InspectionCommandService : IInspectionCommandService
                 inspection.DeclineNote = request.Note;
             }
 
-            _unitOfWOrk.PropertyInspectionCommands.Update(inspection);
+            await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
 
             // Notify customer (in-app)
             var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == inspection.CustomerId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == inspection.CustomerId);
 
             var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == authenticatedUserId);
 
             string action = request.Accept ? "Confirmed" : "Declined";
 
@@ -180,15 +172,13 @@ public class InspectionCommandService : IInspectionCommandService
         try
         {
             var inspection = await _unitOfWOrk.PropertyInspectionQueries.GetByAsync(
-                x => x.Id == request.InspectionId,
-                new FindOptions { IsAsNoTracking = false, IsIgnoreAutoIncludes = true });
+                x => x.Id == request.InspectionId);
 
             if (inspection == null)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
             var property = await _unitOfWOrk.PropertyQueries.GetByAsync(
-                x => x.Id == inspection.PropertyId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == inspection.PropertyId);
 
             if (property == null)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("property"));
@@ -204,16 +194,14 @@ public class InspectionCommandService : IInspectionCommandService
             inspection.RescheduledTime = request.RescheduledTime;
             inspection.RescheduleNote = request.Note;
 
-            _unitOfWOrk.PropertyInspectionCommands.Update(inspection);
+            await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
 
             // Notify customer (in-app)
             var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == inspection.CustomerId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == inspection.CustomerId);
 
             var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == authenticatedUserId);
 
             if (customer != null)
             {
@@ -253,8 +241,7 @@ public class InspectionCommandService : IInspectionCommandService
         try
         {
             var inspection = await _unitOfWOrk.PropertyInspectionQueries.GetByAsync(
-                x => x.Id == inspectionId,
-                new FindOptions { IsAsNoTracking = false, IsIgnoreAutoIncludes = true });
+                x => x.Id == inspectionId);
 
             if (inspection == null)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
@@ -276,22 +263,19 @@ public class InspectionCommandService : IInspectionCommandService
                 inspection.Status = InspectionStatus.Cancelled;
             }
 
-            _unitOfWOrk.PropertyInspectionCommands.Update(inspection);
+            await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
 
             // Notify property owner (in-app)
             var property = await _unitOfWOrk.PropertyQueries.GetByAsync(
-                x => x.Id == inspection.PropertyId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == inspection.PropertyId);
 
             var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == authenticatedUserId);
 
             if (property != null && customer != null)
             {
                 var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                    x => x.Id == property.OwnerId,
-                    new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                    x => x.Id == property.OwnerId);
 
                 if (owner != null)
                 {
@@ -324,8 +308,7 @@ public class InspectionCommandService : IInspectionCommandService
         try
         {
             var inspection = await _unitOfWOrk.PropertyInspectionQueries.GetByAsync(
-                x => x.Id == inspectionId,
-                new FindOptions { IsAsNoTracking = false, IsIgnoreAutoIncludes = true });
+                x => x.Id == inspectionId);
 
             if (inspection == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
@@ -337,16 +320,14 @@ public class InspectionCommandService : IInspectionCommandService
                 return new BaseResponse<bool>(false, false, string.Empty, "Cannot cancel a completed or already cancelled inspection.");
 
             inspection.Status = InspectionStatus.Cancelled;
-            _unitOfWOrk.PropertyInspectionCommands.Update(inspection);
+            await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
 
             // Notify property owner
             var property = await _unitOfWOrk.PropertyQueries.GetByAsync(
-                x => x.Id == inspection.PropertyId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == inspection.PropertyId);
 
             var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId,
-                new FindOptions { IsAsNoTracking = true, IsIgnoreAutoIncludes = true });
+                x => x.Id == authenticatedUserId);
 
             if (property != null && customer != null)
             {

@@ -15,4 +15,6 @@ public record UpdatePropertyDto(
     string? ContactPersonName,
     string? ContactPersonEmail,
     string? ContactPersonPhoneNumber,
-    UpdatePropertyAddressDto? PropertyAddress);
+    UpdatePropertyAddressDto? PropertyAddress,
+    double? Latitude,
+    double? Longitude);
