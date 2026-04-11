@@ -7,15 +7,19 @@ using HealthChecks.UI.Client;
 using HousingHub.API.Common;
 using HousingHub.API.Common.Extensions;
 using HousingHub.API.Common.Middlewares;
+using HousingHub.API.Hubs;
 using HousingHub.Application;
 using HousingHub.Data.Contexts;
 using HousingHub.Repository;
 using HousingHub.Service;
+using HousingHub.Service.NotificationService.Interfaces;
+using HousingHub.Service.ChatService.Interfaces;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
@@ -86,6 +90,19 @@ namespace HousingHub.API
                         ValidAudience = builder.Configuration["Jwt:Audience"],
                         ClockSkew = TimeSpan.Zero
                     };
+                    o.Events = new JwtBearerEvents
+                    {
+                        OnMessageReceived = context =>
+                        {
+                            var accessToken = context.Request.Query["access_token"];
+                            var path = context.HttpContext.Request.Path;
+                            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                            {
+                                context.Token = accessToken;
+                            }
+                            return Task.CompletedTask;
+                        }
+                    };
                 })
                 .AddCookie("ExternalAuth", o =>
                 {
@@ -123,6 +140,12 @@ namespace HousingHub.API
             });
             builder.Services.AddTransient<DynamoDbTableInitializer>();
 
+            // SignalR
+            builder.Services.AddSignalR();
+            builder.Services.AddSingleton<IUserIdProvider, NameUserIdProvider>();
+            builder.Services.AddSingleton<IRealtimeNotifier, SignalRNotificationSender>();
+            builder.Services.AddSingleton<IChatRealtimeNotifier, SignalRChatNotifier>();
+
             //Add methods Extensions
             builder.Services.AddInjectionRepository()
                 .AddInjectionService()
@@ -155,6 +178,8 @@ namespace HousingHub.API
             
 
             app.MapControllers();
+            app.MapHub<NotificationHub>("/hubs/notifications");
+            app.MapHub<ChatHub>("/hubs/chat");
 
             app.Run();
         }

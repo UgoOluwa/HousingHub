@@ -20,6 +20,10 @@ public class UnitOfWork : IUnitOfWOrk
     public IPropertyQueryRepository PropertyQueries { get; }
     public INotificationCommandRepository NotificationCommands { get; }
     public INotificationQueryRepository NotificationQueries { get; }
+    public IConversationCommandRepository ConversationCommands { get; }
+    public IConversationQueryRepository ConversationQueries { get; }
+    public IChatMessageCommandRepository ChatMessageCommands { get; }
+    public IChatMessageQueryRepository ChatMessageQueries { get; }
 
     public UnitOfWork(
         ICustomerAddressCommandRepository customerAddressCommands,
@@ -35,7 +39,11 @@ public class UnitOfWork : IUnitOfWOrk
         IPropertyCommandRepository propertyCommands,
         IPropertyQueryRepository propertyQueries,
         INotificationCommandRepository notificationCommands,
-        INotificationQueryRepository notificationQueries)
+        INotificationQueryRepository notificationQueries,
+        IConversationCommandRepository conversationCommands,
+        IConversationQueryRepository conversationQueries,
+        IChatMessageCommandRepository chatMessageCommands,
+        IChatMessageQueryRepository chatMessageQueries)
     {
         CustomerAddressCommands = customerAddressCommands;
         CustomerAddressQueries = customerAddressQueries;
@@ -51,6 +59,10 @@ public class UnitOfWork : IUnitOfWOrk
         PropertyQueries = propertyQueries;
         NotificationCommands = notificationCommands;
         NotificationQueries = notificationQueries;
+        ConversationCommands = conversationCommands;
+        ConversationQueries = conversationQueries;
+        ChatMessageCommands = chatMessageCommands;
+        ChatMessageQueries = chatMessageQueries;
     }
 
     public Task SaveAsync()

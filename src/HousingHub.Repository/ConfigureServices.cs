@@ -28,6 +28,10 @@ public static class ConfigureServices
         services.AddScoped<ICustomerCommandRepository, CustomerCommandRepository>();
         services.AddScoped<ICustomerQueryRepository, CustomerQueryRepository>();
         services.AddScoped<ICustomerAddressQueryRepository, CustomerAddressQueryRepository>();
+        services.AddScoped<IConversationCommandRepository, ConversationCommandRepository>();
+        services.AddScoped<IConversationQueryRepository, ConversationQueryRepository>();
+        services.AddScoped<IChatMessageCommandRepository, ChatMessageCommandRepository>();
+        services.AddScoped<IChatMessageQueryRepository, ChatMessageQueryRepository>();
 
         return services;
     }

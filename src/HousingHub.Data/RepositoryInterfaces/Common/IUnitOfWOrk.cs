@@ -19,6 +19,10 @@ public interface IUnitOfWOrk : IDisposable
     IPropertyQueryRepository PropertyQueries { get; }
     INotificationCommandRepository NotificationCommands { get; }
     INotificationQueryRepository NotificationQueries { get; }
+    IConversationCommandRepository ConversationCommands { get; }
+    IConversationQueryRepository ConversationQueries { get; }
+    IChatMessageCommandRepository ChatMessageCommands { get; }
+    IChatMessageQueryRepository ChatMessageQueries { get; }
 
     Task SaveAsync();
 }

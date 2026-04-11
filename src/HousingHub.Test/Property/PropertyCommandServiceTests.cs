@@ -13,7 +13,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using System.Linq.Expressions;
 
-namespace HousingHub.Test.Property;
+namespace HousingHub.Test.Properties;
 
 public class PropertyCommandServiceTests
 {
@@ -27,13 +27,18 @@ public class PropertyCommandServiceTests
 
     public PropertyCommandServiceTests()
     {
-        _unitOfWorkMock = new Mock<IUnitOfWOrk>();
+        _unitOfWorkMock = new Mock<IUnitOfWOrk> { DefaultValue = DefaultValue.Mock };
         _fileStorageServiceMock = new Mock<IFileStorageService>();
-        var configExpression = new MapperConfigurationExpression();
-        configExpression.AddProfile<PropertyMapper>();
-        var config = new MapperConfiguration(configExpression);
+        var config = new MapperConfiguration(cfg => cfg.AddProfile<PropertyMapper>(), NullLoggerFactory.Instance);
         _mapper = config.CreateMapper();
         var logger = NullLogger<PropertyCommandService>.Instance;
+
+        // Set up default returns for command methods used in Update/Delete flows
+        _unitOfWorkMock.Setup(u => u.PropertyCommands.UpdateAsync(It.IsAny<HousingHub.Model.Entities.Property>())).Returns(Task.CompletedTask);
+        _unitOfWorkMock.Setup(u => u.PropertyCommands.DeleteAsync(It.IsAny<HousingHub.Model.Entities.Property>())).Returns(Task.CompletedTask);
+        _unitOfWorkMock.Setup(u => u.PropertyAddressCommands.InsertAsync(It.IsAny<HousingHub.Model.Entities.PropertyAddress>())).ReturnsAsync(true);
+        _unitOfWorkMock.Setup(u => u.SaveAsync()).Returns(Task.CompletedTask);
+
         _sut = new PropertyCommandService(logger, _unitOfWorkMock.Object, _mapper, _fileStorageServiceMock.Object);
     }
 
@@ -238,7 +243,9 @@ public class PropertyCommandServiceTests
             ContactPersonEmail: null,
             ContactPersonPhoneNumber: null,
             OwnerId: OwnerId,
-            PropertyAddress: null);
+            PropertyAddress: null,
+            Latitude: null,
+            Longitude: null);
 
         var result = await _sut.CreateProperty(dto, OwnerId);
 

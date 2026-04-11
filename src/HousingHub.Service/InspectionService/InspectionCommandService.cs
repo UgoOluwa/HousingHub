@@ -5,7 +5,9 @@ using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Dtos.Inspection;
+using HousingHub.Service.Dtos.Notification;
 using HousingHub.Service.InspectionService.Interfaces;
+using HousingHub.Service.NotificationService.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace HousingHub.Service.InspectionService;
@@ -15,6 +17,7 @@ public class InspectionCommandService : IInspectionCommandService
     private readonly IUnitOfWOrk _unitOfWOrk;
     private readonly IMapper _mapper;
     private readonly IEmailService _emailService;
+    private readonly IRealtimeNotifier _realtimeNotifier;
     private readonly ILogger<InspectionCommandService> _logger;
     private const string ClassName = "inspection";
 
@@ -22,11 +25,13 @@ public class InspectionCommandService : IInspectionCommandService
         IUnitOfWOrk unitOfWOrk,
         IMapper mapper,
         IEmailService emailService,
+        IRealtimeNotifier realtimeNotifier,
         ILogger<InspectionCommandService> logger)
     {
         _unitOfWOrk = unitOfWOrk;
         _mapper = mapper;
         _emailService = emailService;
+        _realtimeNotifier = realtimeNotifier;
         _logger = logger;
     }
 
@@ -69,6 +74,7 @@ public class InspectionCommandService : IInspectionCommandService
                     $"{customer.FirstName} {customer.LastName} has requested an inspection for your property \"{property.Title}\" on {request.ScheduledDate:yyyy-MM-dd} at {request.ScheduledTime:hh\\:mm}.");
 
                 await _unitOfWOrk.NotificationCommands.InsertAsync(notification);
+                await PushRealtimeNotificationAsync(notification);
             }
 
             await _unitOfWOrk.SaveAsync();
@@ -145,6 +151,7 @@ public class InspectionCommandService : IInspectionCommandService
                     $"Your inspection request for \"{property.Title}\" has been {action.ToLower()}.{(string.IsNullOrWhiteSpace(request.Note) ? "" : $" Note: {request.Note}")}");
 
                 await _unitOfWOrk.NotificationCommands.InsertAsync(notification);
+                await PushRealtimeNotificationAsync(notification);
             }
 
             await _unitOfWOrk.SaveAsync();
@@ -183,11 +190,14 @@ public class InspectionCommandService : IInspectionCommandService
             if (property == null)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("property"));
 
-            if (property.OwnerId != authenticatedUserId)
-                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionNotOwner);
+            bool isOwner = property.OwnerId == authenticatedUserId;
+            bool isCustomer = inspection.CustomerId == authenticatedUserId;
 
-            if (inspection.Status != InspectionStatus.Pending)
-                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionNotPending);
+            if (!isOwner && !isCustomer)
+                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionNotParticipant);
+
+            if (inspection.Status != InspectionStatus.Pending && inspection.Status != InspectionStatus.Confirmed)
+                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionCannotReschedule);
 
             inspection.Status = InspectionStatus.Rescheduled;
             inspection.RescheduledDate = request.RescheduledDate;
@@ -196,33 +206,32 @@ public class InspectionCommandService : IInspectionCommandService
 
             await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
 
-            // Notify customer (in-app)
-            var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == inspection.CustomerId);
-
-            var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
+            var initiator = await _unitOfWOrk.CustomerQueries.GetByAsync(
                 x => x.Id == authenticatedUserId);
 
-            if (customer != null)
-            {
-                var notification = new Notification(
-                    customer.Id,
-                    inspection.Id,
-                    NotificationType.InspectionRescheduled,
-                    "Inspection Rescheduled",
-                    $"The property owner has rescheduled your inspection for \"{property.Title}\" to {request.RescheduledDate:yyyy-MM-dd} at {request.RescheduledTime:hh\\:mm}.{(string.IsNullOrWhiteSpace(request.Note) ? "" : $" Note: {request.Note}")}");
+            // Notify the other party
+            Guid recipientId = isOwner ? inspection.CustomerId : property.OwnerId;
+            string initiatorName = initiator != null ? $"{initiator.FirstName} {initiator.LastName}" : "A user";
+            string role = isOwner ? "property owner" : "requester";
 
-                await _unitOfWOrk.NotificationCommands.InsertAsync(notification);
-            }
+            var recipient = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == recipientId);
 
+            var notification = new Notification(
+                recipientId,
+                inspection.Id,
+                NotificationType.InspectionRescheduled,
+                "Inspection Rescheduled",
+                $"The {role} has rescheduled the inspection for \"{property.Title}\" to {request.RescheduledDate:yyyy-MM-dd} at {request.RescheduledTime:hh\\:mm}.{(string.IsNullOrWhiteSpace(request.Note) ? "" : $" Note: {request.Note}")}");
+
+            await _unitOfWOrk.NotificationCommands.InsertAsync(notification);
+            await PushRealtimeNotificationAsync(notification);
             await _unitOfWOrk.SaveAsync();
 
-            // Notify customer (email)
-            if (customer != null && owner != null)
+            if (recipient != null && initiator != null)
             {
                 _ = _emailService.SendInspectionResponseAsync(
-                    customer.Email, customer.FirstName,
-                    $"{owner.FirstName} {owner.LastName}",
+                    recipient.Email, recipient.FirstName,
+                    initiatorName,
                     property.Title, "Rescheduled", request.Note,
                     request.RescheduledDate, request.RescheduledTime);
             }
@@ -289,6 +298,7 @@ public class InspectionCommandService : IInspectionCommandService
                         $"{customer.FirstName} {customer.LastName} has {action} the rescheduled inspection for \"{property.Title}\".");
 
                     await _unitOfWOrk.NotificationCommands.InsertAsync(notification);
+                    await PushRealtimeNotificationAsync(notification);
                 }
             }
 
@@ -339,6 +349,7 @@ public class InspectionCommandService : IInspectionCommandService
                     $"{customer.FirstName} {customer.LastName} has cancelled their inspection for \"{property.Title}\".");
 
                 await _unitOfWOrk.NotificationCommands.InsertAsync(notification);
+                await PushRealtimeNotificationAsync(notification);
             }
 
             await _unitOfWOrk.SaveAsync();
@@ -350,5 +361,20 @@ public class InspectionCommandService : IInspectionCommandService
             _logger.LogError(ex, "An error occurred in CancelInspectionAsync: {Message}", ex.Message);
             return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
         }
+    }
+
+    private async Task PushRealtimeNotificationAsync(Notification notification)
+    {
+        var dto = new NotificationDto(
+            notification.Id,
+            notification.DateCreated,
+            notification.RecipientId,
+            notification.InspectionId,
+            notification.Type,
+            notification.Title,
+            notification.Message,
+            notification.IsRead);
+
+        await _realtimeNotifier.SendNotificationAsync(notification.RecipientId, dto);
     }
 }

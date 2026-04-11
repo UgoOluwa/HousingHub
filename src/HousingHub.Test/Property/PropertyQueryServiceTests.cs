@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using System.Linq.Expressions;
 
-namespace HousingHub.Test.Property;
+namespace HousingHub.Test.Properties;
 
 public class PropertyQueryServiceTests
 {
@@ -23,12 +23,15 @@ public class PropertyQueryServiceTests
 
     public PropertyQueryServiceTests()
     {
-        _unitOfWorkMock = new Mock<IUnitOfWOrk>();
-        var configExpression = new MapperConfigurationExpression();
-        configExpression.AddProfile<PropertyMapper>();
-        var config = new MapperConfiguration(configExpression);
+        _unitOfWorkMock = new Mock<IUnitOfWOrk> { DefaultValue = DefaultValue.Mock };
+        var config = new MapperConfiguration(cfg => cfg.AddProfile<PropertyMapper>(), NullLoggerFactory.Instance);
         _mapper = config.CreateMapper();
         var logger = NullLogger<PropertyQueryService>.Instance;
+
+        // GetPropertyAsync increments ViewCount via UpdateAsync, so these must be set up
+        _unitOfWorkMock.Setup(u => u.PropertyCommands.UpdateAsync(It.IsAny<HousingHub.Model.Entities.Property>())).Returns(Task.CompletedTask);
+        _unitOfWorkMock.Setup(u => u.SaveAsync()).Returns(Task.CompletedTask);
+
         _sut = new PropertyQueryService(_unitOfWorkMock.Object, _mapper, logger);
     }
 
@@ -180,6 +183,13 @@ public class PropertyQueryServiceTests
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetAllAsync())
             .ReturnsAsync(new List<HousingHub.Model.Entities.Property> { property });
+
+        var result = await _sut.GetAllPropertiesAsync();
+
+        Assert.True(result.IsSuccessful);
+        Assert.Single(result.Data!);
+        Assert.Equal(property.Title, result.Data[0].Title);
+    }
 
     // ??? GetPropertiesByOwnerAsync ????????????????????????????????????
 

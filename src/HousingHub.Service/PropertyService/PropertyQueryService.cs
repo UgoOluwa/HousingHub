@@ -223,4 +223,38 @@ public class PropertyQueryService : IPropertyQueryService
     }
 
     private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180.0;
+
+    public async Task<BaseResponse<OwnerDashboardStatsDto>> GetOwnerDashboardStatsAsync(Guid ownerId)
+    {
+        try
+        {
+            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(p => p.OwnerId == ownerId);
+            var propertyList = properties.ToList();
+            var propertyIds = propertyList.Select(p => p.Id).ToHashSet();
+
+            int totalProperties = propertyList.Count;
+            int activeListings = propertyList.Count(p => p.Availability == PropertyAvailability.Available);
+
+            int pendingInspections = 0;
+            int completedInspections = 0;
+
+            if (propertyIds.Count > 0)
+            {
+                var inspections = await _unitOfWOrk.PropertyInspectionQueries.GetAllAsync(
+                    i => propertyIds.Contains(i.PropertyId));
+
+                var inspectionList = inspections.ToList();
+                pendingInspections = inspectionList.Count(i => i.Status == InspectionStatus.Pending);
+                completedInspections = inspectionList.Count(i => i.Status == InspectionStatus.Completed);
+            }
+
+            var stats = new OwnerDashboardStatsDto(totalProperties, activeListings, pendingInspections, completedInspections);
+            return new BaseResponse<OwnerDashboardStatsDto>(stats, true, string.Empty, ResponseMessages.Successful);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in GetOwnerDashboardStatsAsync: {Message}", ex.Message);
+            return new BaseResponse<OwnerDashboardStatsDto>(null, false, string.Empty, ex.Message);
+        }
+    }
 }

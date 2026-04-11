@@ -44,6 +44,15 @@ public class DynamoDbTableInitializer
         {
             CreateGsi("RecipientId-index", "RecipientId"),
         }),
+        ["Conversations"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            CreateGsi("ParticipantOneId-index", "ParticipantOneId"),
+            CreateGsi("ParticipantTwoId-index", "ParticipantTwoId"),
+        }),
+        ["ChatMessages"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            CreateGsi("ConversationId-index", "ConversationId"),
+        }),
     };
 
     public DynamoDbTableInitializer(IAmazonDynamoDB client, ILogger<DynamoDbTableInitializer> logger)

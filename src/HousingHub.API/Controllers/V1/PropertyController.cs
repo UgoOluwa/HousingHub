@@ -10,6 +10,7 @@ using HousingHub.Application.Property.Queries.GetAll;
 using HousingHub.Application.Property.Queries.GetById;
 using HousingHub.Application.Property.Queries.GetFiles;
 using HousingHub.Application.Property.Queries.GetNearby;
+using HousingHub.Application.Property.Queries.GetDashboardStats;
 using HousingHub.Application.Property.Queries.GetNew;
 using HousingHub.Application.Property.Queries.GetTrending;
 using HousingHub.Service.Dtos.Property;
@@ -85,6 +86,20 @@ public class PropertyController : ControllerBase
         if (userId == null) return Unauthorized();
 
         var response = await _mediator.Send(new DeletePropertyCommand(id, userId.Value));
+        return Ok(response);
+    }
+
+    // ─── Dashboard ──────────────────────────────────────────────────
+
+    [Authorize(Policy = "PropertyOwnerOrAgent")]
+    [HttpGet("dashboard")]
+    [ProducesResponseType(typeof(BaseResponse<OwnerDashboardStatsDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDashboardStats()
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId == null) return Unauthorized();
+
+        var response = await _mediator.Send(new GetOwnerDashboardStatsQuery(userId.Value));
         return Ok(response);
     }
 

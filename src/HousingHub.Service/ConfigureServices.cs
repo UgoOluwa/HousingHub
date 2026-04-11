@@ -2,6 +2,8 @@
 using Amazon.S3;
 using HousingHub.Service.AuthService;
 using HousingHub.Service.AuthService.Interfaces;
+using HousingHub.Service.ChatService;
+using HousingHub.Service.ChatService.Interfaces;
 using HousingHub.Service.Commons.Authentication;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.FileStorage;
@@ -37,6 +39,7 @@ public static class ConfigureServices
             cfg.AddProfile<PropertyFileMapper>();
             cfg.AddProfile<InspectionMapper>();
             cfg.AddProfile<PropertyMapper>();
+            cfg.AddProfile<ChatMapper>();
         });
 
         // Auth
@@ -67,6 +70,8 @@ public static class ConfigureServices
         services.AddScoped<INotificationQueryService, NotificationQueryService>();
         services.AddScoped<IPropertyFileCommandService, PropertyFileCommandService>();
         services.AddScoped<IPropertyFileQueryService, PropertyFileQueryService>();
+        services.AddScoped<IChatCommandService, ChatCommandService>();
+        services.AddScoped<IChatQueryService, ChatQueryService>();
 
         // AWS S3 File Storage
         services.AddSingleton<IAmazonS3>(sp =>
