@@ -9,5 +9,8 @@ public interface ICustomerCommandService
     Task<BaseResponse<CustomerDto>> RegisterCustomer(RegisterCustomerDto request);
     Task<BaseResponse<LoginCustomerResponseDto>> LoginCustomer(LoginCustomerDto request);
     Task<BaseResponse<CustomerDto>> UpdateCustomer(UpdateCustomerDto request);
+    Task<BaseResponse<CustomerDto>> UpdateProfile(Guid customerId, UpdateProfileDto request);
+    Task<BaseResponse<bool>> SubmitKyc(Guid customerId, SubmitKycDto request);
+    Task<BaseResponse<bool>> VerifyKyc(Guid customerId, bool isApproved);
     Task<BaseResponse<bool>> DeleteCustomer(Guid customerId);
 }

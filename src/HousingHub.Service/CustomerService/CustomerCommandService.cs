@@ -94,7 +94,8 @@ public class CustomerCommandService : ICustomerCommandService
     {
         try
         {
-            var existingCustomer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Email == request.Email);
+            var emailOrPhone = request.EmailOrPhone.Trim();
+            var existingCustomer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Email == emailOrPhone || x.PhoneNumber == emailOrPhone);
         if (existingCustomer == null || !_passwordHasher.Verify(request.Password, existingCustomer.PasswordHash))
             {
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidCredentials);
@@ -144,6 +145,87 @@ public class CustomerCommandService : ICustomerCommandService
         {
             _logger.LogError(ex, "An error occurred in UpdateCustomer: {Message}", ex.Message);
             return new BaseResponse<CustomerDto>(null, false, string.Empty, ex.Message);
+        }
+    }
+
+    public async Task<BaseResponse<CustomerDto>> UpdateProfile(Guid customerId, UpdateProfileDto request)
+    {
+        try
+        {
+            var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == customerId);
+            if (customer is null)
+                return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            customer.FirstName = request.FirstName;
+            customer.LastName = request.LastName;
+            customer.PhoneNumber = request.PhoneNumber;
+            customer.DateOfBirth = request.DateOfBirth;
+            customer.JobTitle = request.JobTitle;
+            customer.CompanyName = request.CompanyName;
+            customer.Industry = request.Industry;
+
+            await _unitOfWOrk.CustomerCommands.UpdateAsync(customer);
+            await _unitOfWOrk.SaveAsync();
+
+            return new BaseResponse<CustomerDto>(_mapper.Map<CustomerDto>(customer), true, string.Empty, ResponseMessages.SetUpdateSuccessMessage(ClassName));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in UpdateProfile: {Message}", ex.Message);
+            return new BaseResponse<CustomerDto>(null, false, string.Empty, ex.Message);
+        }
+    }
+
+    public async Task<BaseResponse<bool>> SubmitKyc(Guid customerId, SubmitKycDto request)
+    {
+        try
+        {
+            var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == customerId);
+            if (customer is null)
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            customer.AddKYCDetails(
+                request.DateOfBirth,
+                request.NationalIdNumber,
+                request.IdType,
+                request.IdDocumentUrl,
+                DateTime.UtcNow,
+                request.JobTitle,
+                request.CompanyName,
+                request.Industry);
+
+            await _unitOfWOrk.CustomerCommands.UpdateAsync(customer);
+            await _unitOfWOrk.SaveAsync();
+
+            return new BaseResponse<bool>(true, true, string.Empty, "KYC submitted successfully. Verification is pending.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in SubmitKyc: {Message}", ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+        }
+    }
+
+    public async Task<BaseResponse<bool>> VerifyKyc(Guid customerId, bool isApproved)
+    {
+        try
+        {
+            var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == customerId);
+            if (customer is null)
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            customer.UpdateKycStatus(isApproved);
+
+            await _unitOfWOrk.CustomerCommands.UpdateAsync(customer);
+            await _unitOfWOrk.SaveAsync();
+
+            var message = isApproved ? "KYC verified successfully." : "KYC rejected.";
+            return new BaseResponse<bool>(true, true, string.Empty, message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in VerifyKyc: {Message}", ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
         }
     }
 

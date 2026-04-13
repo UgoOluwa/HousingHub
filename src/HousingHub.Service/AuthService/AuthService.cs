@@ -87,8 +87,9 @@ public class AuthService : IAuthService
     {
         try
         {
+            var emailOrPhone = request.EmailOrPhone.Trim();
             var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Email == request.Email);
+                x => x.Email == emailOrPhone || x.PhoneNumber == emailOrPhone);
 
             if (customer == null || string.IsNullOrEmpty(customer.PasswordHash)
                 || !_passwordHasher.Verify(request.Password, customer.PasswordHash))

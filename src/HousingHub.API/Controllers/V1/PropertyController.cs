@@ -7,6 +7,7 @@ using HousingHub.Application.Property.Commands.DeleteFile;
 using HousingHub.Application.Property.Commands.Update;
 using HousingHub.Application.Property.Commands.UploadFiles;
 using HousingHub.Application.Property.Queries.GetAll;
+using HousingHub.Application.Property.Queries.GetByOwner;
 using HousingHub.Application.Property.Queries.GetById;
 using HousingHub.Application.Property.Queries.GetFiles;
 using HousingHub.Application.Property.Queries.GetNearby;
@@ -86,6 +87,18 @@ public class PropertyController : ControllerBase
         if (userId == null) return Unauthorized();
 
         var response = await _mediator.Send(new DeletePropertyCommand(id, userId.Value));
+        return Ok(response);
+    }
+
+    [Authorize(Policy = "PropertyOwnerOrAgent")]
+    [HttpGet("my")]
+    [ProducesResponseType(typeof(BaseResponse<List<PropertyDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMyProperties()
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId == null) return Unauthorized();
+
+        var response = await _mediator.Send(new GetMyPropertiesQuery(userId.Value));
         return Ok(response);
     }
 

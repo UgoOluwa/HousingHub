@@ -61,7 +61,7 @@ namespace HousingHub.API
             })
             .AddMvc()
             .AddApiExplorer(options => {
-                options.GroupNameFormat = "'v'VVV"; //The say our format of our version number “‘v’major[.minor][-status]”
+                options.GroupNameFormat = "'v'VVV"; //The say our format of our version number ï¿½ï¿½vï¿½major[.minor][-status]ï¿½
                 options.SubstituteApiVersionInUrl = true; //This will help us to resolve the ambiguity when there is a routing conflict due to routing template one or more end points are same.
             });
 
@@ -73,6 +73,12 @@ namespace HousingHub.API
                         var customerType = context.User.FindFirst("customer_type")?.Value;
                         if (string.IsNullOrEmpty(customerType)) return false;
                         return customerType.Contains("HouseOwner") || customerType.Contains("Agent");
+                    }));
+                options.AddPolicy("AdminOnly", policy =>
+                    policy.RequireAssertion(context =>
+                    {
+                        var customerType = context.User.FindFirst("customer_type")?.Value;
+                        return customerType == "Admin";
                     }));
             });
             builder.Services.AddAuthentication(options =>

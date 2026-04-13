@@ -4,4 +4,4 @@ using MediatR;
 
 namespace HousingHub.Application.Auth.Commands.Login;
 
-public record LoginCommand(string Email, string Password) : IRequest<BaseResponse<LoginCustomerResponseDto?>>;
+public record LoginCommand(string EmailOrPhone, string Password) : IRequest<BaseResponse<LoginCustomerResponseDto?>>;

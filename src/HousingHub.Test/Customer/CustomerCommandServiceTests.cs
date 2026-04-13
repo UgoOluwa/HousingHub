@@ -145,4 +145,131 @@ public class CustomerCommandServiceTests
 
         Assert.False(result.IsSuccessful);
     }
+
+    // ── UpdateProfile ────────────────────────────────────────────
+
+    [Fact]
+    public async Task UpdateProfile_WithExistingCustomer_ReturnsSuccess()
+    {
+        var customer = new HousingHub.Model.Entities.Customer("John", "Doe", "john@test.com", "08012345678", CustomerType.Customer, TestPasswordHash) { Id = Guid.NewGuid() };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
+
+        var dto = new UpdateProfileDto("Jane", "Smith", "08099999999", null, "Engineer", "ACME", "Tech");
+        var result = await _sut.UpdateProfile(customer.Id, dto);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal("Jane", result.Data!.FirstName);
+        Assert.Equal("Smith", result.Data.LastName);
+    }
+
+    [Fact]
+    public async Task UpdateProfile_WhenCustomerNotFound_ReturnsFailure()
+    {
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync((HousingHub.Model.Entities.Customer?)null);
+
+        var dto = new UpdateProfileDto("Jane", "Smith", "08099999999", null, null, null, null);
+        var result = await _sut.UpdateProfile(Guid.NewGuid(), dto);
+
+        Assert.False(result.IsSuccessful);
+    }
+
+    [Fact]
+    public async Task UpdateProfile_CallsUpdateAndSave()
+    {
+        var customer = new HousingHub.Model.Entities.Customer("John", "Doe", "john@test.com", "08012345678", CustomerType.Customer, TestPasswordHash) { Id = Guid.NewGuid() };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
+
+        var dto = new UpdateProfileDto("Jane", "Smith", "08099999999", null, null, null, null);
+        await _sut.UpdateProfile(customer.Id, dto);
+
+        _unitOfWorkMock.Verify(u => u.CustomerCommands.UpdateAsync(It.IsAny<HousingHub.Model.Entities.Customer>()), Times.Once);
+        _unitOfWorkMock.Verify(u => u.SaveAsync(), Times.Once);
+    }
+
+    // ── SubmitKyc ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task SubmitKyc_WithExistingCustomer_ReturnsSuccess()
+    {
+        var customer = new HousingHub.Model.Entities.Customer("John", "Doe", "john@test.com", "08012345678", CustomerType.Customer, TestPasswordHash) { Id = Guid.NewGuid() };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
+
+        var dto = new SubmitKycDto(new DateTime(1990, 1, 1), "12345678901", HousingHub.Model.Enums.IDType.NIN, "https://s3.example.com/doc.jpg", "Dev", "ACME", "Tech");
+        var result = await _sut.SubmitKyc(customer.Id, dto);
+
+        Assert.True(result.IsSuccessful);
+    }
+
+    [Fact]
+    public async Task SubmitKyc_SetsKycFieldsOnCustomer()
+    {
+        var customer = new HousingHub.Model.Entities.Customer("John", "Doe", "john@test.com", "08012345678", CustomerType.Customer, TestPasswordHash) { Id = Guid.NewGuid() };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
+
+        var dto = new SubmitKycDto(new DateTime(1990, 1, 1), "NIN12345", HousingHub.Model.Enums.IDType.NIN, "https://s3.example.com/doc.jpg", null, null, null);
+        await _sut.SubmitKyc(customer.Id, dto);
+
+        Assert.Equal("NIN12345", customer.NationalIdNumber);
+        Assert.NotNull(customer.KycSubmittedAt);
+    }
+
+    [Fact]
+    public async Task SubmitKyc_WhenCustomerNotFound_ReturnsFailure()
+    {
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync((HousingHub.Model.Entities.Customer?)null);
+
+        var dto = new SubmitKycDto(null, "NIN12345", HousingHub.Model.Enums.IDType.NIN, null, null, null, null);
+        var result = await _sut.SubmitKyc(Guid.NewGuid(), dto);
+
+        Assert.False(result.IsSuccessful);
+    }
+
+    [Fact]
+    public async Task SubmitKyc_CallsUpdateAndSave()
+    {
+        var customer = new HousingHub.Model.Entities.Customer("John", "Doe", "john@test.com", "08012345678", CustomerType.Customer, TestPasswordHash) { Id = Guid.NewGuid() };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
+
+        var dto = new SubmitKycDto(null, "NIN12345", HousingHub.Model.Enums.IDType.NIN, null, null, null, null);
+        await _sut.SubmitKyc(customer.Id, dto);
+
+        _unitOfWorkMock.Verify(u => u.CustomerCommands.UpdateAsync(It.IsAny<HousingHub.Model.Entities.Customer>()), Times.Once);
+        _unitOfWorkMock.Verify(u => u.SaveAsync(), Times.Once);
+    }
+
+    // ── VerifyKyc ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task VerifyKyc_Approve_SetsIsKycVerifiedTrue()
+    {
+        var customer = new HousingHub.Model.Entities.Customer("John", "Doe", "john@test.com", "08012345678", CustomerType.Customer, TestPasswordHash) { Id = Guid.NewGuid() };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
+
+        var result = await _sut.VerifyKyc(customer.Id, true);
+
+        Assert.True(result.IsSuccessful);
+        Assert.True(customer.IsKycVerified);
+    }
+
+    [Fact]
+    public async Task VerifyKyc_Reject_SetsIsKycVerifiedFalse()
+    {
+        var customer = new HousingHub.Model.Entities.Customer("John", "Doe", "john@test.com", "08012345678", CustomerType.Customer, TestPasswordHash) { Id = Guid.NewGuid(), IsKycVerified = true };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
+
+        var result = await _sut.VerifyKyc(customer.Id, false);
+
+        Assert.True(result.IsSuccessful);
+        Assert.False(customer.IsKycVerified);
+    }
+
+    [Fact]
+    public async Task VerifyKyc_WhenCustomerNotFound_ReturnsFailure()
+    {
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync((HousingHub.Model.Entities.Customer?)null);
+
+        var result = await _sut.VerifyKyc(Guid.NewGuid(), true);
+
+        Assert.False(result.IsSuccessful);
+    }
 }
