@@ -1,9 +1,9 @@
-using AutoMapper;
+using Mapster;
+using HousingHub.Service.Commons.Mappings;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
-using HousingHub.Service.Commons.Mappings;
 using HousingHub.Service.CustomerService;
 using HousingHub.Service.Dtos.Customer;
 using Microsoft.Extensions.Logging;
@@ -24,8 +24,9 @@ public class CustomerQueryServiceTests
         _unitOfWorkMock = new Mock<IUnitOfWOrk> { DefaultValue = DefaultValue.Mock };
         var logger = NullLogger<CustomerQueryService>.Instance;
 
-        var config = new MapperConfiguration(cfg => cfg.AddProfile<CustomerMapper>(), NullLoggerFactory.Instance);
-        _mapper = config.CreateMapper();
+        var config = new TypeAdapterConfig();
+        new CustomerMapper().Register(config);
+        _mapper = new ObjectMapper(config);
 
         _sut = new CustomerQueryService(_unitOfWorkMock.Object, _mapper, logger);
     }

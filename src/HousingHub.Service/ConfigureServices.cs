@@ -7,7 +7,6 @@ using HousingHub.Service.ChatService.Interfaces;
 using HousingHub.Service.Commons.Authentication;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.FileStorage;
-using HousingHub.Service.Commons.Mappings;
 using HousingHub.Service.CustomerAddressService;
 using HousingHub.Service.CustomerAddressService.Interfaces;
 using HousingHub.Service.CustomerService;
@@ -22,6 +21,8 @@ using HousingHub.Service.PropertyFileService;
 using HousingHub.Service.PropertyFileService.Interfaces;
 using HousingHub.Service.PropertyService;
 using HousingHub.Service.PropertyService.Interfaces;
+using HousingHub.Service.Commons.Mappings;
+using Mapster;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SendGrid;
@@ -32,15 +33,10 @@ public static class ConfigureServices
 {
     public static IServiceCollection AddInjectionService(this IServiceCollection services)
     {
-        services.AddAutoMapper(cfg => {
-            cfg.AddProfile<CustomerAddressMapper>();
-            cfg.AddProfile<CustomerMapper>();
-            cfg.AddProfile<PropertyAddressMapper>();
-            cfg.AddProfile<PropertyFileMapper>();
-            cfg.AddProfile<InspectionMapper>();
-            cfg.AddProfile<PropertyMapper>();
-            cfg.AddProfile<ChatMapper>();
-        });
+        var mapsterConfig = TypeAdapterConfig.GlobalSettings;
+        mapsterConfig.Scan(Assembly.GetExecutingAssembly());
+        services.AddSingleton(mapsterConfig);
+        services.AddScoped<IMapper>(sp => new ObjectMapper(sp.GetRequiredService<TypeAdapterConfig>()));
 
         // Auth
         services.AddSingleton<IPasswordHasher, PasswordHasher>();

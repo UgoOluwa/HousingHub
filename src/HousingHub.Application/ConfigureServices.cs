@@ -1,7 +1,7 @@
 ﻿using System.Reflection;
 using FluentValidation;
 using HousingHub.Application.Commons.Behaviours;
-using HousingHub.Application.Commons.Mappings;
+using Mapster;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -12,9 +12,7 @@ public static class ConfigureServices
     public static void AddInjectionApplication(this IServiceCollection services)
     {
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblies(AppDomain.CurrentDomain.GetAssemblies()));
-        services.AddAutoMapper(cfg => {
-            cfg.AddProfile<MappingProfile>();
-        });
+        TypeAdapterConfig.GlobalSettings.Scan(Assembly.GetExecutingAssembly());
         services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
 
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehaviour<,>));

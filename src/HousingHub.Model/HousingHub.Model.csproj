@@ -7,10 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWSSDK.DynamoDBv2" Version="4.0.17.7" />
+    <PackageReference Include="AWSSDK.DynamoDBv2" Version="4.0.17.8" />
     <PackageReference Include="FluentValidation" Version="12.1.1" />
-    <PackageReference Include="MediatR" Version="14.0.0" />
-    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.17.0.131074">
+    <PackageReference Include="MediatR" Version="12.4.1" />
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.23.0.137933">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>

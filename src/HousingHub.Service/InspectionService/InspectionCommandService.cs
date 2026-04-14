@@ -1,4 +1,4 @@
-using AutoMapper;
+using HousingHub.Service.Commons.Mappings;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;

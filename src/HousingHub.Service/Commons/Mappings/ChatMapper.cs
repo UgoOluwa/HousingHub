@@ -1,14 +1,14 @@
-using AutoMapper;
 using HousingHub.Model.Entities;
 using HousingHub.Service.Dtos.Chat;
+using Mapster;
 
 namespace HousingHub.Service.Commons.Mappings;
 
-public class ChatMapper : Profile
+public class ChatMapper : IRegister
 {
-    public ChatMapper()
+    public void Register(TypeAdapterConfig config)
     {
-        CreateMap<ChatMessage, ChatMessageDto>()
-            .ForMember(dest => dest.SenderName, opt => opt.Ignore());
+        config.NewConfig<ChatMessage, ChatMessageDto>()
+            .Ignore(dest => dest.SenderName);
     }
 }

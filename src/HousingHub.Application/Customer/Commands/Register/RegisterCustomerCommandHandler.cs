@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+﻿using HousingHub.Service.Commons.Mappings;
 using HousingHub.Application.Commons.Bases;
 using HousingHub.Application.Customer.Commands.Register;
 using HousingHub.Service.CustomerService.Interfaces;

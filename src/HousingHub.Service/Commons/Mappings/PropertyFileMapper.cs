@@ -1,15 +1,15 @@
-﻿using AutoMapper;
 using HousingHub.Model.Entities;
 using HousingHub.Service.Dtos.PropertyFile;
+using Mapster;
 
 namespace HousingHub.Service.Commons.Mappings;
 
-public class PropertyFileMapper : Profile
+public class PropertyFileMapper : IRegister
 {
-    public PropertyFileMapper()
+    public void Register(TypeAdapterConfig config)
     {
-        CreateMap<PropertyFile, PropertyFileDto>().ReverseMap();
-        CreateMap<CreatePropertyFileDto, PropertyFile>();
-        CreateMap<UpdatePropertyFileDto, PropertyFile>();
+        config.NewConfig<PropertyFile, PropertyFileDto>().TwoWays();
+        config.NewConfig<CreatePropertyFileDto, PropertyFile>();
+        config.NewConfig<UpdatePropertyFileDto, PropertyFile>();
     }
 }

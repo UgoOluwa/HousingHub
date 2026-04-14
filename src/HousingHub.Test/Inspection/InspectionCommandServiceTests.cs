@@ -1,10 +1,10 @@
-using AutoMapper;
+using Mapster;
+using HousingHub.Service.Commons.Mappings;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.Email;
-using HousingHub.Service.Commons.Mappings;
 using HousingHub.Service.Dtos.Inspection;
 using HousingHub.Service.InspectionService;
 using HousingHub.Service.NotificationService.Interfaces;
@@ -35,8 +35,9 @@ public class InspectionCommandServiceTests
         _realtimeNotifierMock = new Mock<IRealtimeNotifier>();
         var logger = NullLogger<InspectionCommandService>.Instance;
 
-        var config = new MapperConfiguration(cfg => cfg.AddProfile<InspectionMapper>(), NullLoggerFactory.Instance);
-        _mapper = config.CreateMapper();
+        var config = new TypeAdapterConfig();
+        new InspectionMapper().Register(config);
+        _mapper = new ObjectMapper(config);
 
         _unitOfWorkMock.Setup(u => u.PropertyInspectionCommands.InsertAsync(It.IsAny<PropertyInspection>())).ReturnsAsync(true);
         _unitOfWorkMock.Setup(u => u.PropertyInspectionCommands.UpdateAsync(It.IsAny<PropertyInspection>())).Returns(Task.CompletedTask);

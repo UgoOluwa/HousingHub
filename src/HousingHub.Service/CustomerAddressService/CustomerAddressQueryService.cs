@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+﻿using HousingHub.Service.Commons.Mappings;
 using Microsoft.Extensions.Logging;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Model.Entities;

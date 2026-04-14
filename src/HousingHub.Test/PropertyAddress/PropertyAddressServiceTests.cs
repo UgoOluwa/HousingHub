@@ -1,8 +1,8 @@
-using AutoMapper;
+using Mapster;
+using HousingHub.Service.Commons.Mappings;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
-using HousingHub.Service.Commons.Mappings;
 using HousingHub.Service.Dtos.PropertyAddress;
 using HousingHub.Service.PropertyAddressService;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -27,8 +27,9 @@ public class PropertyAddressServiceTests
         var commandLogger = NullLogger<PropertyAddressCommandService>.Instance;
         var queryLogger = NullLogger<PropertyAddressQueryService>.Instance;
 
-        var config = new MapperConfiguration(cfg => cfg.AddProfile<PropertyAddressMapper>(), NullLoggerFactory.Instance);
-        _mapper = config.CreateMapper();
+        var config = new TypeAdapterConfig();
+        new PropertyAddressMapper().Register(config);
+        _mapper = new ObjectMapper(config);
 
         _unitOfWorkMock.Setup(u => u.PropertyAddressCommands.InsertAsync(It.IsAny<HousingHub.Model.Entities.PropertyAddress>())).ReturnsAsync(true);
         _unitOfWorkMock.Setup(u => u.SaveAsync()).Returns(Task.CompletedTask);

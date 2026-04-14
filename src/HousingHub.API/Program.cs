@@ -2,6 +2,7 @@ using System.Text;
 using Amazon;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
+using Amazon.Runtime;
 using Asp.Versioning;
 using HealthChecks.UI.Client;
 using HousingHub.API.Common;
@@ -24,6 +25,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using Serilog;
+using Microsoft.AspNetCore.Http;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace HousingHub.API
@@ -42,6 +44,7 @@ namespace HousingHub.API
 
             // Add services to the container.
 
+            builder.Services.AddHealthChecks();
             builder.Services.AddControllers();
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
@@ -50,6 +53,13 @@ namespace HousingHub.API
             {
                 // add a custom operation filter which sets default values
                 options.OperationFilter<SwaggerDefaultValues>();
+
+                // Required in Swashbuckle 10.x: explicitly map IFormFile for [FromForm] file uploads
+                options.MapType<IFormFile>(() => new Microsoft.OpenApi.OpenApiSchema
+                {
+                    Type = Microsoft.OpenApi.JsonSchemaType.String,
+                    Format = "binary"
+                });
             });
 
             builder.Services.AddApiVersioning(option =>
@@ -137,12 +147,19 @@ namespace HousingHub.API
                 if (!string.IsNullOrEmpty(serviceUrl))
                     config.ServiceURL = serviceUrl;
 
+                var accessKey = builder.Configuration["AWS:S3:AccessKey"];
+                var secretKey = builder.Configuration["AWS:S3:SecretKey"];
+                if (!string.IsNullOrEmpty(accessKey) && !string.IsNullOrEmpty(secretKey))
+                    return new AmazonDynamoDBClient(new BasicAWSCredentials(accessKey, secretKey), config);
+
                 return new AmazonDynamoDBClient(config);
             });
             builder.Services.AddSingleton<IDynamoDBContext>(sp =>
             {
                 var client = sp.GetRequiredService<IAmazonDynamoDB>();
-                return new DynamoDBContext(client);
+                return new DynamoDBContextBuilder()
+                    .WithDynamoDBClient(() => client)
+                    .Build();
             });
             builder.Services.AddTransient<DynamoDbTableInitializer>();
 

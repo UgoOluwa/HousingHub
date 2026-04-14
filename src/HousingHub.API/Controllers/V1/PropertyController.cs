@@ -160,12 +160,12 @@ public class PropertyController : ControllerBase
     [HttpPost("{id:guid}/files")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(BaseResponse<List<PropertyFileDto>>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> UploadFiles(Guid id, [FromForm] List<IFormFile> files)
+    public async Task<IActionResult> UploadFiles(Guid id, [FromForm] UploadFilesRequest request)
     {
         var userId = GetAuthenticatedUserId();
         if (userId == null) return Unauthorized();
 
-        var response = await _mediator.Send(new UploadPropertyFilesCommand(id, userId.Value, files));
+        var response = await _mediator.Send(new UploadPropertyFilesCommand(id, userId.Value, request.Files));
         return Ok(response);
     }
 
@@ -191,4 +191,9 @@ public class PropertyController : ControllerBase
 
         return null;
     }
+}
+
+public class UploadFilesRequest
+{
+    public List<IFormFile> Files { get; set; } = [];
 }

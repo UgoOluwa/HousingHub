@@ -1,9 +1,9 @@
-using AutoMapper;
+using Mapster;
+using HousingHub.Service.Commons.Mappings;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
-using HousingHub.Service.Commons.Mappings;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.PropertyService;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -24,8 +24,9 @@ public class PropertyQueryServiceTests
     public PropertyQueryServiceTests()
     {
         _unitOfWorkMock = new Mock<IUnitOfWOrk> { DefaultValue = DefaultValue.Mock };
-        var config = new MapperConfiguration(cfg => cfg.AddProfile<PropertyMapper>(), NullLoggerFactory.Instance);
-        _mapper = config.CreateMapper();
+        var config = new TypeAdapterConfig();
+        new PropertyMapper().Register(config);
+        _mapper = new ObjectMapper(config);
         var logger = NullLogger<PropertyQueryService>.Instance;
 
         // GetPropertyAsync increments ViewCount via UpdateAsync, so these must be set up

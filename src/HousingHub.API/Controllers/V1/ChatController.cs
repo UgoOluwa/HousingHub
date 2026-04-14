@@ -6,7 +6,6 @@ using HousingHub.Application.Chat.Queries.GetConversations;
 using HousingHub.Application.Chat.Queries.GetMessages;
 using HousingHub.Application.Commons.Bases;
 using HousingHub.Core.CustomResponses;
-using BaseResponse = HousingHub.Application.Commons.Bases;
 using HousingHub.Service.Dtos.Chat;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;

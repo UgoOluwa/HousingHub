@@ -1,16 +1,16 @@
-﻿using AutoMapper;
 using HousingHub.Model.Entities;
 using HousingHub.Service.Dtos.Customer;
 using HousingHub.Service.Dtos.CustomerAddress;
+using Mapster;
 
 namespace HousingHub.Service.Commons.Mappings;
 
-public class CustomerAddressMapper : Profile
+public class CustomerAddressMapper : IRegister
 {
-    public CustomerAddressMapper()
+    public void Register(TypeAdapterConfig config)
     {
-        CreateMap<CustomerAddress, CustomerAddressDto>().ReverseMap();
-        CreateMap<CreateCustomerAddressDto, CustomerAddress>();
-        CreateMap<UpdateCustomerDto, CustomerAddress>();
+        config.NewConfig<CustomerAddress, CustomerAddressDto>().TwoWays();
+        config.NewConfig<CreateCustomerAddressDto, CustomerAddress>();
+        config.NewConfig<UpdateCustomerDto, CustomerAddress>();
     }
 }

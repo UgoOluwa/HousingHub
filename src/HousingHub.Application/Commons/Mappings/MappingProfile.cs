@@ -1,4 +1,3 @@
-﻿using AutoMapper;
 using HousingHub.Application.Auth.Commands.Login;
 using HousingHub.Application.Auth.Commands.Register;
 using HousingHub.Application.Customer.Commands.Create;
@@ -8,23 +7,24 @@ using HousingHub.Application.Property.Commands.Create;
 using HousingHub.Application.Property.Commands.Update;
 using HousingHub.Service.Dtos.Customer;
 using HousingHub.Service.Dtos.Property;
+using Mapster;
 
 namespace HousingHub.Application.Commons.Mappings;
 
-public class MappingProfile : Profile
+public class MappingProfile : IRegister
 {
-    public MappingProfile()
+    public void Register(TypeAdapterConfig config)
     {
-        CreateMap<CreateCustomerCommand, CreateCustomerDto>();
-        CreateMap<RegisterCustomerCommand, RegisterCustomerDto>();
-        CreateMap<UpdateCustomerCommand, UpdateCustomerDto>();
+        config.NewConfig<CreateCustomerCommand, CreateCustomerDto>();
+        config.NewConfig<RegisterCustomerCommand, RegisterCustomerDto>();
+        config.NewConfig<UpdateCustomerCommand, UpdateCustomerDto>();
 
         // Auth
-        CreateMap<RegisterAuthCommand, RegisterCustomerDto>();
-        CreateMap<LoginCommand, LoginCustomerDto>();
+        config.NewConfig<RegisterAuthCommand, RegisterCustomerDto>();
+        config.NewConfig<LoginCommand, LoginCustomerDto>();
 
         // Property
-        CreateMap<CreatePropertyCommand, CreatePropertyDto>();
-        CreateMap<UpdatePropertyCommand, UpdatePropertyDto>();
+        config.NewConfig<CreatePropertyCommand, CreatePropertyDto>();
+        config.NewConfig<UpdatePropertyCommand, UpdatePropertyDto>();
     }
 }

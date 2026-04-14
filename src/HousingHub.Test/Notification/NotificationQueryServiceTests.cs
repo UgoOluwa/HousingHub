@@ -1,9 +1,9 @@
-using AutoMapper;
+using Mapster;
+using HousingHub.Service.Commons.Mappings;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
-using HousingHub.Service.Commons.Mappings;
 using HousingHub.Service.Dtos.Notification;
 using HousingHub.Service.NotificationService;
 using Microsoft.Extensions.Logging;
@@ -26,8 +26,9 @@ public class NotificationQueryServiceTests
         _unitOfWorkMock = new Mock<IUnitOfWOrk> { DefaultValue = DefaultValue.Mock };
         var logger = NullLogger<NotificationQueryService>.Instance;
 
-        var config = new MapperConfiguration(cfg => cfg.AddProfile<InspectionMapper>(), NullLoggerFactory.Instance);
-        _mapper = config.CreateMapper();
+        var config = new TypeAdapterConfig();
+        new InspectionMapper().Register(config);
+        _mapper = new ObjectMapper(config);
 
         _sut = new NotificationQueryService(_unitOfWorkMock.Object, _mapper, logger);
     }

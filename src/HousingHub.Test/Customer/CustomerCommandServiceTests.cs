@@ -1,10 +1,10 @@
-using AutoMapper;
+using Mapster;
+using HousingHub.Service.Commons.Mappings;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.Authentication;
-using HousingHub.Service.Commons.Mappings;
 using HousingHub.Service.CustomerService;
 using HousingHub.Service.Dtos.Customer;
 using Microsoft.Extensions.Logging;
@@ -31,8 +31,9 @@ public class CustomerCommandServiceTests
         _tokenProviderMock = new Mock<ITokenProvider>();
         var logger = NullLogger<CustomerCommandService>.Instance;
 
-        var config = new MapperConfiguration(cfg => cfg.AddProfile<CustomerMapper>(), NullLoggerFactory.Instance);
-        _mapper = config.CreateMapper();
+        var config = new TypeAdapterConfig();
+        new CustomerMapper().Register(config);
+        _mapper = new ObjectMapper(config);
 
         _unitOfWorkMock.Setup(u => u.CustomerCommands.InsertAsync(It.IsAny<HousingHub.Model.Entities.Customer>())).ReturnsAsync(true);
         _unitOfWorkMock.Setup(u => u.CustomerCommands.UpdateAsync(It.IsAny<HousingHub.Model.Entities.Customer>())).Returns(Task.CompletedTask);

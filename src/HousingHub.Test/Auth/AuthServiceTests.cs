@@ -8,7 +8,7 @@ using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.Mappings;
 using HousingHub.Service.Dtos.Auth;
 using HousingHub.Service.Dtos.Customer;
-using AutoMapper;
+using Mapster;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -37,8 +37,9 @@ public class AuthServiceTests
         _emailServiceMock = new Mock<IEmailService>();
         var logger = NullLogger<AuthService>.Instance;
 
-        var config = new MapperConfiguration(cfg => cfg.AddProfile<CustomerMapper>(), NullLoggerFactory.Instance);
-        _mapper = config.CreateMapper();
+        var config = new TypeAdapterConfig();
+        new CustomerMapper().Register(config);
+        _mapper = new ObjectMapper(config);
 
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>

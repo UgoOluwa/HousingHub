@@ -1,4 +1,4 @@
-using AutoMapper;
+using HousingHub.Service.Commons.Mappings;
 using HousingHub.Application.Commons.Bases;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.PropertyService.Interfaces;

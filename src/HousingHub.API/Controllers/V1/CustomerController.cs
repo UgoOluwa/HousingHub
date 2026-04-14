@@ -43,7 +43,7 @@ namespace HousingHub.API.Controllers.V1
         }
 
         [Authorize]
-        [HttpGet("{id}")]
+        [HttpGet("{id:guid}")]
         [ProducesResponseType(typeof(BaseResponse<CustomerWithDetailsDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> Get(Guid id)
         {
@@ -61,7 +61,7 @@ namespace HousingHub.API.Controllers.V1
         }
 
         [Authorize]
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:guid}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         public async Task<IActionResult> Delete(Guid id)
         {
@@ -103,12 +103,12 @@ namespace HousingHub.API.Controllers.V1
         [HttpPost("kyc/document")]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> UploadKycDocument([FromForm] IFormFile file)
+        public async Task<IActionResult> UploadKycDocument([FromForm] UploadKycDocumentRequest request)
         {
             var userId = GetAuthenticatedUserId();
             if (userId == null) return Unauthorized();
 
-            var response = await _mediator.Send(new UploadKycDocumentCommand(userId.Value, file));
+            var response = await _mediator.Send(new UploadKycDocumentCommand(userId.Value, request.File));
             return Ok(response);
         }
 
@@ -133,5 +133,10 @@ namespace HousingHub.API.Controllers.V1
 
             return null;
         }
+    }
+
+    public class UploadKycDocumentRequest
+    {
+        public IFormFile File { get; set; } = null!;
     }
 }

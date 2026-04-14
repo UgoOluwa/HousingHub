@@ -1,10 +1,10 @@
-using AutoMapper;
+using Mapster;
+using HousingHub.Service.Commons.Mappings;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.FileStorage;
-using HousingHub.Service.Commons.Mappings;
 using HousingHub.Service.Dtos.PropertyFile;
 using HousingHub.Service.PropertyFileService;
 using Microsoft.AspNetCore.Http;
@@ -34,8 +34,9 @@ public class PropertyFileServiceTests
         var commandLogger = NullLogger<PropertyFileCommandService>.Instance;
         var queryLogger = NullLogger<PropertyFileQueryService>.Instance;
 
-        var config = new MapperConfiguration(cfg => cfg.AddProfile<PropertyFileMapper>(), NullLoggerFactory.Instance);
-        _mapper = config.CreateMapper();
+        var config = new TypeAdapterConfig();
+        new PropertyFileMapper().Register(config);
+        _mapper = new ObjectMapper(config);
 
         _unitOfWorkMock.Setup(u => u.PropertyFileCommands.InsertAsync(It.IsAny<HousingHub.Model.Entities.PropertyFile>())).ReturnsAsync(true);
         _unitOfWorkMock.Setup(u => u.PropertyFileCommands.InsertRangeAsync(It.IsAny<IEnumerable<HousingHub.Model.Entities.PropertyFile>>())).Returns(Task.CompletedTask);

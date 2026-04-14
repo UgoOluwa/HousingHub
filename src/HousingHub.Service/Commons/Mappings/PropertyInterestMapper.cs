@@ -1,15 +1,15 @@
-using AutoMapper;
 using HousingHub.Model.Entities;
 using HousingHub.Service.Dtos.Inspection;
 using HousingHub.Service.Dtos.Notification;
+using Mapster;
 
 namespace HousingHub.Service.Commons.Mappings;
 
-public class InspectionMapper : Profile
+public class InspectionMapper : IRegister
 {
-    public InspectionMapper()
+    public void Register(TypeAdapterConfig config)
     {
-        CreateMap<PropertyInspection, InspectionDto>();
-        CreateMap<Notification, NotificationDto>();
+        config.NewConfig<PropertyInspection, InspectionDto>();
+        config.NewConfig<Notification, NotificationDto>();
     }
 }

@@ -1,15 +1,15 @@
-﻿using AutoMapper;
 using HousingHub.Model.Entities;
 using HousingHub.Service.Dtos.PropertyAddress;
+using Mapster;
 
 namespace HousingHub.Service.Commons.Mappings;
 
-public class PropertyAddressMapper : Profile
+public class PropertyAddressMapper : IRegister
 {
-    public PropertyAddressMapper()
+    public void Register(TypeAdapterConfig config)
     {
-        CreateMap<PropertyAddress, PropertyAddressDto>().ReverseMap();
-        CreateMap<CreatePropertyAddressDto, PropertyAddress>();
-        CreateMap<UpdatePropertyAddressDto, PropertyAddress>();
+        config.NewConfig<PropertyAddress, PropertyAddressDto>().TwoWays();
+        config.NewConfig<CreatePropertyAddressDto, PropertyAddress>();
+        config.NewConfig<UpdatePropertyAddressDto, PropertyAddress>();
     }
 }

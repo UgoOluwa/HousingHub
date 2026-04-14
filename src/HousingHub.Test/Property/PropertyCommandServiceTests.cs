@@ -1,11 +1,11 @@
-using AutoMapper;
+using Mapster;
+using HousingHub.Service.Commons.Mappings;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Data.RepositoryInterfaces.Queries;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.FileStorage;
-using HousingHub.Service.Commons.Mappings;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.Dtos.PropertyAddress;
 using HousingHub.Service.PropertyService;
@@ -29,8 +29,9 @@ public class PropertyCommandServiceTests
     {
         _unitOfWorkMock = new Mock<IUnitOfWOrk> { DefaultValue = DefaultValue.Mock };
         _fileStorageServiceMock = new Mock<IFileStorageService>();
-        var config = new MapperConfiguration(cfg => cfg.AddProfile<PropertyMapper>(), NullLoggerFactory.Instance);
-        _mapper = config.CreateMapper();
+        var config = new TypeAdapterConfig();
+        new PropertyMapper().Register(config);
+        _mapper = new ObjectMapper(config);
         var logger = NullLogger<PropertyCommandService>.Instance;
 
         // Set up default returns for command methods used in Update/Delete flows

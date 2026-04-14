@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using AutoMapper;
+using HousingHub.Service.Commons.Mappings;
 using Google.Apis.Auth;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
