@@ -1,0 +1,12 @@
+{
+  "profile": "",
+  "region": "af-south-1",
+  "configuration": "Release",
+  "function-architecture": "x86_64",
+  "function-runtime": "dotnet8",
+  "function-memory-size": 1024,
+  "function-timeout": 30,
+  "function-handler": "HousingHub.API",
+  "framework": "net8.0",
+  "package-type": "Zip"
+}

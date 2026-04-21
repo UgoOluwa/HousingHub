@@ -5,7 +5,8 @@
       "Bash(dotnet test:*)",
       "Bash(find \"c:\\\\Users\\\\PC\\\\source\\\\repos\\\\HousingHub\\\\src\\\\HousingHub.Model\" -name \"Customer.cs\" -exec cat {} \\\\;)",
       "Bash(xargs ls:*)",
-      "Bash(find \"c:\\\\Users\\\\PC\\\\source\\\\repos\\\\HousingHub\\\\src\\\\HousingHub.Application\\\\Commons\\\\Bases\" -name \"*.cs\" -exec cat {} \\\\;)"
+      "Bash(find \"c:\\\\Users\\\\PC\\\\source\\\\repos\\\\HousingHub\\\\src\\\\HousingHub.Application\\\\Commons\\\\Bases\" -name \"*.cs\" -exec cat {} \\\\;)",
+      "Bash(dotnet lambda *)"
     ]
   }
 }

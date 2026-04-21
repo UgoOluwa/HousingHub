@@ -36,6 +36,10 @@ namespace HousingHub.API
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            var isLambda = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME"));
+
+            builder.Services.AddAWSLambdaHosting(LambdaEventSource.RestApi);
+
             builder.Services.AddSerilog((services, lc) => lc
             .ReadFrom.Configuration(builder.Configuration)
             .ReadFrom.Services(services)
@@ -163,11 +167,19 @@ namespace HousingHub.API
             });
             builder.Services.AddTransient<DynamoDbTableInitializer>();
 
-            // SignalR
-            builder.Services.AddSignalR();
-            builder.Services.AddSingleton<IUserIdProvider, NameUserIdProvider>();
-            builder.Services.AddSingleton<IRealtimeNotifier, SignalRNotificationSender>();
-            builder.Services.AddSingleton<IChatRealtimeNotifier, SignalRChatNotifier>();
+            // SignalR (disabled under Lambda — no persistent WebSocket support)
+            if (!isLambda)
+            {
+                builder.Services.AddSignalR();
+                builder.Services.AddSingleton<IUserIdProvider, NameUserIdProvider>();
+                builder.Services.AddSingleton<IRealtimeNotifier, SignalRNotificationSender>();
+                builder.Services.AddSingleton<IChatRealtimeNotifier, SignalRChatNotifier>();
+            }
+            else
+            {
+                builder.Services.AddSingleton<IRealtimeNotifier, NoOpRealtimeNotifier>();
+                builder.Services.AddSingleton<IChatRealtimeNotifier, NoOpChatRealtimeNotifier>();
+            }
 
             //Add methods Extensions
             builder.Services.AddInjectionRepository()
@@ -201,8 +213,11 @@ namespace HousingHub.API
             
 
             app.MapControllers();
-            app.MapHub<NotificationHub>("/hubs/notifications");
-            app.MapHub<ChatHub>("/hubs/chat");
+            if (!isLambda)
+            {
+                app.MapHub<NotificationHub>("/hubs/notifications");
+                app.MapHub<ChatHub>("/hubs/chat");
+            }
 
             app.Run();
         }
