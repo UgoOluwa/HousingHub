@@ -191,6 +191,11 @@ namespace HousingHub.API
 
             var app = builder.Build();
 
+            if (isLambda)
+            {
+                app.UsePathBase("/dev");
+            }
+
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
             {
@@ -204,7 +209,10 @@ namespace HousingHub.API
                 ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
             });
 
-            app.UseHttpsRedirection();
+            if (!isLambda)
+            {
+                app.UseHttpsRedirection();
+            }
             app.UseAppExceptionMiddleware();
 
             app.UseAuthentication();
