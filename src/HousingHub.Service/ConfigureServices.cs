@@ -25,8 +25,6 @@ using HousingHub.Service.Commons.Mappings;
 using Mapster;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using SendGrid;
-
 namespace HousingHub.Service;
 
 public static class ConfigureServices
@@ -43,14 +41,9 @@ public static class ConfigureServices
         services.AddSingleton<ITokenProvider, TokenProvider>();
         services.AddScoped<IAuthService, AuthService.AuthService>();
 
-        // Email (SendGrid)
-        services.AddSingleton<ISendGridClient>(sp =>
-        {
-            var configuration = sp.GetRequiredService<IConfiguration>();
-            string apiKey = configuration["Email:SendGridApiKey"]!;
-            return new SendGridClient(apiKey);
-        });
-        services.AddScoped<IEmailService, SendGridEmailService>();
+        // Email (Resend)
+        services.AddHttpClient<ResendEmailService>();
+        services.AddScoped<IEmailService, ResendEmailService>();
 
         services.AddScoped<ICustomerCommandService, CustomerCommandService>();
         services.AddScoped<ICustomerQueryService, CustomerQueryService>();

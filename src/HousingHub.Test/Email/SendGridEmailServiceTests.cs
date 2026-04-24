@@ -1,298 +1,238 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using SendGrid;
-using SendGrid.Helpers.Mail;
+using Moq.Protected;
 using HousingHub.Service.Commons.Email;
 
 namespace HousingHub.Test.Email;
 
-public class SendGridEmailServiceTests
+public class ResendEmailServiceTests
 {
-    private readonly Mock<ISendGridClient> _sendGridClientMock;
-    private readonly ILogger<SendGridEmailService> _logger;
+    private readonly Mock<HttpMessageHandler> _handlerMock;
     private readonly IConfiguration _configuration;
-    private readonly SendGridEmailService _sut;
 
-    public SendGridEmailServiceTests()
+    public ResendEmailServiceTests()
     {
-        _sendGridClientMock = new Mock<ISendGridClient>();
-        _logger = NullLogger<SendGridEmailService>.Instance;
-
-        var configData = new Dictionary<string, string?>
-        {
-            { "Email:SenderEmail", "noreply@housinghub.com" },
-            { "Email:SenderName", "HousingHub" },
-            { "Email:BaseUrl", "https://housinghub.com" }
-        };
+        _handlerMock = new Mock<HttpMessageHandler>();
 
         _configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(configData)
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                { "Email:ResendApiKey", "re_test_key" },
+                { "Email:SenderEmail", "noreply@housinghub.com" },
+                { "Email:SenderName", "HousingHub" },
+                { "Email:BaseUrl", "https://housinghub.com" }
+            })
             .Build();
-
-        _sut = new SendGridEmailService(_sendGridClientMock.Object, _configuration, _logger);
     }
 
-    // ??? SendEmailVerificationAsync ???????????????????????????????????
-
-    [Fact]
-    public async Task SendEmailVerificationAsync_WhenSendGridReturns202_ReturnsTrue()
+    private ResendEmailService BuildSut(HttpStatusCode statusCode, string? responseBody = null)
     {
-        // Arrange
-        var response = new Response(HttpStatusCode.Accepted, null, null);
-        _sendGridClientMock
-            .Setup(c => c.SendEmailAsync(It.IsAny<SendGridMessage>(), It.IsAny<CancellationToken>()))
+        var response = new HttpResponseMessage(statusCode);
+        if (responseBody != null)
+            response.Content = new StringContent(responseBody);
+
+        _handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
             .ReturnsAsync(response);
 
-        // Act
-        bool result = await _sut.SendEmailVerificationAsync("user@test.com", "John", "abc123token");
+        var httpClient = new HttpClient(_handlerMock.Object);
+        return new ResendEmailService(httpClient, _configuration, NullLogger<ResendEmailService>.Instance);
+    }
 
-        // Assert
+    // ─── SendEmailVerificationAsync ───────────────────────────────────
+
+    [Fact]
+    public async Task SendEmailVerificationAsync_WhenResendReturns200_ReturnsTrue()
+    {
+        var sut = BuildSut(HttpStatusCode.OK);
+        bool result = await sut.SendEmailVerificationAsync("user@test.com", "John", "abc123token");
         Assert.True(result);
-        _sendGridClientMock.Verify(
-            c => c.SendEmailAsync(It.IsAny<SendGridMessage>(), It.IsAny<CancellationToken>()),
-            Times.Once);
     }
 
     [Fact]
-    public async Task SendEmailVerificationAsync_WhenSendGridReturns400_ReturnsFalse()
+    public async Task SendEmailVerificationAsync_WhenResendReturns400_ReturnsFalse()
     {
-        // Arrange
-        var body = new StringContent("{\"errors\":[{\"message\":\"Bad request\"}]}");
-        var response = new Response(HttpStatusCode.BadRequest, body, null);
-        _sendGridClientMock
-            .Setup(c => c.SendEmailAsync(It.IsAny<SendGridMessage>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(response);
-
-        // Act
-        bool result = await _sut.SendEmailVerificationAsync("user@test.com", "John", "abc123token");
-
-        // Assert
+        var sut = BuildSut(HttpStatusCode.BadRequest, "{\"name\":\"validation_error\"}");
+        bool result = await sut.SendEmailVerificationAsync("user@test.com", "John", "abc123token");
         Assert.False(result);
     }
 
     [Fact]
-    public async Task SendEmailVerificationAsync_WhenSendGridThrows_ReturnsFalse()
+    public async Task SendEmailVerificationAsync_WhenResendThrows_ReturnsFalse()
     {
-        // Arrange
-        _sendGridClientMock
-            .Setup(c => c.SendEmailAsync(It.IsAny<SendGridMessage>(), It.IsAny<CancellationToken>()))
+        _handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
             .ThrowsAsync(new HttpRequestException("Network error"));
 
-        // Act
-        bool result = await _sut.SendEmailVerificationAsync("user@test.com", "John", "abc123token");
+        var httpClient = new HttpClient(_handlerMock.Object);
+        var sut = new ResendEmailService(httpClient, _configuration, NullLogger<ResendEmailService>.Instance);
 
-        // Assert
+        bool result = await sut.SendEmailVerificationAsync("user@test.com", "John", "abc123token");
         Assert.False(result);
     }
 
     [Fact]
-    public async Task SendEmailVerificationAsync_BuildsCorrectMessage()
+    public async Task SendEmailVerificationAsync_SendsCorrectPayload()
     {
-        // Arrange
-        SendGridMessage? capturedMessage = null;
-        var response = new Response(HttpStatusCode.Accepted, null, null);
-        _sendGridClientMock
-            .Setup(c => c.SendEmailAsync(It.IsAny<SendGridMessage>(), It.IsAny<CancellationToken>()))
-            .Callback<SendGridMessage, CancellationToken>((msg, _) => capturedMessage = msg)
-            .ReturnsAsync(response);
+        HttpRequestMessage? captured = null;
+        _handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) => captured = req)
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK));
 
-        // Act
-        await _sut.SendEmailVerificationAsync("user@test.com", "John", "verify-token-123");
+        var httpClient = new HttpClient(_handlerMock.Object);
+        var sut = new ResendEmailService(httpClient, _configuration, NullLogger<ResendEmailService>.Instance);
 
-        // Assert
-        Assert.NotNull(capturedMessage);
-        string json = capturedMessage.Serialize();
-        Assert.Contains("noreply@housinghub.com", json);
-        Assert.Contains("HousingHub", json);
-        Assert.Contains("Verify your HousingHub email", json);
-        Assert.Contains("verify-token-123", json);
-        Assert.Contains("John", json);
-        Assert.Contains("https://housinghub.com/api/v1/Auth/verify-email", json);
+        await sut.SendEmailVerificationAsync("user@test.com", "John", "verify-token-123");
+
+        Assert.NotNull(captured);
+        Assert.Equal(HttpMethod.Post, captured.Method);
+        Assert.Equal("https://api.resend.com/emails", captured.RequestUri!.ToString());
+
+        string body = await captured.Content!.ReadAsStringAsync();
+        Assert.Contains("noreply@housinghub.com", body);
+        Assert.Contains("Verify your HousingHub email", body);
+        Assert.Contains("verify-token-123", body);
+        Assert.Contains("John", body);
+        Assert.Contains("https://housinghub.com/api/v1/Auth/verify-email", body);
     }
 
     [Fact]
     public async Task SendEmailVerificationAsync_EscapesEmailInVerifyLink()
     {
-        // Arrange
-        SendGridMessage? capturedMessage = null;
-        var response = new Response(HttpStatusCode.Accepted, null, null);
-        _sendGridClientMock
-            .Setup(c => c.SendEmailAsync(It.IsAny<SendGridMessage>(), It.IsAny<CancellationToken>()))
-            .Callback<SendGridMessage, CancellationToken>((msg, _) => capturedMessage = msg)
-            .ReturnsAsync(response);
+        HttpRequestMessage? captured = null;
+        _handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) => captured = req)
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK));
 
-        // Act
-        await _sut.SendEmailVerificationAsync("user+test@test.com", "Jane", "token");
+        var httpClient = new HttpClient(_handlerMock.Object);
+        var sut = new ResendEmailService(httpClient, _configuration, NullLogger<ResendEmailService>.Instance);
 
-        // Assert
-        Assert.NotNull(capturedMessage);
-        string json = capturedMessage.Serialize();
-        Assert.Contains("user%2Btest%40test.com", json);
+        await sut.SendEmailVerificationAsync("user+test@test.com", "Jane", "token");
+
+        string body = await captured!.Content!.ReadAsStringAsync();
+        Assert.Contains("user%2Btest%40test.com", body);
     }
 
-    // ??? SendPasswordResetAsync ???????????????????????????????????????
+    // ─── SendPasswordResetAsync ───────────────────────────────────────
 
     [Fact]
-    public async Task SendPasswordResetAsync_WhenSendGridReturns202_ReturnsTrue()
+    public async Task SendPasswordResetAsync_WhenResendReturns200_ReturnsTrue()
     {
-        // Arrange
-        var response = new Response(HttpStatusCode.Accepted, null, null);
-        _sendGridClientMock
-            .Setup(c => c.SendEmailAsync(It.IsAny<SendGridMessage>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(response);
-
-        // Act
-        bool result = await _sut.SendPasswordResetAsync("user@test.com", "John", "reset-token-456");
-
-        // Assert
+        var sut = BuildSut(HttpStatusCode.OK);
+        bool result = await sut.SendPasswordResetAsync("user@test.com", "John", "reset-token-456");
         Assert.True(result);
-        _sendGridClientMock.Verify(
-            c => c.SendEmailAsync(It.IsAny<SendGridMessage>(), It.IsAny<CancellationToken>()),
-            Times.Once);
     }
 
     [Fact]
-    public async Task SendPasswordResetAsync_WhenSendGridReturns401_ReturnsFalse()
+    public async Task SendPasswordResetAsync_WhenResendReturns401_ReturnsFalse()
     {
-        // Arrange
-        var body = new StringContent("{\"errors\":[{\"message\":\"Unauthorized\"}]}");
-        var response = new Response(HttpStatusCode.Unauthorized, body, null);
-        _sendGridClientMock
-            .Setup(c => c.SendEmailAsync(It.IsAny<SendGridMessage>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(response);
-
-        // Act
-        bool result = await _sut.SendPasswordResetAsync("user@test.com", "John", "reset-token-456");
-
-        // Assert
+        var sut = BuildSut(HttpStatusCode.Unauthorized, "{\"name\":\"missing_api_key\"}");
+        bool result = await sut.SendPasswordResetAsync("user@test.com", "John", "reset-token-456");
         Assert.False(result);
     }
 
     [Fact]
-    public async Task SendPasswordResetAsync_WhenSendGridThrows_ReturnsFalse()
+    public async Task SendPasswordResetAsync_SendsCorrectPayload()
     {
-        // Arrange
-        _sendGridClientMock
-            .Setup(c => c.SendEmailAsync(It.IsAny<SendGridMessage>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new HttpRequestException("Timeout"));
+        HttpRequestMessage? captured = null;
+        _handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) => captured = req)
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK));
 
-        // Act
-        bool result = await _sut.SendPasswordResetAsync("user@test.com", "John", "reset-token-456");
+        var httpClient = new HttpClient(_handlerMock.Object);
+        var sut = new ResendEmailService(httpClient, _configuration, NullLogger<ResendEmailService>.Instance);
 
-        // Assert
-        Assert.False(result);
+        await sut.SendPasswordResetAsync("user@test.com", "John", "reset-token-789");
+
+        string body = await captured!.Content!.ReadAsStringAsync();
+        Assert.Contains("Reset your HousingHub password", body);
+        Assert.Contains("reset-token-789", body);
+        Assert.Contains("https://housinghub.com/reset-password", body);
     }
 
-    [Fact]
-    public async Task SendPasswordResetAsync_BuildsCorrectMessage()
-    {
-        // Arrange
-        SendGridMessage? capturedMessage = null;
-        var response = new Response(HttpStatusCode.Accepted, null, null);
-        _sendGridClientMock
-            .Setup(c => c.SendEmailAsync(It.IsAny<SendGridMessage>(), It.IsAny<CancellationToken>()))
-            .Callback<SendGridMessage, CancellationToken>((msg, _) => capturedMessage = msg)
-            .ReturnsAsync(response);
-
-        // Act
-        await _sut.SendPasswordResetAsync("user@test.com", "John", "reset-token-789");
-
-        // Assert
-        Assert.NotNull(capturedMessage);
-        string json = capturedMessage.Serialize();
-        Assert.Contains("noreply@housinghub.com", json);
-        Assert.Contains("HousingHub", json);
-        Assert.Contains("Reset your HousingHub password", json);
-        Assert.Contains("reset-token-789", json);
-        Assert.Contains("John", json);
-        Assert.Contains("https://housinghub.com/reset-password", json);
-    }
-
-    // ??? Configuration edge cases ?????????????????????????????????????
+    // ─── Configuration edge cases ─────────────────────────────────────
 
     [Fact]
     public async Task SendEmailVerificationAsync_UsesDefaultBaseUrl_WhenConfigMissing()
     {
-        // Arrange
-        var configData = new Dictionary<string, string?>
-        {
-            { "Email:SenderEmail", "test@test.com" },
-            { "Email:SenderName", "Test" }
-        };
-        var config = new ConfigurationBuilder().AddInMemoryCollection(configData).Build();
-        var sut = new SendGridEmailService(_sendGridClientMock.Object, config, _logger);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                { "Email:ResendApiKey", "re_test" },
+                { "Email:SenderEmail", "test@test.com" }
+            })
+            .Build();
 
-        SendGridMessage? capturedMessage = null;
-        var response = new Response(HttpStatusCode.Accepted, null, null);
-        _sendGridClientMock
-            .Setup(c => c.SendEmailAsync(It.IsAny<SendGridMessage>(), It.IsAny<CancellationToken>()))
-            .Callback<SendGridMessage, CancellationToken>((msg, _) => capturedMessage = msg)
-            .ReturnsAsync(response);
+        HttpRequestMessage? captured = null;
+        _handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) => captured = req)
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK));
 
-        // Act
+        var sut = new ResendEmailService(new HttpClient(_handlerMock.Object), config, NullLogger<ResendEmailService>.Instance);
+
         await sut.SendEmailVerificationAsync("user@test.com", "Jane", "token");
 
-        // Assert
-        Assert.NotNull(capturedMessage);
-        string json = capturedMessage.Serialize();
-        Assert.Contains("https://localhost/api/v1/Auth/verify-email", json);
-    }
-
-    [Fact]
-    public async Task SendPasswordResetAsync_UsesDefaultBaseUrl_WhenConfigMissing()
-    {
-        // Arrange
-        var configData = new Dictionary<string, string?>
-        {
-            { "Email:SenderEmail", "test@test.com" },
-            { "Email:SenderName", "Test" }
-        };
-        var config = new ConfigurationBuilder().AddInMemoryCollection(configData).Build();
-        var sut = new SendGridEmailService(_sendGridClientMock.Object, config, _logger);
-
-        SendGridMessage? capturedMessage = null;
-        var response = new Response(HttpStatusCode.Accepted, null, null);
-        _sendGridClientMock
-            .Setup(c => c.SendEmailAsync(It.IsAny<SendGridMessage>(), It.IsAny<CancellationToken>()))
-            .Callback<SendGridMessage, CancellationToken>((msg, _) => capturedMessage = msg)
-            .ReturnsAsync(response);
-
-        // Act
-        await sut.SendPasswordResetAsync("user@test.com", "Jane", "token");
-
-        // Assert
-        Assert.NotNull(capturedMessage);
-        string json = capturedMessage.Serialize();
-        Assert.Contains("https://localhost/reset-password", json);
+        string body = await captured!.Content!.ReadAsStringAsync();
+        Assert.Contains("https://localhost/api/v1/Auth/verify-email", body);
     }
 
     [Fact]
     public async Task SendEmailVerificationAsync_UsesDefaultSenderName_WhenConfigMissing()
     {
-        // Arrange
-        var configData = new Dictionary<string, string?>
-        {
-            { "Email:SenderEmail", "test@test.com" }
-        };
-        var config = new ConfigurationBuilder().AddInMemoryCollection(configData).Build();
-        var sut = new SendGridEmailService(_sendGridClientMock.Object, config, _logger);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                { "Email:ResendApiKey", "re_test" },
+                { "Email:SenderEmail", "test@test.com" }
+            })
+            .Build();
 
-        SendGridMessage? capturedMessage = null;
-        var response = new Response(HttpStatusCode.Accepted, null, null);
-        _sendGridClientMock
-            .Setup(c => c.SendEmailAsync(It.IsAny<SendGridMessage>(), It.IsAny<CancellationToken>()))
-            .Callback<SendGridMessage, CancellationToken>((msg, _) => capturedMessage = msg)
-            .ReturnsAsync(response);
+        HttpRequestMessage? captured = null;
+        _handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) => captured = req)
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK));
 
-        // Act
+        var sut = new ResendEmailService(new HttpClient(_handlerMock.Object), config, NullLogger<ResendEmailService>.Instance);
+
         await sut.SendEmailVerificationAsync("user@test.com", "Jane", "token");
 
-        // Assert
-        Assert.NotNull(capturedMessage);
-        string json = capturedMessage.Serialize();
-        Assert.Contains("HousingHub", json);
+        string body = await captured!.Content!.ReadAsStringAsync();
+        Assert.Contains("HousingHub", body);
     }
 }

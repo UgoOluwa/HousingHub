@@ -1,33 +1,29 @@
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using SendGrid;
-using SendGrid.Helpers.Mail;
 
 namespace HousingHub.Service.Commons.Email;
 
-internal sealed class SendGridEmailService : IEmailService
+internal sealed class ResendEmailService : IEmailService
 {
-    private readonly ISendGridClient _client;
+    private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
-    private readonly ILogger<SendGridEmailService> _logger;
+    private readonly ILogger<ResendEmailService> _logger;
 
-    public SendGridEmailService(
-        ISendGridClient client,
-        IConfiguration configuration,
-        ILogger<SendGridEmailService> logger)
+    public ResendEmailService(HttpClient httpClient, IConfiguration configuration, ILogger<ResendEmailService> logger)
     {
-        _client = client;
+        _httpClient = httpClient;
         _configuration = configuration;
         _logger = logger;
     }
 
     public async Task<bool> SendEmailVerificationAsync(string toEmail, string firstName, string verificationToken)
     {
-        string subject = "Verify your HousingHub email";
         string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
         string verifyLink = $"{baseUrl}/api/v1/Auth/verify-email?email={Uri.EscapeDataString(toEmail)}&token={verificationToken}";
 
-        string htmlContent = $"""
+        string html = $"""
             <h2>Welcome to HousingHub, {firstName}!</h2>
             <p>Please verify your email address by clicking the link below:</p>
             <p><a href="{verifyLink}" style="padding:10px 20px;background:#4F46E5;color:#fff;text-decoration:none;border-radius:5px;">Verify Email</a></p>
@@ -38,18 +34,17 @@ internal sealed class SendGridEmailService : IEmailService
             <p>If you did not create an account, please ignore this email.</p>
             """;
 
-        string plainTextContent = $"Welcome to HousingHub, {firstName}! Verify your email by visiting: {verifyLink}. This link expires in 24 hours.";
+        string text = $"Welcome to HousingHub, {firstName}! Verify your email by visiting: {verifyLink}. This link expires in 24 hours.";
 
-        return await SendAsync(toEmail, subject, plainTextContent, htmlContent);
+        return await SendAsync(toEmail, "Verify your HousingHub email", text, html);
     }
 
     public async Task<bool> SendPasswordResetAsync(string toEmail, string firstName, string resetToken)
     {
-        string subject = "Reset your HousingHub password";
         string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
         string resetLink = $"{baseUrl}/reset-password?email={Uri.EscapeDataString(toEmail)}&token={resetToken}";
 
-        string htmlContent = $"""
+        string html = $"""
             <h2>Password Reset Request</h2>
             <p>Hi {firstName},</p>
             <p>We received a request to reset your password. Click the link below to set a new password:</p>
@@ -61,17 +56,16 @@ internal sealed class SendGridEmailService : IEmailService
             <p>If you did not request a password reset, please ignore this email.</p>
             """;
 
-        string plainTextContent = $"Hi {firstName}, reset your HousingHub password by visiting: {resetLink}. This link expires in 1 hour.";
+        string text = $"Hi {firstName}, reset your HousingHub password by visiting: {resetLink}. This link expires in 1 hour.";
 
-        return await SendAsync(toEmail, subject, plainTextContent, htmlContent);
+        return await SendAsync(toEmail, "Reset your HousingHub password", text, html);
     }
 
     public async Task<bool> SendInspectionScheduledAsync(string ownerEmail, string ownerName, string customerName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime, string? note)
     {
-        string subject = $"New Inspection Request for {propertyTitle}";
         string noteSection = string.IsNullOrWhiteSpace(note) ? "" : $"<p><strong>Note:</strong> {note}</p>";
 
-        string htmlContent = $"""
+        string html = $"""
             <h2>New Inspection Request</h2>
             <p>Hi {ownerName},</p>
             <p><strong>{customerName}</strong> has scheduled an inspection for your property <strong>{propertyTitle}</strong>.</p>
@@ -81,20 +75,19 @@ internal sealed class SendGridEmailService : IEmailService
             <p>Please log in to your HousingHub dashboard to accept or decline this inspection request.</p>
             """;
 
-        string plainTextContent = $"Hi {ownerName}, {customerName} has scheduled an inspection for {propertyTitle} on {scheduledDate:yyyy-MM-dd} at {scheduledTime:hh\\:mm}. Log in to respond.";
+        string text = $"Hi {ownerName}, {customerName} has scheduled an inspection for {propertyTitle} on {scheduledDate:yyyy-MM-dd} at {scheduledTime:hh\\:mm}. Log in to respond.";
 
-        return await SendAsync(ownerEmail, subject, plainTextContent, htmlContent);
+        return await SendAsync(ownerEmail, $"New Inspection Request for {propertyTitle}", text, html);
     }
 
     public async Task<bool> SendInspectionResponseAsync(string customerEmail, string customerName, string ownerName, string propertyTitle, string action, string? note, DateTime? rescheduledDate, TimeSpan? rescheduledTime)
     {
-        string subject = $"Inspection {action} for {propertyTitle}";
         string noteSection = string.IsNullOrWhiteSpace(note) ? "" : $"<p><strong>Note:</strong> {note}</p>";
         string rescheduleSection = rescheduledDate.HasValue
             ? $"<p><strong>New Date:</strong> {rescheduledDate.Value:yyyy-MM-dd}</p><p><strong>New Time:</strong> {rescheduledTime!.Value:hh\\:mm}</p>"
             : "";
 
-        string htmlContent = $"""
+        string html = $"""
             <h2>Inspection {action}</h2>
             <p>Hi {customerName},</p>
             <p>The property owner <strong>{ownerName}</strong> has <strong>{action.ToLower()}</strong> your inspection request for <strong>{propertyTitle}</strong>.</p>
@@ -103,23 +96,31 @@ internal sealed class SendGridEmailService : IEmailService
             <p>Please log in to your HousingHub dashboard for more details.</p>
             """;
 
-        string plainTextContent = $"Hi {customerName}, {ownerName} has {action.ToLower()} your inspection for {propertyTitle}. Log in for details.";
+        string text = $"Hi {customerName}, {ownerName} has {action.ToLower()} your inspection for {propertyTitle}. Log in for details.";
 
-        return await SendAsync(customerEmail, subject, plainTextContent, htmlContent);
+        return await SendAsync(customerEmail, $"Inspection {action} for {propertyTitle}", text, html);
     }
 
-    private async Task<bool> SendAsync(string toEmail, string subject, string plainTextContent, string htmlContent)
+    private async Task<bool> SendAsync(string toEmail, string subject, string text, string html)
     {
         try
         {
             string fromEmail = _configuration["Email:SenderEmail"]!;
             string fromName = _configuration["Email:SenderName"] ?? "HousingHub";
+            string apiKey = _configuration["Email:ResendApiKey"]!;
 
-            var from = new EmailAddress(fromEmail, fromName);
-            var to = new EmailAddress(toEmail);
-            var msg = MailHelper.CreateSingleEmail(from, to, subject, plainTextContent, htmlContent);
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
-            var response = await _client.SendEmailAsync(msg);
+            var payload = new
+            {
+                from = $"{fromName} <{fromEmail}>",
+                to = new[] { toEmail },
+                subject,
+                text,
+                html
+            };
+
+            var response = await _httpClient.PostAsJsonAsync("https://api.resend.com/emails", payload);
 
             if (response.IsSuccessStatusCode)
             {
@@ -127,9 +128,8 @@ internal sealed class SendGridEmailService : IEmailService
                 return true;
             }
 
-            string body = await response.Body.ReadAsStringAsync();
-            _logger.LogWarning("SendGrid returned {StatusCode} for {Email}: {Body}",
-                response.StatusCode, toEmail, body);
+            string body = await response.Content.ReadAsStringAsync();
+            _logger.LogWarning("Resend returned {StatusCode} for {Email}: {Body}", response.StatusCode, toEmail, body);
             return false;
         }
         catch (Exception ex)
