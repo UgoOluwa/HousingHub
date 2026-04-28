@@ -236,9 +236,7 @@ public class CustomerCommandService : ICustomerCommandService
         {
             var existingCustomer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == customerId);
             if (existingCustomer == null)
-            {
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
-            }
 
             await _unitOfWOrk.CustomerCommands.DeleteAsync(existingCustomer);
             await _unitOfWOrk.SaveAsync();
@@ -248,6 +246,50 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in DeleteCustomer: {Message}", ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+        }
+    }
+
+    public async Task<BaseResponse<bool>> SuspendCustomer(Guid customerId)
+    {
+        try
+        {
+            var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == customerId);
+            if (customer == null)
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            customer.IsActive = false;
+            customer.DateModified = DateTime.UtcNow;
+            await _unitOfWOrk.CustomerCommands.UpdateAsync(customer);
+            await _unitOfWOrk.SaveAsync();
+
+            return new BaseResponse<bool>(true, true, string.Empty, "Customer suspended successfully.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in SuspendCustomer: {Message}", ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+        }
+    }
+
+    public async Task<BaseResponse<bool>> ReactivateCustomer(Guid customerId)
+    {
+        try
+        {
+            var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == customerId);
+            if (customer == null)
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            customer.IsActive = true;
+            customer.DateModified = DateTime.UtcNow;
+            await _unitOfWOrk.CustomerCommands.UpdateAsync(customer);
+            await _unitOfWOrk.SaveAsync();
+
+            return new BaseResponse<bool>(true, true, string.Empty, "Customer reactivated successfully.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in ReactivateCustomer: {Message}", ex.Message);
             return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
         }
     }

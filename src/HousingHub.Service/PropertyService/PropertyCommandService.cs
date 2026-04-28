@@ -189,18 +189,14 @@ public class PropertyCommandService : IPropertyCommandService
     {
         try
         {
-            var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId);
-
+            var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == authenticatedUserId);
             if (owner == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
 
             if (!owner.CustomerType.HasFlag(CustomerType.HouseOwner) && !owner.CustomerType.HasFlag(CustomerType.Agent))
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
 
-            var property = await _unitOfWOrk.PropertyQueries.GetByAsync(
-                x => x.Id == propertyId);
-
+            var property = await _unitOfWOrk.PropertyQueries.GetByAsync(x => x.Id == propertyId);
             if (property == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
@@ -215,6 +211,51 @@ public class PropertyCommandService : IPropertyCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in DeleteProperty: {Message}", ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+        }
+    }
+
+    public async Task<BaseResponse<bool>> SetPropertyPublishedAsync(Guid propertyId, bool isPublished)
+    {
+        try
+        {
+            var property = await _unitOfWOrk.PropertyQueries.GetByAsync(x => x.Id == propertyId);
+            if (property == null)
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            property.IsPublished = isPublished;
+            property.PublishedAt = isPublished ? DateTime.UtcNow : null;
+            property.DateModified = DateTime.UtcNow;
+
+            await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
+            await _unitOfWOrk.SaveAsync();
+
+            var message = isPublished ? "Property published successfully." : "Property unpublished successfully.";
+            return new BaseResponse<bool>(true, true, string.Empty, message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in SetPropertyPublishedAsync: {Message}", ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+        }
+    }
+
+    public async Task<BaseResponse<bool>> AdminDeletePropertyAsync(Guid propertyId)
+    {
+        try
+        {
+            var property = await _unitOfWOrk.PropertyQueries.GetByAsync(x => x.Id == propertyId);
+            if (property == null)
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            await _unitOfWOrk.PropertyCommands.DeleteAsync(property);
+            await _unitOfWOrk.SaveAsync();
+
+            return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.SetDeletedSuccessMessage(ClassName));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in AdminDeletePropertyAsync: {Message}", ex.Message);
             return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
         }
     }

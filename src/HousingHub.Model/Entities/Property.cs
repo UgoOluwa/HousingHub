@@ -44,6 +44,10 @@ public class Property : BaseEntity
     // Analytics
     public long ViewCount { get; set; }
 
+    // Admin moderation
+    public bool IsPublished { get; set; } = false;
+    public DateTime? PublishedAt { get; set; }
+
     public Property() { }
 
     public Property(string title, string description, PropertyType propertyType, decimal price, PropertyAvailability availability, PropertyLeaseType propertyLeaseType)

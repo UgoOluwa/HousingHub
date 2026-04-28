@@ -23,4 +23,6 @@ public record PropertyDto(
     double? Latitude,
     double? Longitude,
     long ViewCount,
+    bool IsPublished,
+    DateTime? PublishedAt,
     List<PropertyFileDto>? Files = null);

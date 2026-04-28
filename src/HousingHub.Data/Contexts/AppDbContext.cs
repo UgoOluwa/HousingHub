@@ -11,6 +11,10 @@ public class DynamoDbTableInitializer
 
     private static readonly Dictionary<string, (string HashKey, List<GlobalSecondaryIndex>? GSIs)> TableDefinitions = new()
     {
+        ["Admins"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            CreateGsi("Email-index", "Email"),
+        }),
         ["Customers"] = ("Id", new List<GlobalSecondaryIndex>
         {
             CreateGsi("Email-index", "Email"),

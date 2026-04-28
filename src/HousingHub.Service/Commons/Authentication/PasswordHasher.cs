@@ -2,7 +2,7 @@
 
 namespace HousingHub.Service.Commons.Authentication;
 
-internal sealed class PasswordHasher : IPasswordHasher
+public sealed class PasswordHasher : IPasswordHasher
 {
     private const int SaltSize = 16;
     private const int HashSize = 32;

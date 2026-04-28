@@ -10,5 +10,7 @@ public enum CustomerType
     [Description("Agent")]
     Agent = 2,
     [Description("Customer")]
-    Customer = 4
+    Customer = 4,
+    [Description("Admin")]
+    Admin = 8
 }
