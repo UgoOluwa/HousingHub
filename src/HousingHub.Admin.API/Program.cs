@@ -57,6 +57,7 @@ public static class Program
             .AddJwtBearer(o =>
             {
                 o.RequireHttpsMetadata = false;
+                o.MapInboundClaims = false;
                 o.TokenValidationParameters = new TokenValidationParameters
                 {
                     IssuerSigningKey = new SymmetricSecurityKey(
@@ -108,6 +109,7 @@ public static class Program
         // Admin-specific services
         builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
         builder.Services.AddScoped<IAdminAuthService, AdminAuthService>();
+        builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 
         // Shared application + repository layers
         builder.Services.AddInjectionRepository()
@@ -121,19 +123,17 @@ public static class Program
             app.UsePathBase("/admin");
         }
 
-        if (app.Environment.IsDevelopment())
+        app.UseSwagger(c => c.RouteTemplate = "openapi/{documentName}.json");
+        app.UseSwaggerUI(c =>
         {
-            app.UseSwagger(c => c.RouteTemplate = "openapi/{documentName}.json");
-            app.UseSwaggerUI(c =>
-            {
-                c.SwaggerEndpoint("/openapi/v1.json", "HousingHub Admin API v1");
-                c.RoutePrefix = "swagger";
-            });
-            app.MapScalarApiReference("/scalar/{documentName}", options =>
-            {
-                options.WithTitle("HousingHub Admin API");
-            });
-        }
+            c.SwaggerEndpoint("/admin/openapi/v1.json", "HousingHub Admin API v1");
+            c.RoutePrefix = "swagger";
+        });
+        app.MapScalarApiReference("/scalar", options =>
+        {
+            options.WithTitle("HousingHub Admin API")
+                   .WithOpenApiRoutePattern("/admin/openapi/v1.json");
+        }).AllowAnonymous();
 
         using (var scope = app.Services.CreateScope())
         {
@@ -148,6 +148,7 @@ public static class Program
 
         app.UseAuthentication();
         app.UseAuthorization();
+        app.MapGet("/", () => Results.Redirect("/admin/scalar")).AllowAnonymous();
         app.MapControllers();
 
         app.Run();

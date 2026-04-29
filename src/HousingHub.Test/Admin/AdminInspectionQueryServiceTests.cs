@@ -281,4 +281,46 @@ public class AdminInspectionQueryServiceTests
 
         Assert.False(result.IsSuccessful);
     }
+
+    [Fact]
+    public async Task GetTodaysInspections_RepositoryThrows_ReturnsFailure()
+    {
+        _unitOfWorkMock
+            .Setup(u => u.PropertyInspectionQueries.GetAllAsync(It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ThrowsAsync(new Exception("DB error"));
+
+        var result = await _sut.GetTodaysInspectionsPaginatedAsync(1, 20);
+
+        Assert.False(result.IsSuccessful);
+    }
+
+    [Fact]
+    public async Task GetRecentActivity_RepositoryThrows_ReturnsFailure()
+    {
+        _unitOfWorkMock
+            .Setup(u => u.CustomerQueries.GetAllAsync(It.IsAny<Expression<Func<Customer, bool>>>()))
+            .ThrowsAsync(new Exception("DB error"));
+
+        var result = await _sut.GetRecentActivityAsync();
+
+        Assert.False(result.IsSuccessful);
+    }
+
+    [Fact]
+    public async Task GetAllInspectionsPaginated_CustomerIdFilter_ReturnsMatchingOnly()
+    {
+        var customerId = Guid.NewGuid();
+        var inspections = new[]
+        {
+            MakeInspection(customerId: customerId),
+            MakeInspection(),
+        };
+        SetupInspections(inspections);
+
+        var result = await _sut.GetAllInspectionsPaginatedAsync(
+            new AdminInspectionFilterDto(CustomerId: customerId));
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(1, result.Data!.TotalCount);
+    }
 }

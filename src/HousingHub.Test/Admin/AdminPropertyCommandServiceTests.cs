@@ -128,4 +128,16 @@ public class AdminPropertyCommandServiceTests
 
         Assert.False(result.IsSuccessful);
     }
+
+    [Fact]
+    public async Task SetPropertyPublished_RepositoryThrows_ReturnsFailure()
+    {
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByAsync(It.IsAny<Expression<Func<Property, bool>>>()))
+            .ThrowsAsync(new Exception("DB error"));
+
+        var result = await _sut.SetPropertyPublishedAsync(Guid.NewGuid(), true);
+
+        Assert.False(result.IsSuccessful);
+    }
 }

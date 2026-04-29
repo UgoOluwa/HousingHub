@@ -8,7 +8,8 @@
       "Bash(find \"c:\\\\Users\\\\PC\\\\source\\\\repos\\\\HousingHub\\\\src\\\\HousingHub.Application\\\\Commons\\\\Bases\" -name \"*.cs\" -exec cat {} \\\\;)",
       "Bash(dotnet lambda *)",
       "Bash(aws --version)",
-      "Read(//c/Users/PC/.aws/**)"
+      "Read(//c/Users/PC/.aws/**)",
+      "Read(//c/Users/PC/.nuget/packages/awssdk.dynamodbv2/4.0.17.8/**)"
     ]
   }
 }
