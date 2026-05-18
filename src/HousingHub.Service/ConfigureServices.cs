@@ -7,6 +7,7 @@ using HousingHub.Service.ChatService.Interfaces;
 using HousingHub.Service.Commons.Authentication;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.FileStorage;
+using HousingHub.Service.Commons.Utilities;
 using HousingHub.Service.CustomerAddressService;
 using HousingHub.Service.CustomerAddressService.Interfaces;
 using HousingHub.Service.CustomerService;
@@ -61,6 +62,7 @@ public static class ConfigureServices
         services.AddScoped<IPropertyFileQueryService, PropertyFileQueryService>();
         services.AddScoped<IChatCommandService, ChatCommandService>();
         services.AddScoped<IChatQueryService, ChatQueryService>();
+        services.AddSingleton<IUtilityService, UtilityService>();
 
         // AWS S3 File Storage
         services.AddSingleton<IAmazonS3>(sp =>

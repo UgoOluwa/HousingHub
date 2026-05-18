@@ -5,6 +5,7 @@ using HousingHub.Application.Auth.Commands.ForgotPassword;
 using HousingHub.Application.Auth.Commands.GoogleSignIn;
 using HousingHub.Application.Auth.Commands.Login;
 using HousingHub.Application.Auth.Commands.Register;
+using HousingHub.Application.Auth.Commands.ResendOtp;
 using HousingHub.Application.Auth.Commands.ResetPassword;
 using HousingHub.Application.Auth.Commands.VerifyEmail;
 using HousingHub.Application.Commons.Bases;
@@ -53,6 +54,14 @@ public class AuthController : ControllerBase
     [HttpPost("verify-email")]
     [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
     public async Task<IActionResult> VerifyEmail(VerifyEmailCommand command)
+    {
+        var response = await _mediator.Send(command);
+        return Ok(response);
+    }
+
+    [HttpPost("resend-otp")]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ResendOtp(ResendOtpCommand command)
     {
         var response = await _mediator.Send(command);
         return Ok(response);

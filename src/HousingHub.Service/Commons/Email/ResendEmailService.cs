@@ -21,7 +21,7 @@ internal sealed class ResendEmailService : IEmailService
     public async Task<bool> SendEmailVerificationAsync(string toEmail, string firstName, string verificationToken)
     {
         string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
-        string verifyLink = $"{baseUrl}/api/v1/Auth/verify-email?email={Uri.EscapeDataString(toEmail)}&token={verificationToken}";
+        string verifyLink = $"{baseUrl}/verify?email={Uri.EscapeDataString(toEmail)}&token={verificationToken}";
 
         string html = $"""
             <h2>Welcome to HousingHub, {firstName}!</h2>

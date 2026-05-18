@@ -9,6 +9,7 @@ public interface IAuthService
     Task<BaseResponse<CustomerDto>> Register(RegisterCustomerDto request);
     Task<BaseResponse<LoginCustomerResponseDto>> Login(LoginCustomerDto request);
     Task<BaseResponse<bool>> VerifyEmail(VerifyEmailRequestDto request);
+    Task<BaseResponse<bool>> ResendEmailVerificationToken(string email);
     Task<BaseResponse<string>> ForgotPassword(ForgotPasswordRequestDto request);
     Task<BaseResponse<bool>> ResetPassword(ResetPasswordRequestDto request);
     Task<BaseResponse<bool>> ChangePassword(ChangePasswordRequestDto request);

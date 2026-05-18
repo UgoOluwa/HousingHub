@@ -346,6 +346,36 @@ public class AuthService : IAuthService
         }
     }
 
+    public async Task<BaseResponse<bool>> ResendEmailVerificationToken(string email)
+    {
+        try
+        {
+            var customer = await _unitOfWork.CustomerQueries.GetByAsync(
+                x => x.Email == email);
+
+            if (customer == null)
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
+
+            if (customer.EmailVerified)
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.EmailAlreadyVerified);
+
+            customer.EmailVerificationToken = GenerateSecureToken();
+            customer.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
+
+            await _unitOfWork.CustomerCommands.UpdateAsync(customer);
+            await _unitOfWork.SaveAsync();
+
+            await _emailService.SendEmailVerificationAsync(customer.Email, customer.FirstName, customer.EmailVerificationToken!);
+
+            return new BaseResponse<bool>(true, true, string.Empty, "Email verification token sent successfully.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in ResendEmailVerificationToken: {Message}", ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+        }
+    }
+
     private static string GenerateSecureToken()
     {
         return Convert.ToHexString(RandomNumberGenerator.GetBytes(32));

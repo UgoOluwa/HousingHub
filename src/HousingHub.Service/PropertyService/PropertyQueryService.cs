@@ -84,33 +84,70 @@ public class PropertyQueryService : IPropertyQueryService
     {
         try
         {
-            System.Linq.Expressions.Expression<Func<Property, bool>>? predicate = null;
+            var allProperties = await _unitOfWOrk.PropertyQueries.GetAllAsync();
+            var properties = allProperties.AsEnumerable();
 
-            var hasSearch = !string.IsNullOrWhiteSpace(filter.Search);
-            var hasFeature = filter.Features.HasValue && filter.Features.Value != PropertyFeature.None;
-
-            if (hasSearch && hasFeature)
+            // Text search
+            if (!string.IsNullOrWhiteSpace(filter.Search))
             {
-                var search = filter.Search!.Trim();
-                var features = filter.Features!.Value;
-                predicate = x => x.Title.Contains(search) && x.Features.HasFlag(features);
-            }
-            else if (hasSearch)
-            {
-                var search = filter.Search!.Trim();
-                predicate = x => x.Title.Contains(search);
-            }
-            else if (hasFeature)
-            {
-                var features = filter.Features!.Value;
-                predicate = x => x.Features.HasFlag(features);
+                var search = filter.Search.Trim().ToLower();
+                properties = properties.Where(x => x.Title.ToLower().Contains(search));
             }
 
-            var (properties, totalCount) = await _unitOfWOrk.PropertyQueries.GetPagedAsync(
-                filter.PageNumber, filter.PageSize,
-                predicate: predicate);
+            // Features filter
+            if (filter.Features.HasValue && filter.Features.Value != PropertyFeature.None)
+            {
+                properties = properties.Where(x => x.Features.HasFlag(filter.Features.Value));
+            }
 
-            var mappedItems = _mapper.Map<List<PropertyDto>>(properties);
+            // Property type filter
+            if (filter.PropertyType.HasValue)
+            {
+                properties = properties.Where(x => x.PropertyType == filter.PropertyType.Value);
+            }
+
+            // Price range filter
+            if (filter.MinPrice.HasValue)
+            {
+                properties = properties.Where(x => x.Price >= filter.MinPrice.Value);
+            }
+            if (filter.MaxPrice.HasValue)
+            {
+                properties = properties.Where(x => x.Price <= filter.MaxPrice.Value);
+            }
+
+            // Location filter (by City/State)
+            if (!string.IsNullOrWhiteSpace(filter.City) || !string.IsNullOrWhiteSpace(filter.State))
+            {
+                var propertyIds = properties.Select(p => p.Id).ToList();
+                var addresses = await _unitOfWOrk.PropertyAddressQueries.GetAllAsync(
+                    a => propertyIds.Contains(a.PropertyId));
+
+                var filteredAddresses = addresses.AsEnumerable();
+                if (!string.IsNullOrWhiteSpace(filter.City))
+                {
+                    var city = filter.City.Trim().ToLower();
+                    filteredAddresses = filteredAddresses.Where(a => a.City.ToLower().Contains(city));
+                }
+                if (!string.IsNullOrWhiteSpace(filter.State))
+                {
+                    var state = filter.State.Trim().ToLower();
+                    filteredAddresses = filteredAddresses.Where(a => a.State.ToLower().Contains(state));
+                }
+
+                var matchingAddressPropertyIds = filteredAddresses.Select(a => a.PropertyId).ToHashSet();
+                properties = properties.Where(p => matchingAddressPropertyIds.Contains(p.Id));
+            }
+
+            var propertiesList = properties.ToList();
+            var totalCount = propertiesList.Count;
+
+            var paginatedProperties = propertiesList
+                .Skip((filter.PageNumber - 1) * filter.PageSize)
+                .Take(filter.PageSize)
+                .ToList();
+
+            var mappedItems = _mapper.Map<List<PropertyDto>>(paginatedProperties);
             var paginatedResult = new PaginatedResult<PropertyDto>(mappedItems, totalCount, filter.PageNumber, filter.PageSize);
 
             return new BaseResponse<PaginatedResult<PropertyDto>>(paginatedResult, true, string.Empty, ResponseMessages.Successful);
@@ -136,6 +173,26 @@ public class PropertyQueryService : IPropertyQueryService
         {
             _logger.LogError(ex, "An error occurred in GetPropertiesByOwnerAsync: {Message}", ex.Message);
             return new BaseResponse<List<PropertyDto>>(new List<PropertyDto>(), false, string.Empty, ex.Message);
+        }
+    }
+
+    public async Task<BaseResponse<PaginatedResult<PropertyDto>>> GetPropertiesByOwnerPaginatedAsync(Guid ownerId, GetMyPropertiesFilterDto filter)
+    {
+        try
+        {
+            var (properties, totalCount) = await _unitOfWOrk.PropertyQueries.GetPagedAsync(
+                filter.PageNumber, filter.PageSize,
+                predicate: x => x.OwnerId == ownerId);
+
+            var mappedItems = _mapper.Map<List<PropertyDto>>(properties);
+            var paginatedResult = new PaginatedResult<PropertyDto>(mappedItems, totalCount, filter.PageNumber, filter.PageSize);
+
+            return new BaseResponse<PaginatedResult<PropertyDto>>(paginatedResult, true, string.Empty, ResponseMessages.Successful);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in GetPropertiesByOwnerPaginatedAsync: {Message}", ex.Message);
+            return new BaseResponse<PaginatedResult<PropertyDto>>(null, false, string.Empty, ex.Message);
         }
     }
 

@@ -5,7 +5,7 @@ using MediatR;
 
 namespace HousingHub.Application.Property.Queries.GetByOwner;
 
-public class GetMyPropertiesQueryHandler : IRequestHandler<GetMyPropertiesQuery, BaseResponse<List<PropertyDto>>>
+public class GetMyPropertiesQueryHandler : IRequestHandler<GetMyPropertiesQuery, BaseResponse<HousingHub.Core.CustomResponses.PaginatedResult<PropertyDto>>>
 {
     private readonly IPropertyQueryService _propertyQueryService;
 
@@ -14,9 +14,9 @@ public class GetMyPropertiesQueryHandler : IRequestHandler<GetMyPropertiesQuery,
         _propertyQueryService = propertyQueryService;
     }
 
-    public async Task<BaseResponse<List<PropertyDto>>> Handle(GetMyPropertiesQuery request, CancellationToken cancellationToken)
+    public async Task<BaseResponse<HousingHub.Core.CustomResponses.PaginatedResult<PropertyDto>>> Handle(GetMyPropertiesQuery request, CancellationToken cancellationToken)
     {
-        var response = await _propertyQueryService.GetPropertiesByOwnerAsync(request.OwnerId);
-        return new BaseResponse<List<PropertyDto>>(response.IsSuccessful, response.Data, response.Message, null);
+        var response = await _propertyQueryService.GetPropertiesByOwnerPaginatedAsync(request.OwnerId, request.Filter);
+        return new BaseResponse<HousingHub.Core.CustomResponses.PaginatedResult<PropertyDto>>(response.IsSuccessful, response.Data, response.Message, null);
     }
 }

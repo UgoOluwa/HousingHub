@@ -4,4 +4,5 @@ using MediatR;
 
 namespace HousingHub.Application.Property.Queries.GetByOwner;
 
-public record GetMyPropertiesQuery(Guid OwnerId) : IRequest<BaseResponse<List<PropertyDto>>>;
+public record GetMyPropertiesQuery(Guid OwnerId, GetMyPropertiesFilterDto Filter) : IRequest<BaseResponse<HousingHub.Core.CustomResponses.PaginatedResult<PropertyDto>>>;
+

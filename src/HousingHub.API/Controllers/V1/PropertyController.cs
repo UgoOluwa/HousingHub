@@ -92,13 +92,14 @@ public class PropertyController : ControllerBase
 
     [Authorize(Policy = "PropertyOwnerOrAgent")]
     [HttpGet("my")]
-    [ProducesResponseType(typeof(BaseResponse<List<PropertyDto>>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetMyProperties()
+    [ProducesResponseType(typeof(BaseResponsePagination<HousingHub.Core.CustomResponses.PaginatedResult<PropertyDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMyProperties([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
     {
         var userId = GetAuthenticatedUserId();
         if (userId == null) return Unauthorized();
 
-        var response = await _mediator.Send(new GetMyPropertiesQuery(userId.Value));
+        var filter = new GetMyPropertiesFilterDto { PageNumber = pageNumber, PageSize = pageSize };
+        var response = await _mediator.Send(new GetMyPropertiesQuery(userId.Value, filter));
         return Ok(response);
     }
 
