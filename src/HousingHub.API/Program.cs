@@ -48,6 +48,21 @@ namespace HousingHub.API
 
             // Add services to the container.
 
+            var allowedOrigins = builder.Configuration
+                .GetSection("Cors:AllowedOrigins")
+                .Get<string[]>() ?? [];
+
+            builder.Services.AddCors(options =>
+            {
+                options.AddDefaultPolicy(policy =>
+                {
+                    policy.WithOrigins(allowedOrigins)
+                          .AllowAnyHeader()
+                          .AllowAnyMethod()
+                          .AllowCredentials();
+                });
+            });
+
             builder.Services.AddHealthChecks();
             builder.Services.AddControllers();
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -214,6 +229,8 @@ namespace HousingHub.API
                 app.UseHttpsRedirection();
             }
             app.UseAppExceptionMiddleware();
+
+            app.UseCors();
 
             app.UseAuthentication();
 
