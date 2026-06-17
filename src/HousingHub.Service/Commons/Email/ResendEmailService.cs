@@ -42,7 +42,7 @@ internal sealed class ResendEmailService : IEmailService
     public async Task<bool> SendPasswordResetAsync(string toEmail, string firstName, string resetToken)
     {
         string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
-        string resetLink = $"{baseUrl}/reset-password?email={Uri.EscapeDataString(toEmail)}&token={resetToken}";
+        string resetLink = $"{baseUrl}/create-new-password?email={Uri.EscapeDataString(toEmail)}&token={resetToken}";
 
         string html = $"""
             <h2>Password Reset Request</h2>

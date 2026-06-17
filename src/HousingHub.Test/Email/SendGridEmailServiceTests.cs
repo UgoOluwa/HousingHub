@@ -173,7 +173,7 @@ public class ResendEmailServiceTests
         string body = await captured!.Content!.ReadAsStringAsync();
         Assert.Contains("Reset your HousingHub password", body);
         Assert.Contains("reset-token-789", body);
-        Assert.Contains("https://housinghub.com/reset-password", body);
+        Assert.Contains("https://housinghub.com/create-new-password", body);
     }
 
     // ─── Configuration edge cases ─────────────────────────────────────
