@@ -16,7 +16,7 @@ public class GetTrendingPropertiesQueryHandler : IRequestHandler<GetTrendingProp
 
     public async Task<BaseResponse<List<PropertyDto>>> Handle(GetTrendingPropertiesQuery request, CancellationToken cancellationToken)
     {
-        var response = await _propertyQueryService.GetTrendingPropertiesAsync(request.Count);
+        var response = await _propertyQueryService.GetTrendingPropertiesAsync(request.Count, request.Skip);
         return new BaseResponse<List<PropertyDto>>(response.IsSuccessful, response.Data, response.Message, null);
     }
 }

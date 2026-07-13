@@ -217,7 +217,7 @@ public class PropertyQueryService : IPropertyQueryService
         }
     }
 
-    public async Task<BaseResponse<List<PropertyDto>>> GetTrendingPropertiesAsync(int count = 10)
+    public async Task<BaseResponse<List<PropertyDto>>> GetTrendingPropertiesAsync(int count = 10, int skip = 0)
     {
         try
         {
@@ -225,6 +225,7 @@ public class PropertyQueryService : IPropertyQueryService
 
             var trending = properties
                 .OrderByDescending(p => p.ViewCount)
+                .Skip(skip)
                 .Take(count)
                 .ToList();
 
@@ -238,7 +239,7 @@ public class PropertyQueryService : IPropertyQueryService
         }
     }
 
-    public async Task<BaseResponse<List<PropertyDto>>> GetNearbyPropertiesAsync(double latitude, double longitude, double radiusKm = 10, int count = 10)
+    public async Task<BaseResponse<List<PropertyDto>>> GetNearbyPropertiesAsync(double latitude, double longitude, double radiusKm = 10, int count = 10, int skip = 0)
     {
         try
         {
@@ -253,6 +254,7 @@ public class PropertyQueryService : IPropertyQueryService
                 })
                 .Where(x => x.Distance <= radiusKm)
                 .OrderBy(x => x.Distance)
+                .Skip(skip)
                 .Take(count)
                 .Select(x => x.Property)
                 .ToList();

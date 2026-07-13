@@ -6,6 +6,7 @@ using HousingHub.Application.Customer.Commands.Delete;
 using HousingHub.Application.Customer.Commands.SubmitKyc;
 using HousingHub.Application.Customer.Commands.UpdateProfile;
 using HousingHub.Application.Customer.Commands.UploadKycDocument;
+using HousingHub.Application.Customer.Commands.VerifyKyc;
 using HousingHub.Application.Customer.Queries.GetAll;
 using HousingHub.Application.Customer.Queries.GetById;
 using HousingHub.Model.Enums;
@@ -108,6 +109,15 @@ namespace HousingHub.API.Controllers.V1
             if (userId == null) return Unauthorized();
 
             var response = await _mediator.Send(new UploadKycDocumentCommand(userId.Value, request.File));
+            return Ok(response);
+        }
+
+        [Authorize]
+        [HttpPut("{id:guid}/kyc/verify")]
+        [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> VerifyKyc(Guid id, [FromQuery] bool approve)
+        {
+            var response = await _mediator.Send(new VerifyKycCommand(id, approve));
             return Ok(response);
         }
 
