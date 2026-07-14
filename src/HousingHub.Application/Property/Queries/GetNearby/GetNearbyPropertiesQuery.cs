@@ -8,4 +8,5 @@ public record GetNearbyPropertiesQuery(
     double Latitude,
     double Longitude,
     double RadiusKm = 10,
-    int Count = 10) : IRequest<BaseResponse<List<PropertyDto>>>;
+    int Count = 10,
+    int Skip = 0) : IRequest<BaseResponse<List<PropertyDto>>>;

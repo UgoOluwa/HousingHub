@@ -4,4 +4,4 @@ using MediatR;
 
 namespace HousingHub.Application.Property.Queries.GetTrending;
 
-public record GetTrendingPropertiesQuery(int Count = 10) : IRequest<BaseResponse<List<PropertyDto>>>;
+public record GetTrendingPropertiesQuery(int Count = 10, int Skip = 0) : IRequest<BaseResponse<List<PropertyDto>>>;

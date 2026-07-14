@@ -17,7 +17,7 @@ public class GetNearbyPropertiesQueryHandler : IRequestHandler<GetNearbyProperti
     public async Task<BaseResponse<List<PropertyDto>>> Handle(GetNearbyPropertiesQuery request, CancellationToken cancellationToken)
     {
         var response = await _propertyQueryService.GetNearbyPropertiesAsync(
-            request.Latitude, request.Longitude, request.RadiusKm, request.Count);
+            request.Latitude, request.Longitude, request.RadiusKm, request.Count, request.Skip);
         return new BaseResponse<List<PropertyDto>>(response.IsSuccessful, response.Data, response.Message, null);
     }
 }

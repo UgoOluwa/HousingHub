@@ -129,9 +129,9 @@ public class PropertyController : ControllerBase
 
     [HttpGet("trending")]
     [ProducesResponseType(typeof(BaseResponse<List<PropertyDto>>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetTrendingProperties([FromQuery] int count = 10)
+    public async Task<IActionResult> GetTrendingProperties([FromQuery] int count = 10, [FromQuery] int skip = 0)
     {
-        var response = await _mediator.Send(new GetTrendingPropertiesQuery(count));
+        var response = await _mediator.Send(new GetTrendingPropertiesQuery(count, skip));
         return Ok(response);
     }
 
@@ -141,9 +141,10 @@ public class PropertyController : ControllerBase
         [FromQuery] double latitude,
         [FromQuery] double longitude,
         [FromQuery] double radiusKm = 10,
-        [FromQuery] int count = 10)
+        [FromQuery] int count = 10,
+        [FromQuery] int skip = 0)
     {
-        var response = await _mediator.Send(new GetNearbyPropertiesQuery(latitude, longitude, radiusKm, count));
+        var response = await _mediator.Send(new GetNearbyPropertiesQuery(latitude, longitude, radiusKm, count, skip));
         return Ok(response);
     }
 
