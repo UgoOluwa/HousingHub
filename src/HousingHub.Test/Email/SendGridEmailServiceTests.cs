@@ -109,7 +109,7 @@ public class ResendEmailServiceTests
         Assert.Contains("Verify your HousingHub email", body);
         Assert.Contains("verify-token-123", body);
         Assert.Contains("John", body);
-        Assert.Contains("https://housinghub.com/api/v1/Auth/verify-email", body);
+        Assert.Contains("https://housinghub.com/verify-email", body);
     }
 
     [Fact]
@@ -204,7 +204,7 @@ public class ResendEmailServiceTests
         await sut.SendEmailVerificationAsync("user@test.com", "Jane", "token");
 
         string body = await captured!.Content!.ReadAsStringAsync();
-        Assert.Contains("https://localhost/api/v1/Auth/verify-email", body);
+        Assert.Contains("https://localhost/verify-email", body);
     }
 
     [Fact]
