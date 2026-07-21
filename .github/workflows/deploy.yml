@@ -7,7 +7,7 @@ on:
 
 env:
   AWS_REGION: af-south-1
-  DOTNET_VERSION: "8.0.x"
+  DOTNET_VERSION: "10.0.x"
 
 permissions:
   contents: read
