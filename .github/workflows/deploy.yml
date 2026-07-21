@@ -1,0 +1,62 @@
+name: Test and Deploy to AWS Lambda
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch: {}
+
+env:
+  AWS_REGION: af-south-1
+  DOTNET_VERSION: "8.0.x"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore HousingHub.sln
+
+      - name: Build
+        run: dotnet build HousingHub.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test src/HousingHub.Test/HousingHub.Test.csproj --no-build --configuration Release
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install Amazon.Lambda.Tools
+        run: dotnet tool install -g Amazon.Lambda.Tools
+
+      - name: Deploy HousingHub.API
+        working-directory: src/HousingHub.API
+        run: dotnet lambda deploy-function HousingHub-API --region ${{ env.AWS_REGION }}
+
+      - name: Deploy HousingHub.Admin.API
+        working-directory: src/HousingHub.Admin.API
+        run: dotnet lambda deploy-function HousingHub-Admin-API --region ${{ env.AWS_REGION }}
