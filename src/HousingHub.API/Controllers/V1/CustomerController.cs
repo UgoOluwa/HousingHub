@@ -112,7 +112,12 @@ namespace HousingHub.API.Controllers.V1
             return Ok(response);
         }
 
-        [Authorize]
+        /// <summary>
+        /// Approves or rejects a customer's KYC. Admin-only: with plain [Authorize] any
+        /// signed-in user could call this against their own id and self-verify, which
+        /// defeats the entire verification layer.
+        /// </summary>
+        [Authorize(Policy = "AdminOnly")]
         [HttpPut("{id:guid}/kyc/verify")]
         [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
         public async Task<IActionResult> VerifyKyc(Guid id, [FromQuery] bool approve)
