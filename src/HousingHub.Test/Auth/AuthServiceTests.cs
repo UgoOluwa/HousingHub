@@ -173,16 +173,18 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task Login_WithGoogleAccount_ReturnsFailure()
+    public async Task Login_WithLinkedGoogleAccountThatHasAPassword_Succeeds()
     {
         var customer = CreateCustomer(authProvider: AuthProvider.Google);
+        customer.GoogleId = "google123";
         _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
 
         var dto = new LoginCustomerDto("test@test.com", "Password123!");
         var result = await _sut.Login(dto);
 
-        Assert.False(result.IsSuccessful);
-        Assert.Equal(ResponseMessages.AccountUsesGoogleAuth, result.Message);
+        // A linked account reconciles: either sign-in method reaches the same record.
+        Assert.True(result.IsSuccessful);
+        Assert.NotNull(result.Data);
     }
 
     [Fact]
@@ -278,16 +280,19 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task ForgotPassword_WithGoogleAccount_ReturnsFailure()
+    public async Task ForgotPassword_WithGoogleAccount_SendsResetSoTheyCanAddAPassword()
     {
         var customer = CreateCustomer(authProvider: AuthProvider.Google);
+        customer.PasswordHash = string.Empty;
         _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
 
         var dto = new ForgotPasswordRequestDto("test@test.com");
         var result = await _sut.ForgotPassword(dto);
 
-        Assert.False(result.IsSuccessful);
-        Assert.Equal(ResponseMessages.AccountUsesGoogleAuth, result.Message);
+        // This is how a Google customer adds a password so either method works.
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.PasswordResetTokenSent, result.Message);
+        Assert.NotNull(customer.PasswordResetToken);
     }
 
     // ── ResetPassword ────────────────────────────────────────────
@@ -380,17 +385,32 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task ChangePassword_WithGoogleAccount_ReturnsFailure()
+    public async Task ChangePassword_WhenAccountHasNoPassword_DirectsUserToResetFlow()
     {
         var customerId = Guid.NewGuid();
         var customer = CreateCustomer(id: customerId, authProvider: AuthProvider.Google);
+        customer.PasswordHash = string.Empty;
         _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
 
         var dto = new ChangePasswordRequestDto(customerId, "Password123!", "NewPassword123!");
         var result = await _sut.ChangePassword(dto);
 
         Assert.False(result.IsSuccessful);
-        Assert.Equal(ResponseMessages.AccountUsesGoogleAuth, result.Message);
+        Assert.Equal(ResponseMessages.AccountHasNoPassword, result.Message);
+    }
+
+    [Fact]
+    public async Task ChangePassword_WithLinkedGoogleAccountThatHasAPassword_Succeeds()
+    {
+        var customerId = Guid.NewGuid();
+        var customer = CreateCustomer(id: customerId, authProvider: AuthProvider.Google);
+        customer.GoogleId = "google123";
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+
+        var dto = new ChangePasswordRequestDto(customerId, "Password123!", "NewPassword123!");
+        var result = await _sut.ChangePassword(dto);
+
+        Assert.True(result.IsSuccessful);
     }
 
     [Fact]
@@ -411,7 +431,7 @@ public class AuthServiceTests
     {
         _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync((Customer?)null);
 
-        var claims = new GoogleClaimsDto("new@google.com", "google123", "Jane", "Doe");
+        var claims = new GoogleClaimsDto("new@google.com", "google123", "Jane", "Doe", EmailVerified: true);
         var result = await _sut.GoogleSignInFromClaims(claims);
 
         Assert.True(result.IsSuccessful);
@@ -423,25 +443,76 @@ public class AuthServiceTests
     public async Task GoogleSignInFromClaims_WithExistingGoogleUser_ReturnsSuccess()
     {
         var customer = CreateCustomer(authProvider: AuthProvider.Google);
+        customer.GoogleId = "google123";
         _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
 
-        var claims = new GoogleClaimsDto("test@test.com", "google123", "John", "Doe");
+        var claims = new GoogleClaimsDto("test@test.com", "google123", "John", "Doe", EmailVerified: true);
         var result = await _sut.GoogleSignInFromClaims(claims);
 
         Assert.True(result.IsSuccessful);
         Assert.NotNull(result.Data);
     }
 
+    // ── Account linking ──────────────────────────────────────────
+
     [Fact]
-    public async Task GoogleSignInFromClaims_WithLocalAccount_ReturnsFailure()
+    public async Task GoogleSignInFromClaims_WithExistingPasswordAccount_LinksAndSignsIn()
+    {
+        var customer = CreateCustomer(authProvider: AuthProvider.Local, emailVerified: false);
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+
+        var claims = new GoogleClaimsDto("test@test.com", "google123", "John", "Doe", EmailVerified: true);
+        var result = await _sut.GoogleSignInFromClaims(claims);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal("google123", customer.GoogleId);
+        // Google proved ownership of the mailbox.
+        Assert.True(customer.EmailVerified);
+        // The password is preserved so either method keeps working.
+        Assert.Equal(TestPasswordHash, customer.PasswordHash);
+    }
+
+    [Fact]
+    public async Task GoogleSignInFromClaims_WhenGoogleHasNotVerifiedEmail_RefusesToLink()
     {
         var customer = CreateCustomer(authProvider: AuthProvider.Local);
         _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
 
-        var claims = new GoogleClaimsDto("test@test.com", "google123", "John", "Doe");
+        var claims = new GoogleClaimsDto("test@test.com", "google123", "John", "Doe", EmailVerified: false);
+        var result = await _sut.GoogleSignInFromClaims(claims);
+
+        // Guards against account pre-hijacking via an unverified provider address.
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.GoogleEmailNotVerified, result.Message);
+        Assert.Null(customer.GoogleId);
+    }
+
+    [Fact]
+    public async Task GoogleSignInFromClaims_WhenLinkedToDifferentGoogleAccount_ReturnsFailure()
+    {
+        var customer = CreateCustomer(authProvider: AuthProvider.Google);
+        customer.GoogleId = "google-original";
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+
+        var claims = new GoogleClaimsDto("test@test.com", "google-other", "John", "Doe", EmailVerified: true);
         var result = await _sut.GoogleSignInFromClaims(claims);
 
         Assert.False(result.IsSuccessful);
-        Assert.Equal(ResponseMessages.AccountUsesLocalAuth, result.Message);
+        Assert.Equal(ResponseMessages.GoogleAccountMismatch, result.Message);
+        Assert.Equal("google-original", customer.GoogleId);
+    }
+
+    [Fact]
+    public async Task Login_WithGoogleAccountThatHasNoPassword_TellsUserHowToSignIn()
+    {
+        var customer = CreateCustomer(authProvider: AuthProvider.Google);
+        customer.PasswordHash = string.Empty;
+        customer.GoogleId = "google123";
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+
+        var result = await _sut.Login(new LoginCustomerDto("test@test.com", "Password123!"));
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.AccountHasNoPassword, result.Message);
     }
 }

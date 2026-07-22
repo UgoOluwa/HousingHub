@@ -182,8 +182,11 @@ public class AuthController : ControllerBase
         if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(googleId))
             return GoogleResult(returnUrl, error: "google_profile_incomplete");
 
+        var emailVerified = string.Equals(
+            result.Principal.FindFirstValue("email_verified"), "true", StringComparison.OrdinalIgnoreCase);
+
         var response = await _authService.GoogleSignInFromClaims(
-            new GoogleClaimsDto(email, googleId, firstName, lastName));
+            new GoogleClaimsDto(email, googleId, firstName, lastName, emailVerified));
 
         if (!response.IsSuccessful || response.Data == null)
             return GoogleResult(returnUrl, error: "google_signin_failed", message: response.Message);

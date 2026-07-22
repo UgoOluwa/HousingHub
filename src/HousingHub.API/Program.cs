@@ -156,6 +156,10 @@ namespace HousingHub.API
                     o.ClientSecret = builder.Configuration["Google:ClientSecret"]!;
                     o.SignInScheme = "ExternalAuth";
                     o.SaveTokens = true;
+
+                    // Not mapped by default, but required before we link a Google
+                    // identity onto an existing account.
+                    o.ClaimActions.MapJsonKey("email_verified", "email_verified", "boolean");
                 });
 
             // DynamoDB

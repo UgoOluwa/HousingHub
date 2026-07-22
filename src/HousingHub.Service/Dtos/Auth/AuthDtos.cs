@@ -12,4 +12,8 @@ public record ChangePasswordBodyDto(string CurrentPassword, string NewPassword);
 
 public record GoogleSignInRequestDto(string IdToken);
 
-public record GoogleClaimsDto(string Email, string GoogleId, string? FirstName, string? LastName);
+/// <summary>
+/// EmailVerified comes from Google's `email_verified` claim and gates linking this
+/// identity onto an existing account — see AuthService.LinkGoogleIdentity.
+/// </summary>
+public record GoogleClaimsDto(string Email, string GoogleId, string? FirstName, string? LastName, bool EmailVerified);
