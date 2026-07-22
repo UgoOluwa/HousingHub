@@ -25,6 +25,9 @@ public class AuthService : IAuthService
     private readonly ILogger<AuthService> _logger;
     private readonly IEmailService _emailService;
 
+    /// <summary>How long a user must wait between verification-email resends.</summary>
+    private static readonly TimeSpan ResendVerificationCooldown = TimeSpan.FromMinutes(5);
+
     public AuthService(
         IUnitOfWOrk unitOfWork,
         IPasswordHasher passwordHasher,
@@ -390,7 +393,13 @@ public class AuthService : IAuthService
         }
     }
 
-    public async Task<BaseResponse<bool>> ResendEmailVerificationToken(string email)
+    /// <summary>
+    /// Resends the email verification link, throttled server-side so the endpoint
+    /// cannot be used to spam an inbox (it is unauthenticated by necessity).
+    /// Data carries the seconds remaining until the next resend is allowed, so the
+    /// client can render an accurate countdown instead of guessing.
+    /// </summary>
+    public async Task<BaseResponse<int>> ResendEmailVerificationToken(string email)
     {
         try
         {
@@ -398,25 +407,38 @@ public class AuthService : IAuthService
                 x => x.Email == email);
 
             if (customer == null)
-                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
+                return new BaseResponse<int>(0, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
 
             if (customer.EmailVerified)
-                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.EmailAlreadyVerified);
+                return new BaseResponse<int>(0, false, string.Empty, ResponseMessages.EmailAlreadyVerified);
+
+            if (customer.LastVerificationEmailSentAt is { } lastSent)
+            {
+                var elapsed = DateTime.UtcNow - lastSent;
+                if (elapsed < ResendVerificationCooldown)
+                {
+                    var remaining = (int)Math.Ceiling((ResendVerificationCooldown - elapsed).TotalSeconds);
+                    return new BaseResponse<int>(remaining, false, string.Empty,
+                        ResponseMessages.ResendVerificationTooSoon(remaining));
+                }
+            }
 
             customer.EmailVerificationToken = GenerateSecureToken();
             customer.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
+            customer.LastVerificationEmailSentAt = DateTime.UtcNow;
 
             await _unitOfWork.CustomerCommands.UpdateAsync(customer);
             await _unitOfWork.SaveAsync();
 
             await _emailService.SendEmailVerificationAsync(customer.Email, customer.FirstName, customer.EmailVerificationToken!);
 
-            return new BaseResponse<bool>(true, true, string.Empty, "Email verification token sent successfully.");
+            return new BaseResponse<int>((int)ResendVerificationCooldown.TotalSeconds, true, string.Empty,
+                "Email verification link sent successfully.");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in ResendEmailVerificationToken: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<int>(0, false, string.Empty, ex.Message);
         }
     }
 

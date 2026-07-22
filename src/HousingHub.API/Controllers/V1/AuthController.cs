@@ -62,8 +62,12 @@ public class AuthController : ControllerBase
         return Ok(response);
     }
 
+    /// <summary>
+    /// Resends the email verification link. Throttled server-side; the response data
+    /// is the number of seconds until another resend is allowed.
+    /// </summary>
     [HttpPost("resend-otp")]
-    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BaseResponse<int>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ResendOtp(ResendOtpCommand command)
     {
         var response = await _mediator.Send(command);

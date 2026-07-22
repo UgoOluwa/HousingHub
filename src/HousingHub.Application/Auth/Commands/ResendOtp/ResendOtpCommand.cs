@@ -3,4 +3,4 @@ using MediatR;
 
 namespace HousingHub.Application.Auth.Commands.ResendOtp;
 
-public record ResendOtpCommand(string Email) : IRequest<BaseResponse<bool>>;
+public record ResendOtpCommand(string Email) : IRequest<BaseResponse<int>>;

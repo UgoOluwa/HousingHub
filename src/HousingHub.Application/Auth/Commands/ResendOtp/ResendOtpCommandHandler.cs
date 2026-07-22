@@ -5,7 +5,7 @@ using MediatR;
 
 namespace HousingHub.Application.Auth.Commands.ResendOtp;
 
-public class ResendOtpCommandHandler : IRequestHandler<ResendOtpCommand, BaseResponse<bool>>
+public class ResendOtpCommandHandler : IRequestHandler<ResendOtpCommand, BaseResponse<int>>
 {
     private readonly IAuthService _authService;
 
@@ -14,9 +14,9 @@ public class ResendOtpCommandHandler : IRequestHandler<ResendOtpCommand, BaseRes
         _authService = authService;
     }
 
-    public async Task<BaseResponse<bool>> Handle(ResendOtpCommand request, CancellationToken cancellationToken)
+    public async Task<BaseResponse<int>> Handle(ResendOtpCommand request, CancellationToken cancellationToken)
     {
         var response = await _authService.ResendEmailVerificationToken(request.Email);
-        return new BaseResponse<bool>(response.IsSuccessful, response.Data, response.Message, null);
+        return new BaseResponse<int>(response.IsSuccessful, response.Data, response.Message, null);
     }
 }

@@ -22,6 +22,15 @@ public static class ResponseMessages
     public const string AccountUsesGoogleAuth = "This account uses Google sign-in. Please use Google to log in.";
     public const string AccountUsesLocalAuth = "This account uses email/password sign-in. Please log in with your password.";
     public const string AccountTypeAlreadySet = "Your account type has already been set.";
+
+    public static string ResendVerificationTooSoon(int secondsRemaining)
+    {
+        var minutes = secondsRemaining / 60;
+        var seconds = secondsRemaining % 60;
+        var wait = minutes > 0 ? $"{minutes}m {seconds:D2}s" : $"{seconds}s";
+        return $"A verification link was just sent. Please wait {wait} before requesting another.";
+    }
+
     public const string InvalidAccountType = "Choose a valid account type.";
 
     // Property messages

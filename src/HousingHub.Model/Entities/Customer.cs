@@ -9,6 +9,12 @@ public class Customer : BaseEntity
     // Authentication
     public string? EmailVerificationToken { get; set; }
     public DateTime? EmailVerificationTokenExpiry { get; set; }
+
+    /// <summary>
+    /// When the last verification email went out. Used to throttle resends
+    /// server-side so the endpoint can't be used to spam an inbox.
+    /// </summary>
+    public DateTime? LastVerificationEmailSentAt { get; set; }
     public string? PasswordResetToken { get; set; }
     public DateTime? PasswordResetTokenExpiry { get; set; }
 
