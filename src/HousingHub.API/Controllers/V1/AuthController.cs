@@ -7,6 +7,7 @@ using HousingHub.Application.Auth.Commands.Login;
 using HousingHub.Application.Auth.Commands.Register;
 using HousingHub.Application.Auth.Commands.ResendOtp;
 using HousingHub.Application.Auth.Commands.ResetPassword;
+using HousingHub.Application.Auth.Commands.SetAccountType;
 using HousingHub.Application.Auth.Commands.VerifyEmail;
 using HousingHub.Application.Commons.Bases;
 using HousingHub.Service.AuthService.Interfaces;
@@ -109,6 +110,25 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> GoogleSignIn(GoogleSignInCommand command)
     {
         var response = await _mediator.Send(command);
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// One-time onboarding step for accounts created via Google, which start as Unset.
+    /// Returns a fresh JWT because the customer_type claim drives authorization.
+    /// </summary>
+    [Authorize]
+    [HttpPut("account-type")]
+    [ProducesResponseType(typeof(BaseResponse<LoginCustomerResponseDto?>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SetAccountType(SetAccountTypeCommand command)
+    {
+        var userIdClaim = User.FindFirst(JwtRegisteredClaimNames.Sub)
+                       ?? User.FindFirst(ClaimTypes.NameIdentifier);
+
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var customerId))
+            return Unauthorized();
+
+        var response = await _mediator.Send(command with { CustomerId = customerId });
         return Ok(response);
     }
 
