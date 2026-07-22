@@ -8,4 +8,4 @@ public record LoginCustomerDto(string EmailOrPhone, string Password);
 
 public record LoginCustomerResponseDto(Guid Id, DateTime DateCreated, string FirstName, string LastName, string Email, string PhoneNumber, int CustomerType, string token);
 
-public record CustomerWithDetailsDto(Guid Id, DateTime DateCreated, DateTime DateModified, string FirstName, string LastName, string Email, string PhoneNumber, int CustomerType, DateTime? DateOfBirth, string? NationalIdNumber, string? IdDocumentUrl, DateTime? KycSubmittedAt, bool IsKycVerified, string? JobTitle, string? CompanyName, string? Industry, CustomerAddressDto Address);
+public record CustomerWithDetailsDto(Guid Id, DateTime DateCreated, DateTime DateModified, string FirstName, string LastName, string Email, string PhoneNumber, int CustomerType, DateTime? DateOfBirth, string? NationalIdNumber, string? IdDocumentUrl, DateTime? KycSubmittedAt, bool IsKycVerified, bool EmailVerified, string? JobTitle, string? CompanyName, string? Industry, CustomerAddressDto Address);

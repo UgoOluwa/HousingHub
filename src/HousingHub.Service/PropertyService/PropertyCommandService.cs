@@ -52,7 +52,7 @@ public class PropertyCommandService : IPropertyCommandService
             if (owner == null)
                 return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
 
-            if (!owner.CustomerType.HasFlag(CustomerType.HouseOwner) && !owner.CustomerType.HasFlag(CustomerType.Agent))
+            if (!owner.CustomerType.CanManageProperties())
                 return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
 
             var property = new Property(
@@ -147,7 +147,7 @@ public class PropertyCommandService : IPropertyCommandService
             if (owner == null)
                 return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
 
-            if (!owner.CustomerType.HasFlag(CustomerType.HouseOwner) && !owner.CustomerType.HasFlag(CustomerType.Agent))
+            if (!owner.CustomerType.CanManageProperties())
                 return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
 
             var property = await _unitOfWOrk.PropertyQueries.GetByAsync(
@@ -193,7 +193,7 @@ public class PropertyCommandService : IPropertyCommandService
             if (owner == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
 
-            if (!owner.CustomerType.HasFlag(CustomerType.HouseOwner) && !owner.CustomerType.HasFlag(CustomerType.Agent))
+            if (!owner.CustomerType.CanManageProperties())
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
 
             var property = await _unitOfWOrk.PropertyQueries.GetByAsync(x => x.Id == propertyId);

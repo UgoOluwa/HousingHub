@@ -83,7 +83,7 @@ public class PropertyFileCommandService : IPropertyFileCommandService
             if (owner == null)
                 return new BaseResponse<List<PropertyFileDto>>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
 
-            if (!owner.CustomerType.HasFlag(CustomerType.HouseOwner) && !owner.CustomerType.HasFlag(CustomerType.Agent))
+            if (!owner.CustomerType.CanManageProperties())
                 return new BaseResponse<List<PropertyFileDto>>(null, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
 
             var property = await _unitOfWOrk.PropertyQueries.GetByAsync(
@@ -136,7 +136,7 @@ public class PropertyFileCommandService : IPropertyFileCommandService
             if (owner == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
 
-            if (!owner.CustomerType.HasFlag(CustomerType.HouseOwner) && !owner.CustomerType.HasFlag(CustomerType.Agent))
+            if (!owner.CustomerType.CanManageProperties())
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
 
             var file = await _unitOfWOrk.PropertyFileQueries.GetByAsync(x => x.Id == fileId);
