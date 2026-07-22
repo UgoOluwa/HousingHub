@@ -28,11 +28,13 @@ public class AuthController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly IAuthService _authService;
+    private readonly IConfiguration _configuration;
 
-    public AuthController(IMediator mediator, IAuthService authService)
+    public AuthController(IMediator mediator, IAuthService authService, IConfiguration configuration)
     {
         _mediator = mediator;
         _authService = authService;
+        _configuration = configuration;
     }
 
     [HttpPost("register")]
@@ -117,6 +119,10 @@ public class AuthController : ControllerBase
     [HttpGet("google-login")]
     public IActionResult GoogleLogin([FromQuery] string returnUrl)
     {
+        // Only ever hand the JWT back to an origin we trust.
+        if (!IsAllowedReturnUrl(returnUrl))
+            return BadRequest(new { message = "The supplied returnUrl is not an allowed origin." });
+
         var properties = new AuthenticationProperties
         {
             RedirectUri = Url.Action(nameof(GoogleCallback), new { returnUrl }),
@@ -133,34 +139,72 @@ public class AuthController : ControllerBase
     [HttpGet("google-callback")]
     public async Task<IActionResult> GoogleCallback([FromQuery] string? returnUrl)
     {
+        // Never redirect (with a token) to an origin we don't control.
+        if (!string.IsNullOrEmpty(returnUrl) && !IsAllowedReturnUrl(returnUrl))
+            return BadRequest(new { message = "The supplied returnUrl is not an allowed origin." });
+
         var result = await HttpContext.AuthenticateAsync("ExternalAuth");
         if (result?.Principal == null)
-            return Unauthorized(new { message = "Google authentication failed." });
+            return GoogleResult(returnUrl, error: "google_auth_failed");
 
         var email = result.Principal.FindFirstValue(ClaimTypes.Email);
         var googleId = result.Principal.FindFirstValue(ClaimTypes.NameIdentifier);
         var firstName = result.Principal.FindFirstValue(ClaimTypes.GivenName);
         var lastName = result.Principal.FindFirstValue(ClaimTypes.Surname);
 
-        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(googleId))
-            return BadRequest(new { message = "Could not retrieve email or Google ID from Google." });
-
         // Clean up the external cookie
         await HttpContext.SignOutAsync("ExternalAuth");
+
+        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(googleId))
+            return GoogleResult(returnUrl, error: "google_profile_incomplete");
 
         var response = await _authService.GoogleSignInFromClaims(
             new GoogleClaimsDto(email, googleId, firstName, lastName));
 
         if (!response.IsSuccessful || response.Data == null)
-            return BadRequest(new { message = response.Message });
+            return GoogleResult(returnUrl, error: "google_signin_failed", message: response.Message);
 
-        // Redirect to frontend with the JWT token
-        if (!string.IsNullOrEmpty(returnUrl))
+        return GoogleResult(returnUrl, token: response.Data.token, payload: response);
+    }
+
+    /// <summary>
+    /// Redirects back to the frontend with either a token or an error code.
+    /// Falls back to a JSON response when no returnUrl was supplied (e.g. direct API use).
+    /// </summary>
+    private IActionResult GoogleResult(string? returnUrl, string? token = null, string? error = null,
+        string? message = null, object? payload = null)
+    {
+        if (string.IsNullOrEmpty(returnUrl))
         {
-            var separator = returnUrl.Contains('?') ? "&" : "?";
-            return Redirect($"{returnUrl}{separator}token={response.Data.token}");
+            if (error != null)
+                return BadRequest(new { message = message ?? error, error });
+            return Ok(payload);
         }
 
-        return Ok(response);
+        var separator = returnUrl.Contains('?') ? "&" : "?";
+        var query = error != null
+            ? $"error={Uri.EscapeDataString(error)}"
+            : $"token={Uri.EscapeDataString(token ?? string.Empty)}";
+
+        return Redirect($"{returnUrl}{separator}{query}");
+    }
+
+    /// <summary>
+    /// A returnUrl is only accepted when its origin is in Cors:AllowedOrigins.
+    /// Without this the endpoint is an open redirect that leaks a valid JWT.
+    /// </summary>
+    private bool IsAllowedReturnUrl(string? returnUrl)
+    {
+        if (string.IsNullOrWhiteSpace(returnUrl)) return false;
+        if (!Uri.TryCreate(returnUrl, UriKind.Absolute, out var uri)) return false;
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return false;
+
+        var allowed = _configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+
+        return allowed.Any(origin =>
+            Uri.TryCreate(origin, UriKind.Absolute, out var allowedUri) &&
+            string.Equals(allowedUri.Scheme, uri.Scheme, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(allowedUri.Host, uri.Host, StringComparison.OrdinalIgnoreCase) &&
+            allowedUri.Port == uri.Port);
     }
 }
