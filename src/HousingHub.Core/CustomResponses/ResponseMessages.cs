@@ -21,6 +21,11 @@ public static class ResponseMessages
     public const string GoogleSignInFailed = "Google sign-in failed. Invalid token.";
     public const string AccountUsesGoogleAuth = "This account uses Google sign-in. Please use Google to log in.";
     public const string AccountUsesLocalAuth = "This account uses email/password sign-in. Please log in with your password.";
+
+    // Account linking
+    public const string AccountHasNoPassword = "This account was created with Google. Sign in with Google, or use \"Forgot password\" to set a password.";
+    public const string GoogleEmailNotVerified = "Google hasn't verified this email address, so we can't link it to an existing Housing Hub account.";
+    public const string GoogleAccountMismatch = "This email is already linked to a different Google account.";
     public const string AccountTypeAlreadySet = "Your account type has already been set.";
 
     public static string ResendVerificationTooSoon(int secondsRemaining)

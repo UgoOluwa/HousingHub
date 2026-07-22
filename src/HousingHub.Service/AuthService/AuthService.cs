@@ -94,12 +94,20 @@ public class AuthService : IAuthService
             var customer = await _unitOfWork.CustomerQueries.GetByAsync(
                 x => x.Email == emailOrPhone || x.PhoneNumber == emailOrPhone);
 
-            if (customer == null || string.IsNullOrEmpty(customer.PasswordHash)
-                || !_passwordHasher.Verify(request.Password, customer.PasswordHash))
+            if (customer == null)
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidCredentials);
 
-            if (customer.AuthProvider == AuthProvider.Google)
-                return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.AccountUsesGoogleAuth);
+            // Whether a sign-in method is available is decided by the credentials the
+            // account actually holds, not by which provider created it — an account can
+            // hold both a password and a linked Google identity.
+            if (string.IsNullOrEmpty(customer.PasswordHash))
+                return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty,
+                    string.IsNullOrEmpty(customer.GoogleId)
+                        ? ResponseMessages.InvalidCredentials
+                        : ResponseMessages.AccountHasNoPassword);
+
+            if (!_passwordHasher.Verify(request.Password, customer.PasswordHash))
+                return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidCredentials);
 
             if (!customer.EmailVerified)
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.EmailNotVerified);
@@ -161,9 +169,8 @@ public class AuthService : IAuthService
             if (customer == null)
                 return new BaseResponse<string>(null, true, string.Empty, ResponseMessages.PasswordResetTokenSent);
 
-            if (customer.AuthProvider == AuthProvider.Google)
-                return new BaseResponse<string>(null, false, string.Empty, ResponseMessages.AccountUsesGoogleAuth);
-
+            // Google-only accounts are allowed through: this is how a customer who
+            // signed up with Google adds a password so either method works.
             customer.PasswordResetToken = GenerateSecureToken();
             customer.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
 
@@ -222,8 +229,10 @@ public class AuthService : IAuthService
             if (customer == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
 
-            if (customer.AuthProvider == AuthProvider.Google)
-                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.AccountUsesGoogleAuth);
+            // A Google account that has since set a password can change it here; one
+            // that has no password yet must go through the reset flow to create it.
+            if (string.IsNullOrEmpty(customer.PasswordHash))
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.AccountHasNoPassword);
 
             if (!_passwordHasher.Verify(request.CurrentPassword, customer.PasswordHash))
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.CurrentPasswordIncorrect);
@@ -264,8 +273,12 @@ public class AuthService : IAuthService
             var customer = await _unitOfWork.CustomerQueries.GetByAsync(
                 x => x.Email == payload.Email);
 
-            if (customer != null && customer.AuthProvider != AuthProvider.Google)
-                return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.AccountUsesLocalAuth);
+            if (customer != null)
+            {
+                var link = await LinkGoogleIdentity(customer, payload.Subject, payload.EmailVerified);
+                if (link != null)
+                    return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, link);
+            }
 
             if (customer == null)
             {
@@ -304,6 +317,40 @@ public class AuthService : IAuthService
         }
     }
 
+    /// <summary>
+    /// Links a Google identity onto an existing account so a customer can use either
+    /// sign-in method and land on the same record. Returns null on success, or an error
+    /// message when linking must be refused.
+    ///
+    /// SECURITY: linking is only allowed when Google reports the address as verified.
+    /// Without that check, anyone able to create an identity-provider account using
+    /// someone else's address could sign in and take over their Housing Hub account —
+    /// the standard account pre-hijacking attack.
+    /// </summary>
+    private async Task<string?> LinkGoogleIdentity(Customer customer, string googleId, bool emailVerifiedByGoogle)
+    {
+        // Already linked to this Google account — nothing to do.
+        if (customer.GoogleId == googleId)
+            return null;
+
+        if (!string.IsNullOrEmpty(customer.GoogleId))
+            return ResponseMessages.GoogleAccountMismatch;
+
+        if (!emailVerifiedByGoogle)
+            return ResponseMessages.GoogleEmailNotVerified;
+
+        customer.GoogleId = googleId;
+
+        // Google has proven ownership of the mailbox, so an account that signed up with
+        // a password but never confirmed its email is verified by this link.
+        customer.EmailVerified = true;
+
+        await _unitOfWork.CustomerCommands.UpdateAsync(customer);
+        await _unitOfWork.SaveAsync();
+
+        return null;
+    }
+
     public async Task<BaseResponse<LoginCustomerResponseDto>> GoogleSignInFromClaims(GoogleClaimsDto claims)
     {
         try
@@ -311,8 +358,12 @@ public class AuthService : IAuthService
             var customer = await _unitOfWork.CustomerQueries.GetByAsync(
                 x => x.Email == claims.Email);
 
-            if (customer != null && customer.AuthProvider != AuthProvider.Google)
-                return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.AccountUsesLocalAuth);
+            if (customer != null)
+            {
+                var link = await LinkGoogleIdentity(customer, claims.GoogleId, claims.EmailVerified);
+                if (link != null)
+                    return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, link);
+            }
 
             if (customer == null)
             {
