@@ -13,6 +13,19 @@ public partial class GenericQueryRepository<T> : IGenericQueryRepository<T> wher
         _context = context;
     }
 
+    public async Task<T?> GetByIdAsync(Guid id)
+    {
+        // GetItem on the hash key — a single-digit-millisecond read regardless of
+        // table size, versus scanning every row to find one.
+        return await _context.LoadAsync<T>(id);
+    }
+
+    public async Task<IReadOnlyList<T>> QueryByIndexAsync(string indexName, object hashKeyValue)
+    {
+        var search = _context.QueryAsync<T>(hashKeyValue, new QueryConfig { IndexName = indexName });
+        return await search.GetRemainingAsync();
+    }
+
     public async Task<T?> GetByAsync(Expression<Func<T, bool>> predicate)
     {
         var items = await ScanAllAsync();

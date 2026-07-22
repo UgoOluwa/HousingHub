@@ -79,12 +79,26 @@ public class AuthServiceTests
             EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24)
         };
 
+    /// <summary>
+    /// Points every customer lookup at the same result. AuthService reads through
+    /// indexed lookups (GetByEmailAsync / GetByIdAsync / ...) rather than table
+    /// scans, so tests shouldn't depend on which one a given method happens to use.
+    /// </summary>
+    private void SetupCustomerLookup(Customer? customer)
+    {
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync(customer);
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByEmailAsync(It.IsAny<string>())).ReturnsAsync(customer);
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByPhoneNumberAsync(It.IsAny<string>())).ReturnsAsync(customer);
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByEmailOrPhoneAsync(It.IsAny<string>())).ReturnsAsync(customer);
+    }
+
     // ── Register ─────────────────────────────────────────────────
 
     [Fact]
     public async Task Register_WithValidData_ReturnsSuccess()
     {
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.AnyAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(false);
+        SetupCustomerLookup(null);
 
         var dto = new RegisterCustomerDto("John", "Doe", "john@test.com", "08012345678", "Password123!", CustomerType.Customer);
         var result = await _sut.Register(dto);
@@ -97,7 +111,7 @@ public class AuthServiceTests
     [Fact]
     public async Task Register_WithExistingEmail_ReturnsFailure()
     {
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.AnyAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(true);
+        SetupCustomerLookup(CreateCustomer());
 
         var dto = new RegisterCustomerDto("John", "Doe", "existing@test.com", "08012345678", "Password123!", CustomerType.Customer);
         var result = await _sut.Register(dto);
@@ -109,7 +123,7 @@ public class AuthServiceTests
     [Fact]
     public async Task Register_WhenInsertFails_ReturnsFailure()
     {
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.AnyAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(false);
+        SetupCustomerLookup(null);
         _unitOfWorkMock.Setup(u => u.CustomerCommands.InsertAsync(It.IsAny<Customer>())).ReturnsAsync(false);
 
         var dto = new RegisterCustomerDto("John", "Doe", "john@test.com", "08012345678", "Password123!", CustomerType.Customer);
@@ -121,7 +135,7 @@ public class AuthServiceTests
     [Fact]
     public async Task Register_SendsVerificationEmail()
     {
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.AnyAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(false);
+        SetupCustomerLookup(null);
 
         var dto = new RegisterCustomerDto("John", "Doe", "john@test.com", "08012345678", "Password123!", CustomerType.Customer);
         await _sut.Register(dto);
@@ -135,7 +149,7 @@ public class AuthServiceTests
     public async Task Login_WithValidCredentials_ReturnsSuccess()
     {
         var customer = CreateCustomer();
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var dto = new LoginCustomerDto("test@test.com", "Password123!");
         var result = await _sut.Login(dto);
@@ -150,7 +164,7 @@ public class AuthServiceTests
     public async Task Login_WithInvalidPassword_ReturnsFailure()
     {
         var customer = CreateCustomer();
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
         _passwordHasherMock.Setup(p => p.Verify("wrong_password", TestPasswordHash)).Returns(false);
 
         var dto = new LoginCustomerDto("test@test.com", "wrong_password");
@@ -163,7 +177,7 @@ public class AuthServiceTests
     [Fact]
     public async Task Login_WithNonExistentUser_ReturnsFailure()
     {
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync((Customer?)null);
+        SetupCustomerLookup(null);
 
         var dto = new LoginCustomerDto("nonexistent@test.com", "Password123!");
         var result = await _sut.Login(dto);
@@ -177,7 +191,7 @@ public class AuthServiceTests
     {
         var customer = CreateCustomer(authProvider: AuthProvider.Google);
         customer.GoogleId = "google123";
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var dto = new LoginCustomerDto("test@test.com", "Password123!");
         var result = await _sut.Login(dto);
@@ -191,7 +205,7 @@ public class AuthServiceTests
     public async Task Login_WithUnverifiedEmail_ReturnsFailure()
     {
         var customer = CreateCustomer(emailVerified: false);
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var dto = new LoginCustomerDto("test@test.com", "Password123!");
         var result = await _sut.Login(dto);
@@ -206,7 +220,7 @@ public class AuthServiceTests
     public async Task VerifyEmail_WithValidToken_ReturnsSuccess()
     {
         var customer = CreateCustomer(emailVerified: false);
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var dto = new VerifyEmailRequestDto("test@test.com", "verify_token");
         var result = await _sut.VerifyEmail(dto);
@@ -219,7 +233,7 @@ public class AuthServiceTests
     public async Task VerifyEmail_WhenAlreadyVerified_ReturnsSuccess()
     {
         var customer = CreateCustomer(emailVerified: true);
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var dto = new VerifyEmailRequestDto("test@test.com", "verify_token");
         var result = await _sut.VerifyEmail(dto);
@@ -232,7 +246,7 @@ public class AuthServiceTests
     public async Task VerifyEmail_WithInvalidToken_ReturnsFailure()
     {
         var customer = CreateCustomer(emailVerified: false);
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var dto = new VerifyEmailRequestDto("test@test.com", "wrong_token");
         var result = await _sut.VerifyEmail(dto);
@@ -244,7 +258,7 @@ public class AuthServiceTests
     [Fact]
     public async Task VerifyEmail_WithNonExistentUser_ReturnsFailure()
     {
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync((Customer?)null);
+        SetupCustomerLookup(null);
 
         var dto = new VerifyEmailRequestDto("none@test.com", "token");
         var result = await _sut.VerifyEmail(dto);
@@ -258,7 +272,7 @@ public class AuthServiceTests
     public async Task ForgotPassword_WithExistingUser_SendsResetEmail()
     {
         var customer = CreateCustomer();
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var dto = new ForgotPasswordRequestDto("test@test.com");
         var result = await _sut.ForgotPassword(dto);
@@ -270,7 +284,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ForgotPassword_WithNonExistentUser_StillReturnsSuccess()
     {
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync((Customer?)null);
+        SetupCustomerLookup(null);
 
         var dto = new ForgotPasswordRequestDto("none@test.com");
         var result = await _sut.ForgotPassword(dto);
@@ -284,7 +298,7 @@ public class AuthServiceTests
     {
         var customer = CreateCustomer(authProvider: AuthProvider.Google);
         customer.PasswordHash = string.Empty;
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var dto = new ForgotPasswordRequestDto("test@test.com");
         var result = await _sut.ForgotPassword(dto);
@@ -303,7 +317,7 @@ public class AuthServiceTests
         var customer = CreateCustomer();
         customer.PasswordResetToken = "reset_token";
         customer.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var dto = new ResetPasswordRequestDto("test@test.com", "reset_token", "NewPassword123!");
         var result = await _sut.ResetPassword(dto);
@@ -318,7 +332,7 @@ public class AuthServiceTests
         var customer = CreateCustomer();
         customer.PasswordResetToken = "reset_token";
         customer.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var dto = new ResetPasswordRequestDto("test@test.com", "wrong_token", "NewPassword123!");
         var result = await _sut.ResetPassword(dto);
@@ -333,7 +347,7 @@ public class AuthServiceTests
         var customer = CreateCustomer();
         customer.PasswordResetToken = "reset_token";
         customer.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(-1);
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var dto = new ResetPasswordRequestDto("test@test.com", "reset_token", "NewPassword123!");
         var result = await _sut.ResetPassword(dto);
@@ -345,7 +359,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ResetPassword_WithNonExistentUser_ReturnsFailure()
     {
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync((Customer?)null);
+        SetupCustomerLookup(null);
 
         var dto = new ResetPasswordRequestDto("none@test.com", "token", "NewPassword!");
         var result = await _sut.ResetPassword(dto);
@@ -360,7 +374,7 @@ public class AuthServiceTests
     {
         var customerId = Guid.NewGuid();
         var customer = CreateCustomer(id: customerId);
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var dto = new ChangePasswordRequestDto(customerId, "Password123!", "NewPassword123!");
         var result = await _sut.ChangePassword(dto);
@@ -374,7 +388,7 @@ public class AuthServiceTests
     {
         var customerId = Guid.NewGuid();
         var customer = CreateCustomer(id: customerId);
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
         _passwordHasherMock.Setup(p => p.Verify("wrong_password", TestPasswordHash)).Returns(false);
 
         var dto = new ChangePasswordRequestDto(customerId, "wrong_password", "NewPassword123!");
@@ -390,7 +404,7 @@ public class AuthServiceTests
         var customerId = Guid.NewGuid();
         var customer = CreateCustomer(id: customerId, authProvider: AuthProvider.Google);
         customer.PasswordHash = string.Empty;
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var dto = new ChangePasswordRequestDto(customerId, "Password123!", "NewPassword123!");
         var result = await _sut.ChangePassword(dto);
@@ -405,7 +419,7 @@ public class AuthServiceTests
         var customerId = Guid.NewGuid();
         var customer = CreateCustomer(id: customerId, authProvider: AuthProvider.Google);
         customer.GoogleId = "google123";
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var dto = new ChangePasswordRequestDto(customerId, "Password123!", "NewPassword123!");
         var result = await _sut.ChangePassword(dto);
@@ -416,7 +430,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangePassword_WithNonExistentUser_ReturnsFailure()
     {
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync((Customer?)null);
+        SetupCustomerLookup(null);
 
         var dto = new ChangePasswordRequestDto(Guid.NewGuid(), "Password123!", "NewPassword123!");
         var result = await _sut.ChangePassword(dto);
@@ -429,7 +443,7 @@ public class AuthServiceTests
     [Fact]
     public async Task GoogleSignInFromClaims_WithNewUser_CreatesAndReturnsSuccess()
     {
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync((Customer?)null);
+        SetupCustomerLookup(null);
 
         var claims = new GoogleClaimsDto("new@google.com", "google123", "Jane", "Doe", EmailVerified: true);
         var result = await _sut.GoogleSignInFromClaims(claims);
@@ -444,7 +458,7 @@ public class AuthServiceTests
     {
         var customer = CreateCustomer(authProvider: AuthProvider.Google);
         customer.GoogleId = "google123";
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var claims = new GoogleClaimsDto("test@test.com", "google123", "John", "Doe", EmailVerified: true);
         var result = await _sut.GoogleSignInFromClaims(claims);
@@ -459,7 +473,7 @@ public class AuthServiceTests
     public async Task GoogleSignInFromClaims_WithExistingPasswordAccount_LinksAndSignsIn()
     {
         var customer = CreateCustomer(authProvider: AuthProvider.Local, emailVerified: false);
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var claims = new GoogleClaimsDto("test@test.com", "google123", "John", "Doe", EmailVerified: true);
         var result = await _sut.GoogleSignInFromClaims(claims);
@@ -476,7 +490,7 @@ public class AuthServiceTests
     public async Task GoogleSignInFromClaims_WhenGoogleHasNotVerifiedEmail_RefusesToLink()
     {
         var customer = CreateCustomer(authProvider: AuthProvider.Local);
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var claims = new GoogleClaimsDto("test@test.com", "google123", "John", "Doe", EmailVerified: false);
         var result = await _sut.GoogleSignInFromClaims(claims);
@@ -492,7 +506,7 @@ public class AuthServiceTests
     {
         var customer = CreateCustomer(authProvider: AuthProvider.Google);
         customer.GoogleId = "google-original";
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var claims = new GoogleClaimsDto("test@test.com", "google-other", "John", "Doe", EmailVerified: true);
         var result = await _sut.GoogleSignInFromClaims(claims);
@@ -508,7 +522,7 @@ public class AuthServiceTests
         var customer = CreateCustomer(authProvider: AuthProvider.Google);
         customer.PasswordHash = string.Empty;
         customer.GoogleId = "google123";
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>())).ReturnsAsync(customer);
+        SetupCustomerLookup(customer);
 
         var result = await _sut.Login(new LoginCustomerDto("test@test.com", "Password123!"));
 

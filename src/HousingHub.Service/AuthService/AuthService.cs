@@ -50,8 +50,8 @@ public class AuthService : IAuthService
     {
         try
         {
-            bool exists = await _unitOfWork.CustomerQueries.AnyAsync(
-                x => x.Email == request.Email || x.PhoneNumber == request.PhoneNumber);
+            bool exists = await _unitOfWork.CustomerQueries.GetByEmailAsync(request.Email) != null
+                       || await _unitOfWork.CustomerQueries.GetByPhoneNumberAsync(request.PhoneNumber) != null;
 
             if (exists)
                 return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.CustomerAlreadyExists);
@@ -91,8 +91,7 @@ public class AuthService : IAuthService
         try
         {
             var emailOrPhone = request.EmailOrPhone.Trim();
-            var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Email == emailOrPhone || x.PhoneNumber == emailOrPhone);
+            var customer = await _unitOfWork.CustomerQueries.GetByEmailOrPhoneAsync(emailOrPhone);
 
             if (customer == null)
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidCredentials);
@@ -129,8 +128,7 @@ public class AuthService : IAuthService
     {
         try
         {
-            var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Email == request.Email);
+            var customer = await _unitOfWork.CustomerQueries.GetByEmailAsync(request.Email);
 
             if (customer == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
@@ -163,8 +161,7 @@ public class AuthService : IAuthService
     {
         try
         {
-            var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Email == request.Email);
+            var customer = await _unitOfWork.CustomerQueries.GetByEmailAsync(request.Email);
 
             if (customer == null)
                 return new BaseResponse<string>(null, true, string.Empty, ResponseMessages.PasswordResetTokenSent);
@@ -192,8 +189,7 @@ public class AuthService : IAuthService
     {
         try
         {
-            var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Email == request.Email);
+            var customer = await _unitOfWork.CustomerQueries.GetByEmailAsync(request.Email);
 
             if (customer == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
@@ -223,8 +219,7 @@ public class AuthService : IAuthService
     {
         try
         {
-            var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Id == request.CustomerId);
+            var customer = await _unitOfWork.CustomerQueries.GetByIdAsync(request.CustomerId);
 
             if (customer == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
@@ -270,8 +265,7 @@ public class AuthService : IAuthService
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.GoogleSignInFailed);
             }
 
-            var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Email == payload.Email);
+            var customer = await _unitOfWork.CustomerQueries.GetByEmailAsync(payload.Email);
 
             if (customer != null)
             {
@@ -355,8 +349,7 @@ public class AuthService : IAuthService
     {
         try
         {
-            var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Email == claims.Email);
+            var customer = await _unitOfWork.CustomerQueries.GetByEmailAsync(claims.Email);
 
             if (customer != null)
             {
@@ -416,7 +409,7 @@ public class AuthService : IAuthService
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty,
                     ResponseMessages.InvalidAccountType);
 
-            var customer = await _unitOfWork.CustomerQueries.GetByAsync(x => x.Id == customerId);
+            var customer = await _unitOfWork.CustomerQueries.GetByIdAsync(customerId);
 
             if (customer == null)
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty,
@@ -454,8 +447,7 @@ public class AuthService : IAuthService
     {
         try
         {
-            var customer = await _unitOfWork.CustomerQueries.GetByAsync(
-                x => x.Email == email);
+            var customer = await _unitOfWork.CustomerQueries.GetByEmailAsync(email);
 
             if (customer == null)
                 return new BaseResponse<int>(0, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
