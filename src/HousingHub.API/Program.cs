@@ -11,6 +11,7 @@ using HousingHub.API.Common.Middlewares;
 using HousingHub.API.Hubs;
 using HousingHub.Application;
 using HousingHub.Data.Contexts;
+using HousingHub.Model.Enums;
 using HousingHub.Repository;
 using HousingHub.Service;
 using HousingHub.Service.NotificationService.Interfaces;
@@ -96,12 +97,16 @@ namespace HousingHub.API
 
             builder.Services.AddAuthorization(options =>
             {
+                // Property owners, agents and developers all manage listings.
+                // Keep in sync with CustomerTypeExtensions.CanManageProperties().
                 options.AddPolicy("PropertyOwnerOrAgent", policy =>
                     policy.RequireAssertion(context =>
                     {
-                        var customerType = context.User.FindFirst("customer_type")?.Value;
-                        if (string.IsNullOrEmpty(customerType)) return false;
-                        return customerType.Contains("HouseOwner") || customerType.Contains("Agent");
+                        var claim = context.User.FindFirst("customer_type")?.Value;
+                        if (string.IsNullOrEmpty(claim)) return false;
+
+                        return Enum.TryParse<CustomerType>(claim, ignoreCase: true, out var customerType)
+                               && customerType.CanManageProperties();
                     }));
                 options.AddPolicy("AdminOnly", policy =>
                     policy.RequireAssertion(context =>

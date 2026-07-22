@@ -19,5 +19,12 @@ public enum CustomerType
     [Description("Customer")]
     Customer = 4,
     [Description("Admin")]
-    Admin = 8
+    Admin = 8,
+
+    /// <summary>
+    /// Property developer. Has the same property-management capabilities as a
+    /// house owner or agent — see <see cref="CustomerTypeExtensions.CanManageProperties"/>.
+    /// </summary>
+    [Description("Developer")]
+    Developer = 16
 }

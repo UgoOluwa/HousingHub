@@ -358,9 +358,7 @@ public class AuthService : IAuthService
     {
         try
         {
-            if (customerType != CustomerType.HouseOwner
-                && customerType != CustomerType.Agent
-                && customerType != CustomerType.Customer)
+            if (!customerType.IsSelectableAtOnboarding())
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty,
                     ResponseMessages.InvalidAccountType);
 
