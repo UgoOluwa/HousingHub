@@ -266,12 +266,13 @@ public class AuthService : IAuthService
 
             if (customer == null)
             {
+                // Type is chosen by the user in the onboarding step after first sign-in.
                 customer = new Customer(
                     payload.GivenName ?? string.Empty,
                     payload.FamilyName ?? string.Empty,
                     payload.Email,
                     string.Empty,
-                    CustomerType.Customer,
+                    CustomerType.Unset,
                     string.Empty)
                 {
                     GoogleId = payload.Subject,
@@ -312,12 +313,13 @@ public class AuthService : IAuthService
 
             if (customer == null)
             {
+                // Type is chosen by the user in the onboarding step after first sign-in.
                 customer = new Customer(
                     claims.FirstName ?? string.Empty,
                     claims.LastName ?? string.Empty,
                     claims.Email,
                     string.Empty,
-                    CustomerType.Customer,
+                    CustomerType.Unset,
                     string.Empty)
                 {
                     GoogleId = claims.GoogleId,
@@ -342,6 +344,50 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in GoogleSignInFromClaims: {Message}", ex.Message);
+            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// One-time onboarding step for accounts created through an external provider.
+    /// Only an Unset account can be assigned a type, so this cannot be replayed to
+    /// escalate a Customer into a HouseOwner/Agent (or an Admin).
+    /// A fresh JWT is returned because the customer_type claim drives authorization.
+    /// </summary>
+    public async Task<BaseResponse<LoginCustomerResponseDto>> SetAccountType(Guid customerId, CustomerType customerType)
+    {
+        try
+        {
+            if (customerType != CustomerType.HouseOwner
+                && customerType != CustomerType.Agent
+                && customerType != CustomerType.Customer)
+                return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty,
+                    ResponseMessages.InvalidAccountType);
+
+            var customer = await _unitOfWork.CustomerQueries.GetByAsync(x => x.Id == customerId);
+
+            if (customer == null)
+                return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty,
+                    ResponseMessages.SetNotFoundMessage("customer"));
+
+            if (customer.CustomerType != CustomerType.Unset)
+                return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty,
+                    ResponseMessages.AccountTypeAlreadySet);
+
+            customer.CustomerType = customerType;
+
+            await _unitOfWork.CustomerCommands.UpdateAsync(customer);
+            await _unitOfWork.SaveAsync();
+
+            string token = _tokenProvider.Create(customer);
+            var response = _mapper.Map<LoginCustomerResponseDto>(customer);
+            response = response with { token = token };
+
+            return new BaseResponse<LoginCustomerResponseDto>(response, true, string.Empty, ResponseMessages.Successful);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in SetAccountType: {Message}", ex.Message);
             return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
         }
     }

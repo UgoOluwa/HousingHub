@@ -5,6 +5,13 @@ namespace HousingHub.Model.Enums;
 [Flags]
 public enum CustomerType
 {
+    /// <summary>
+    /// Account created via an external provider (Google) before the user has told us
+    /// how they intend to use Housing Hub. Carries no permissions.
+    /// </summary>
+    [Description("Not set")]
+    Unset = 0,
+
     [Description("House Owner")]
     HouseOwner = 1,
     [Description("Agent")]

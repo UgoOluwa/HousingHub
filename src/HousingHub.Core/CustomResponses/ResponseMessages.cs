@@ -21,6 +21,8 @@ public static class ResponseMessages
     public const string GoogleSignInFailed = "Google sign-in failed. Invalid token.";
     public const string AccountUsesGoogleAuth = "This account uses Google sign-in. Please use Google to log in.";
     public const string AccountUsesLocalAuth = "This account uses email/password sign-in. Please log in with your password.";
+    public const string AccountTypeAlreadySet = "Your account type has already been set.";
+    public const string InvalidAccountType = "Choose a valid account type.";
 
     // Property messages
     public const string UnauthorizedPropertyAction = "Only home owners or agents can manage properties.";
