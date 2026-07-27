@@ -70,12 +70,20 @@ public static class ConfigureServices
             var configuration = sp.GetRequiredService<IConfiguration>();
             var config = new AmazonS3Config
             {
-                RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(configuration["AWS:S3:Region"]!)
+                RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(configuration["AWS:S3:Region"] ?? "af-south-1")
             };
-            return new AmazonS3Client(
-                configuration["AWS:S3:AccessKey"],
-                configuration["AWS:S3:SecretKey"],
-                config);
+
+            // On Lambda the credentials come from the execution role, so AccessKey/SecretKey
+            // aren't in config. Passing the resulting nulls to AmazonS3Client threw a
+            // NullReferenceException on the first upload (publish property, KYC/profile
+            // uploads). Only use explicit keys when both are present, otherwise fall back
+            // to the default credential chain — same pattern as the DynamoDB client.
+            var accessKey = configuration["AWS:S3:AccessKey"];
+            var secretKey = configuration["AWS:S3:SecretKey"];
+            if (!string.IsNullOrEmpty(accessKey) && !string.IsNullOrEmpty(secretKey))
+                return new AmazonS3Client(accessKey, secretKey, config);
+
+            return new AmazonS3Client(config);
         });
         services.AddSingleton<IFileStorageService, S3FileStorageService>();
 
