@@ -3,8 +3,10 @@ using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Service.Commons.Authentication;
+using HousingHub.Service.Commons.FileStorage;
 using HousingHub.Service.CustomerService.Interfaces;
 using HousingHub.Service.Dtos.Customer;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
 namespace HousingHub.Service.CustomerService;
@@ -17,14 +19,16 @@ public class CustomerCommandService : ICustomerCommandService
     private readonly IMapper _mapper;
     private readonly IPasswordHasher _passwordHasher;
     private readonly ITokenProvider _tokenProvider;
+    private readonly IFileStorageService _fileStorageService;
 
-    public CustomerCommandService(ILogger<CustomerCommandService> logger, IUnitOfWOrk unitOfWOrk, IMapper mapper, IPasswordHasher passwordHasher, ITokenProvider tokenProvider)
+    public CustomerCommandService(ILogger<CustomerCommandService> logger, IUnitOfWOrk unitOfWOrk, IMapper mapper, IPasswordHasher passwordHasher, ITokenProvider tokenProvider, IFileStorageService fileStorageService)
     {
         _logger = logger;
         _unitOfWOrk = unitOfWOrk;
         _mapper = mapper;
         _passwordHasher = passwordHasher;
         _tokenProvider = tokenProvider;
+        _fileStorageService = fileStorageService;
     }
 
     public async Task<BaseResponse<CustomerDto>> CreateCustomer(CreateCustomerDto request)
@@ -173,6 +177,39 @@ public class CustomerCommandService : ICustomerCommandService
         {
             _logger.LogError(ex, "An error occurred in UpdateProfile: {Message}", ex.Message);
             return new BaseResponse<CustomerDto>(null, false, string.Empty, ex.Message);
+        }
+    }
+
+    public async Task<BaseResponse<string?>> UpdateProfilePhoto(Guid customerId, IFormFile? file)
+    {
+        try
+        {
+            var customer = await _unitOfWOrk.CustomerQueries.GetByIdAsync(customerId);
+            if (customer is null)
+                return new BaseResponse<string?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            // A null file clears the picture; otherwise upload and replace.
+            string? newUrl = null;
+            if (file is not null)
+                newUrl = await _fileStorageService.UploadFileAsync(file, $"profile-photos/{customerId}");
+
+            // Best-effort cleanup of the previous object so we don't leak storage.
+            if (!string.IsNullOrEmpty(customer.ProfileImageUrl))
+            {
+                try { await _fileStorageService.DeleteFileAsync(customer.ProfileImageUrl); }
+                catch (Exception ex) { _logger.LogWarning(ex, "Could not delete old profile photo for {CustomerId}", customerId); }
+            }
+
+            customer.ProfileImageUrl = newUrl;
+            await _unitOfWOrk.CustomerCommands.UpdateAsync(customer);
+            await _unitOfWOrk.SaveAsync();
+
+            return new BaseResponse<string?>(newUrl, true, string.Empty, ResponseMessages.SetUpdateSuccessMessage(ClassName));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in UpdateProfilePhoto: {Message}", ex.Message);
+            return new BaseResponse<string?>(null, false, string.Empty, ex.Message);
         }
     }
 

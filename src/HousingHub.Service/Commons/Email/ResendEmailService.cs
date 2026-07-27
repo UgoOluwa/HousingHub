@@ -61,6 +61,25 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(toEmail, "Reset your HousingHub password", text, html);
     }
 
+    public async Task<bool> SendPasswordChangedAsync(string toEmail, string firstName)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        string html = $"""
+            <h2>Your password was changed</h2>
+            <p>Hi {firstName},</p>
+            <p>This is a confirmation that the password for your HousingHub account was just changed.</p>
+            <p>If this was you, no further action is needed.</p>
+            <p><strong>If you did NOT make this change</strong>, your account may be at risk. Reset your
+            password immediately and contact support:</p>
+            <p><a href="{baseUrl}/reset-password" style="padding:10px 20px;background:#0B2A6B;color:#fff;text-decoration:none;border-radius:5px;">Secure my account</a></p>
+            """;
+
+        string text = $"Hi {firstName}, your HousingHub password was just changed. If this wasn't you, reset your password immediately at {baseUrl}/reset-password.";
+
+        return await SendAsync(toEmail, "Your HousingHub password was changed", text, html);
+    }
+
     public async Task<bool> SendInspectionScheduledAsync(string ownerEmail, string ownerName, string customerName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime, string? note)
     {
         string noteSection = string.IsNullOrWhiteSpace(note) ? "" : $"<p><strong>Note:</strong> {note}</p>";

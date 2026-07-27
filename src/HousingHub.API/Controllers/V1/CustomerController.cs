@@ -5,6 +5,7 @@ using HousingHub.Application.Customer.Commands.Create;
 using HousingHub.Application.Customer.Commands.Delete;
 using HousingHub.Application.Customer.Commands.SubmitKyc;
 using HousingHub.Application.Customer.Commands.UpdateProfile;
+using HousingHub.Application.Customer.Commands.UpdateProfilePhoto;
 using HousingHub.Application.Customer.Commands.UploadKycDocument;
 using HousingHub.Application.Customer.Commands.VerifyKyc;
 using HousingHub.Application.Customer.Queries.GetAll;
@@ -103,12 +104,56 @@ namespace HousingHub.API.Controllers.V1
         [HttpPost("kyc/document")]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> UploadKycDocument([FromForm] UploadKycDocumentRequest request)
         {
             var userId = GetAuthenticatedUserId();
             if (userId == null) return Unauthorized();
 
-            var response = await _mediator.Send(new UploadKycDocumentCommand(userId.Value, request.File));
+            // Binding a single IFormFile via a wrapper is fragile; also accept the raw
+            // form file so a client sending "File" (or "file") always resolves, and never
+            // hand a null file to the handler (which surfaced as a 500 "object reference
+            // not set" instead of a useful message).
+            var file = request.File
+                       ?? Request.Form.Files.GetFile("File")
+                       ?? Request.Form.Files.FirstOrDefault();
+
+            if (file == null || file.Length == 0)
+                return BadRequest(new BaseResponse<string>(false, null,
+                    Core.CustomResponses.ResponseMessages.NoFileProvided, null));
+
+            var response = await _mediator.Send(new UploadKycDocumentCommand(userId.Value, file));
+            return Ok(response);
+        }
+
+        [Authorize]
+        [HttpPost("profile/photo")]
+        [Consumes("multipart/form-data")]
+        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> UpdateProfilePhoto([FromForm] UpdateProfilePhotoRequest request)
+        {
+            var userId = GetAuthenticatedUserId();
+            if (userId == null) return Unauthorized();
+
+            var file = request.File ?? Request.Form.Files.GetFile("File") ?? Request.Form.Files.FirstOrDefault();
+            if (file == null || file.Length == 0)
+                return BadRequest(new BaseResponse<string>(false, null,
+                    Core.CustomResponses.ResponseMessages.NoFileProvided, null));
+
+            var response = await _mediator.Send(new UpdateProfilePhotoCommand(userId.Value, file));
+            return Ok(response);
+        }
+
+        [Authorize]
+        [HttpDelete("profile/photo")]
+        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> RemoveProfilePhoto()
+        {
+            var userId = GetAuthenticatedUserId();
+            if (userId == null) return Unauthorized();
+
+            var response = await _mediator.Send(new UpdateProfilePhotoCommand(userId.Value, null));
             return Ok(response);
         }
 
@@ -142,6 +187,11 @@ namespace HousingHub.API.Controllers.V1
 
     public class UploadKycDocumentRequest
     {
-        public IFormFile File { get; set; } = null!;
+        public IFormFile? File { get; set; }
+    }
+
+    public class UpdateProfilePhotoRequest
+    {
+        public IFormFile? File { get; set; }
     }
 }

@@ -206,6 +206,10 @@ public class AuthService : IAuthService
             await _unitOfWork.CustomerCommands.UpdateAsync(customer);
             await _unitOfWork.SaveAsync();
 
+            // Security confirmation so an account owner is alerted if the reset wasn't
+            // them. Best-effort: a mail failure must not fail the reset itself.
+            await SafeSendPasswordChangedAsync(customer);
+
             return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.PasswordResetSuccess);
         }
         catch (Exception ex)
@@ -236,6 +240,8 @@ public class AuthService : IAuthService
 
             await _unitOfWork.CustomerCommands.UpdateAsync(customer);
             await _unitOfWork.SaveAsync();
+
+            await SafeSendPasswordChangedAsync(customer);
 
             return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.PasswordChangeSuccess);
         }
@@ -488,5 +494,21 @@ public class AuthService : IAuthService
     private static string GenerateSecureToken()
     {
         return Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+    }
+
+    /// <summary>
+    /// Sends the "password changed" security notice without letting a mail failure
+    /// fail the password operation that already succeeded.
+    /// </summary>
+    private async Task SafeSendPasswordChangedAsync(Customer customer)
+    {
+        try
+        {
+            await _emailService.SendPasswordChangedAsync(customer.Email, customer.FirstName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send password-changed email to {Email}", customer.Email);
+        }
     }
 }

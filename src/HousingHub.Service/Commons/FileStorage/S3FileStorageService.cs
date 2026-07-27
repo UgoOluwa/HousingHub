@@ -23,6 +23,8 @@ public class S3FileStorageService : IFileStorageService
 
     public async Task<string> UploadFileAsync(IFormFile file, string subDirectory)
     {
+        ArgumentNullException.ThrowIfNull(file);
+
         var key = $"{subDirectory}/{Guid.NewGuid():N}{Path.GetExtension(file.FileName)}";
 
         using var stream = file.OpenReadStream();

@@ -1,3 +1,4 @@
+using HousingHub.Service.Commons.FileStorage;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
@@ -30,7 +31,8 @@ public class AdminCustomerCommandServiceTests
             _unitOfWorkMock.Object,
             mapper,
             passwordHasher.Object,
-            tokenProvider.Object);
+            tokenProvider.Object,
+            new Mock<IFileStorageService>().Object);
     }
 
     private static Customer MakeCustomer(bool isActive = true) =>
