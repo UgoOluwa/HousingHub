@@ -24,6 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\HousingHub.Application\HousingHub.Application.csproj" />
     <ProjectReference Include="..\HousingHub.Service\HousingHub.Service.csproj" />
     <ProjectReference Include="..\HousingHub.Model\HousingHub.Model.csproj" />
     <ProjectReference Include="..\HousingHub.Data\HousingHub.Data.csproj" />
