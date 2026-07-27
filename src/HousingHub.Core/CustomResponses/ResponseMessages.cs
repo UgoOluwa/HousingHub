@@ -37,6 +37,7 @@ public static class ResponseMessages
     }
 
     public const string InvalidAccountType = "Choose a valid account type.";
+    public const string NoFileProvided = "No file was provided. Please attach a document and try again.";
 
     // Property messages
     public const string UnauthorizedPropertyAction = "Only home owners or agents can manage properties.";
