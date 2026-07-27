@@ -69,7 +69,9 @@ public class PropertyCommandService : IPropertyCommandService
                 ContactPersonEmail = request.ContactPersonEmail,
                 ContactPersonPhoneNumber = request.ContactPersonPhoneNumber,
                 Latitude = request.Latitude,
-                Longitude = request.Longitude
+                Longitude = request.Longitude,
+                IsPublished = request.Publish,
+                PublishedAt = request.Publish ? DateTime.UtcNow : null
             };
 
             if (request.PropertyAddress != null)
@@ -116,6 +118,34 @@ public class PropertyCommandService : IPropertyCommandService
         {
             _logger.LogError(ex, "An error occurred in CreateProperty: {Message}", ex.Message);
             return new BaseResponse<PropertyDto>(null, false, string.Empty, ex.Message);
+        }
+    }
+
+    public async Task<BaseResponse<bool>> SetOwnPropertyPublishedAsync(Guid propertyId, Guid authenticatedUserId, bool isPublished)
+    {
+        try
+        {
+            var property = await _unitOfWOrk.PropertyQueries.GetByIdAsync(propertyId);
+            if (property == null)
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            if (property.OwnerId != authenticatedUserId)
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.PropertyNotOwnedByUser);
+
+            property.IsPublished = isPublished;
+            // Stamp the first publish time; keep it once set so it reads as "listed since".
+            if (isPublished && property.PublishedAt == null)
+                property.PublishedAt = DateTime.UtcNow;
+
+            await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
+            await _unitOfWOrk.SaveAsync();
+
+            return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.SetUpdateSuccessMessage(ClassName));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in SetOwnPropertyPublishedAsync: {Message}", ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
         }
     }
 

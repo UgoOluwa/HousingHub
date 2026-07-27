@@ -85,7 +85,9 @@ public class PropertyQueryService : IPropertyQueryService
         try
         {
             var allProperties = await _unitOfWOrk.PropertyQueries.GetAllAsync();
-            var properties = allProperties.AsEnumerable();
+            // Public listing: clients only see published properties. Owners see their own
+            // drafts through the "my properties" endpoints, which don't apply this filter.
+            var properties = allProperties.Where(p => p.IsPublished);
 
             // Text search
             if (!string.IsNullOrWhiteSpace(filter.Search))
@@ -203,6 +205,7 @@ public class PropertyQueryService : IPropertyQueryService
             var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync();
 
             var newProperties = properties
+                .Where(p => p.IsPublished)
                 .OrderByDescending(p => p.DateCreated)
                 .Take(count)
                 .ToList();
@@ -224,6 +227,7 @@ public class PropertyQueryService : IPropertyQueryService
             var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync();
 
             var trending = properties
+                .Where(p => p.IsPublished)
                 .OrderByDescending(p => p.ViewCount)
                 .Skip(skip)
                 .Take(count)
@@ -244,7 +248,7 @@ public class PropertyQueryService : IPropertyQueryService
         try
         {
             var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(
-                p => p.Latitude.HasValue && p.Longitude.HasValue);
+                p => p.IsPublished && p.Latitude.HasValue && p.Longitude.HasValue);
 
             var nearby = properties
                 .Select(p => new

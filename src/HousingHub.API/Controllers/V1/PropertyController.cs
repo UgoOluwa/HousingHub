@@ -4,6 +4,7 @@ using HousingHub.Application.Commons.Bases;
 using HousingHub.Application.Property.Commands.Create;
 using HousingHub.Application.Property.Commands.Delete;
 using HousingHub.Application.Property.Commands.DeleteFile;
+using HousingHub.Application.Property.Commands.SetPublished;
 using HousingHub.Application.Property.Commands.Update;
 using HousingHub.Application.Property.Commands.UploadFiles;
 using HousingHub.Application.Property.Queries.GetAll;
@@ -87,6 +88,30 @@ public class PropertyController : ControllerBase
         if (userId == null) return Unauthorized();
 
         var response = await _mediator.Send(new DeletePropertyCommand(id, userId.Value));
+        return Ok(response);
+    }
+
+    [Authorize(Policy = "PropertyOwnerOrAgent")]
+    [HttpPut("{id:guid}/publish")]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Publish(Guid id)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId == null) return Unauthorized();
+
+        var response = await _mediator.Send(new SetPropertyPublishedCommand(id, true, userId.Value));
+        return Ok(response);
+    }
+
+    [Authorize(Policy = "PropertyOwnerOrAgent")]
+    [HttpPut("{id:guid}/unpublish")]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Unpublish(Guid id)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId == null) return Unauthorized();
+
+        var response = await _mediator.Send(new SetPropertyPublishedCommand(id, false, userId.Value));
         return Ok(response);
     }
 

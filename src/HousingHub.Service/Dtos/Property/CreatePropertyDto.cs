@@ -19,4 +19,5 @@ public record CreatePropertyDto(
     CreatePropertyAddressDto? PropertyAddress,
     double? Latitude,
     double? Longitude,
-    IList<IFormFile>? Files = null);
+    IList<IFormFile>? Files = null,
+    bool Publish = true);

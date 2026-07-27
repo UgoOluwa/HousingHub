@@ -9,6 +9,9 @@ public interface IPropertyCommandService
     Task<BaseResponse<PropertyDto>> UpdateProperty(UpdatePropertyDto request, Guid authenticatedUserId);
     Task<BaseResponse<bool>> DeleteProperty(Guid propertyId, Guid authenticatedUserId);
 
+    /// <summary>Owner: publish or unpublish one of their own listings.</summary>
+    Task<BaseResponse<bool>> SetOwnPropertyPublishedAsync(Guid propertyId, Guid authenticatedUserId, bool isPublished);
+
     /// <summary>Admin: publish or unpublish a property listing.</summary>
     Task<BaseResponse<bool>> SetPropertyPublishedAsync(Guid propertyId, bool isPublished);
 

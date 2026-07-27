@@ -21,4 +21,6 @@ public record
     string? ContactPersonPhoneNumber,
     Guid OwnerId,
     CreatePropertyAddressDto? PropertyAddress,
-    IList<IFormFile>? Files = null) : IRequest<BaseResponse<PropertyDto?>>;
+    IList<IFormFile>? Files = null,
+    // true = publish immediately; false = save as a draft the owner can publish later.
+    bool Publish = true) : IRequest<BaseResponse<PropertyDto?>>;
