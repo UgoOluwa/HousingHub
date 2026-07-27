@@ -1,3 +1,4 @@
+using HousingHub.Service.Commons.FileStorage;
 using Mapster;
 using HousingHub.Service.Commons.Mappings;
 using HousingHub.Core.CustomResponses;
@@ -44,7 +45,7 @@ public class CustomerCommandServiceTests
         _passwordHasherMock.Setup(p => p.Verify(It.IsAny<string>(), TestPasswordHash)).Returns(true);
         _tokenProviderMock.Setup(t => t.Create(It.IsAny<HousingHub.Model.Entities.Customer>())).Returns("jwt_token");
 
-        _sut = new CustomerCommandService(logger, _unitOfWorkMock.Object, _mapper, _passwordHasherMock.Object, _tokenProviderMock.Object);
+        _sut = new CustomerCommandService(logger, _unitOfWorkMock.Object, _mapper, _passwordHasherMock.Object, _tokenProviderMock.Object, new Mock<IFileStorageService>().Object);
     }
 
     // ── CreateCustomer ───────────────────────────────────────────

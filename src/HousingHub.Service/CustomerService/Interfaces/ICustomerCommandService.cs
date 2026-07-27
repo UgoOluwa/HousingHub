@@ -1,10 +1,14 @@
 using HousingHub.Core.CustomResponses;
 using HousingHub.Service.Dtos.Customer;
+using Microsoft.AspNetCore.Http;
 
 namespace HousingHub.Service.CustomerService.Interfaces;
 
 public interface ICustomerCommandService
 {
+    /// <summary>Uploads/replaces the profile photo, or clears it when file is null. Returns the new URL.</summary>
+    Task<BaseResponse<string?>> UpdateProfilePhoto(Guid customerId, IFormFile? file);
+
     Task<BaseResponse<CustomerDto>> CreateCustomer(CreateCustomerDto request);
     Task<BaseResponse<CustomerDto>> RegisterCustomer(RegisterCustomerDto request);
     Task<BaseResponse<LoginCustomerResponseDto>> LoginCustomer(LoginCustomerDto request);
