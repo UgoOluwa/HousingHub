@@ -16,9 +16,14 @@ public class PropertyMappingTests
 {
     private static TypeAdapterConfig BuildConfig()
     {
-        // Same registration the API performs at startup.
+        // Mirror production exactly: BOTH the Service mappers (ObjectMapper) and the
+        // Application mappers (MappingProfile) are scanned into GlobalSettings at
+        // startup. Scanning only one assembly hides breakage in the other — which is
+        // how the CreatePropertyCommand -> CreatePropertyDto failure slipped through.
         var config = new TypeAdapterConfig();
-        config.Scan(Assembly.GetAssembly(typeof(PropertyMapper))!);
+        config.Scan(
+            Assembly.GetAssembly(typeof(PropertyMapper))!,                                  // HousingHub.Service
+            Assembly.GetAssembly(typeof(HousingHub.Application.Commons.Mappings.MappingProfile))!); // HousingHub.Application
         return config;
     }
 
@@ -74,11 +79,59 @@ public class PropertyMappingTests
     }
 
     [Fact]
+    public void CreatePropertyCommand_MapsToDto()
+    {
+        // The exact adapt CreatePropertyCommandHandler runs on publish.
+        var mapper = new ObjectMapper(BuildConfig());
+
+        // Real uploads, not null: mapping IFormFile -> IFormFile (an interface with no
+        // constructor) is what threw "The type initializer for 'Mapster.TypeAdapter`2'"
+        // on publish. A null Files list hides the bug.
+        var files = new List<Microsoft.AspNetCore.Http.IFormFile> { new FakeFormFile() };
+
+        var command = new HousingHub.Application.Property.Commands.Create.CreatePropertyCommand(
+            "Test", "Desc", PropertyType.House, 1_000_000m, PropertyAvailability.Available,
+            PropertyLeaseType.Rent, PropertyFeature.None, "Jane", "jane@test.com", "080",
+            Guid.NewGuid(),
+            new Service.Dtos.PropertyAddress.CreatePropertyAddressDto("Place", "City", "State", "Country", "100001", Guid.Empty),
+            files);
+
+        var dto = mapper.Map<Service.Dtos.Property.CreatePropertyDto>(command);
+
+        Assert.NotNull(dto);
+        Assert.Equal("Test", dto.Title);
+        Assert.Null(dto.Latitude);
+        Assert.Null(dto.Longitude);
+        // The file instance must pass through untouched, not be reconstructed.
+        Assert.NotNull(dto.Files);
+        Assert.Single(dto.Files!);
+        Assert.Same(files[0], dto.Files![0]);
+    }
+
+    private sealed class FakeFormFile : Microsoft.AspNetCore.Http.IFormFile
+    {
+        public string ContentType => "image/png";
+        public string ContentDisposition => "form-data; name=\"Files\"; filename=\"a.png\"";
+        public Microsoft.AspNetCore.Http.IHeaderDictionary Headers => new Microsoft.AspNetCore.Http.HeaderDictionary();
+        public long Length => 3;
+        public string Name => "Files";
+        public string FileName => "a.png";
+        public void CopyTo(Stream target) { }
+        public Task CopyToAsync(Stream target, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Stream OpenReadStream() => new MemoryStream(new byte[] { 1, 2, 3 });
+    }
+
+    [Fact]
     public void EveryRegisteredMapper_CompilesInIsolation()
     {
         // Names the offending registration instead of failing on the whole config.
-        var registers = Assembly.GetAssembly(typeof(PropertyMapper))!
-            .GetTypes()
+        // Covers both mapper assemblies, since either can poison the shared config.
+        var registers = new[]
+            {
+                Assembly.GetAssembly(typeof(PropertyMapper))!,
+                Assembly.GetAssembly(typeof(HousingHub.Application.Commons.Mappings.MappingProfile))!
+            }
+            .SelectMany(a => a.GetTypes())
             .Where(t => typeof(IRegister).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
             .ToList();
 
