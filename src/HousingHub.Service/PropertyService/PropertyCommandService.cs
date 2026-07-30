@@ -79,7 +79,15 @@ public class PropertyCommandService : IPropertyCommandService
                     request.PropertyAddress.City,
                     request.PropertyAddress.State,
                     request.PropertyAddress.Country,
-                    request.PropertyAddress.PostalCode);
+                    request.PropertyAddress.PostalCode)
+                {
+                    PropertyId = property.Id
+                };
+
+                bool addressSaved = await _unitOfWOrk.PropertyAddressCommands.InsertAsync(address);
+                if (!addressSaved)
+                    return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.SetCreationFailureMessage("property address"));
+
                 property.Address = address;
                 property.AddressId = address.Id;
             }
