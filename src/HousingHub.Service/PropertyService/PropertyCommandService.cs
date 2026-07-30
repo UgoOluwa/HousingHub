@@ -220,13 +220,31 @@ public class PropertyCommandService : IPropertyCommandService
         }
     }
 
-    public async Task<BaseResponse<bool>> SetPropertyPublishedAsync(Guid propertyId, bool isPublished)
+    public Task<BaseResponse<bool>> SetPropertyPublishedAsync(Guid propertyId, bool isPublished) =>
+        SetPropertyPublishedInternalAsync(propertyId, isPublished, ownerCheck: null);
+
+    public async Task<BaseResponse<bool>> SetPropertyPublishedAsync(Guid propertyId, bool isPublished, Guid authenticatedUserId)
+    {
+        var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == authenticatedUserId);
+        if (owner == null)
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
+
+        if (!owner.CustomerType.CanManageProperties())
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
+
+        return await SetPropertyPublishedInternalAsync(propertyId, isPublished, authenticatedUserId);
+    }
+
+    private async Task<BaseResponse<bool>> SetPropertyPublishedInternalAsync(Guid propertyId, bool isPublished, Guid? ownerCheck)
     {
         try
         {
             var property = await _unitOfWOrk.PropertyQueries.GetByAsync(x => x.Id == propertyId);
             if (property == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            if (ownerCheck.HasValue && property.OwnerId != ownerCheck.Value)
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.PropertyNotOwnedByUser);
 
             property.IsPublished = isPublished;
             property.PublishedAt = isPublished ? DateTime.UtcNow : null;

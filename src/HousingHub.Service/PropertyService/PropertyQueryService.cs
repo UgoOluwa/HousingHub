@@ -35,8 +35,12 @@ public class PropertyQueryService : IPropertyQueryService
             if (!includeUnpublished && !property.IsPublished && property.OwnerId != requesterId)
                 return new BaseResponse<PropertyDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
-            property.ViewCount++;
-            await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
+            // Only count views from clients, not the owner checking their own listing.
+            if (property.OwnerId != requesterId)
+            {
+                property.ViewCount++;
+                await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
+            }
 
             await AttachFilesAsync(property);
 
@@ -341,7 +345,7 @@ public class PropertyQueryService : IPropertyQueryService
             var propertyIds = propertyList.Select(p => p.Id).ToHashSet();
 
             int totalProperties = propertyList.Count;
-            int activeListings = propertyList.Count(p => p.Availability == PropertyAvailability.Available);
+            int activeListings = propertyList.Count(p => p.IsPublished && p.Availability == PropertyAvailability.Available);
 
             int pendingInspections = 0;
             int completedInspections = 0;

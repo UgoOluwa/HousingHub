@@ -34,7 +34,9 @@ public class GenericCommandRepository<T> : IGenericCommandRepository<T> where T 
 
     public async Task InsertRangeAsync(IEnumerable<T> entities)
     {
-        var batch = _context.CreateBatchWrite<T>();
+        // DynamoDB's BatchWriteItem has no support for conditional/version checks at all,
+        // so any versioned entity (every BaseEntity) fails batch writes unless this is set.
+        var batch = _context.CreateBatchWrite<T>(new DynamoDBOperationConfig { SkipVersionCheck = true });
         foreach (var entity in entities)
         {
             SetTimestamps(entity, isNew: true);
@@ -45,7 +47,9 @@ public class GenericCommandRepository<T> : IGenericCommandRepository<T> where T 
 
     public async Task UpdateRangeAsync(IEnumerable<T> entities)
     {
-        var batch = _context.CreateBatchWrite<T>();
+        // DynamoDB's BatchWriteItem has no support for conditional/version checks at all,
+        // so any versioned entity (every BaseEntity) fails batch writes unless this is set.
+        var batch = _context.CreateBatchWrite<T>(new DynamoDBOperationConfig { SkipVersionCheck = true });
         foreach (var entity in entities)
         {
             SetTimestamps(entity, isNew: false);
@@ -56,7 +60,9 @@ public class GenericCommandRepository<T> : IGenericCommandRepository<T> where T 
 
     public async Task DeleteRangeAsync(IEnumerable<T> entities)
     {
-        var batch = _context.CreateBatchWrite<T>();
+        // DynamoDB's BatchWriteItem has no support for conditional/version checks at all,
+        // so any versioned entity (every BaseEntity) fails batch writes unless this is set.
+        var batch = _context.CreateBatchWrite<T>(new DynamoDBOperationConfig { SkipVersionCheck = true });
         foreach (var entity in entities)
         {
             batch.AddDeleteItem(entity);

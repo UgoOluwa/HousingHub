@@ -119,14 +119,18 @@ public class PropertyController : ControllerBase
         return Ok(response);
     }
 
-    // ─── Admin Moderation ────────────────────────────────────────────
+    // ─── Publish (owner) ────────────────────────────────────────────
+    // Admin moderation has its own separate endpoint in HousingHub.Admin.API.
 
-    [Authorize(Policy = "Admin")]
+    [Authorize(Policy = "PropertyOwnerOrAgent")]
     [HttpPut("{id:guid}/publish")]
     [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Publish(Guid id, [FromQuery] bool isPublished = true)
     {
-        var response = await _mediator.Send(new PublishPropertyCommand(id, isPublished));
+        var userId = GetAuthenticatedUserId();
+        if (userId == null) return Unauthorized();
+
+        var response = await _mediator.Send(new PublishPropertyCommand(id, isPublished, userId.Value));
         return Ok(response);
     }
 
