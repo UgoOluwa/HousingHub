@@ -345,7 +345,7 @@ public class PropertyQueryService : IPropertyQueryService
             var propertyIds = propertyList.Select(p => p.Id).ToHashSet();
 
             int totalProperties = propertyList.Count;
-            int activeListings = propertyList.Count(p => p.Availability == PropertyAvailability.Available);
+            int activeListings = propertyList.Count(p => p.IsPublished && p.Availability == PropertyAvailability.Available);
 
             int pendingInspections = 0;
             int completedInspections = 0;
