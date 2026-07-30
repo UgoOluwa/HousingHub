@@ -101,7 +101,7 @@ public class AdminPropertyController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id)
     {
-        var result = await propertyQueryService.GetPropertyAsync(id);
+        var result = await propertyQueryService.GetPropertyAsync(id, includeUnpublished: true);
         if (result.Data == null) return NotFound(result);
         return Ok(result);
     }

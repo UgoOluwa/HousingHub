@@ -48,7 +48,8 @@ public class PropertyController : ControllerBase
     [ProducesResponseType(typeof(BaseResponse<PropertyDto?>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetById(Guid id)
     {
-        var response = await _mediator.Send(new GetPropertyByIdQuery(id));
+        var requesterId = GetAuthenticatedUserId();
+        var response = await _mediator.Send(new GetPropertyByIdQuery(id, requesterId));
         return Ok(response);
     }
 

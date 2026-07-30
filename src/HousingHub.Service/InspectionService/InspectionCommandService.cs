@@ -156,7 +156,7 @@ public class InspectionCommandService : IInspectionCommandService
                     await _unitOfWOrk.ConversationCommands.InsertAsync(conversation);
                 }
 
-                string chatContent = $"Your inspection for \"{property.Title}\" has been confirmed for {inspection.ScheduledDate:yyyy-MM-dd} at {inspection.ScheduledTime:hh\\:mm tt}. Please arrive on time and bring a valid ID. Contact us via this chat if you have any questions. — {owner.FirstName} {owner.LastName}";
+                string chatContent = $"Your inspection for \"{property.Title}\" has been confirmed for {inspection.ScheduledDate:yyyy-MM-dd} at {DateTime.Today.Add(inspection.ScheduledTime):hh:mm tt}. Please arrive on time and bring a valid ID. Contact us via this chat if you have any questions. — {owner.FirstName} {owner.LastName}";
 
                 var chatMessage = new ChatMessage(conversation.Id, owner.Id, chatContent);
                 await _unitOfWOrk.ChatMessageCommands.InsertAsync(chatMessage);

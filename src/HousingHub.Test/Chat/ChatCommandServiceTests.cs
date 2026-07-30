@@ -4,6 +4,7 @@ using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
 using HousingHub.Service.ChatService;
 using HousingHub.Service.ChatService.Interfaces;
+using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Dtos.Chat;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -15,6 +16,7 @@ public class ChatCommandServiceTests
 {
     private readonly Mock<IUnitOfWOrk> _unitOfWorkMock;
     private readonly Mock<IChatRealtimeNotifier> _realtimeNotifierMock;
+    private readonly Mock<IEmailService> _emailServiceMock;
     private readonly ChatCommandService _sut;
 
     private static readonly Guid SenderId = Guid.NewGuid();
@@ -25,6 +27,7 @@ public class ChatCommandServiceTests
     {
         _unitOfWorkMock = new Mock<IUnitOfWOrk> { DefaultValue = DefaultValue.Mock };
         _realtimeNotifierMock = new Mock<IChatRealtimeNotifier>();
+        _emailServiceMock = new Mock<IEmailService>();
         var logger = NullLogger<ChatCommandService>.Instance;
 
         // Set up default returns for command repository methods used by the service
@@ -34,7 +37,7 @@ public class ChatCommandServiceTests
         _unitOfWorkMock.Setup(u => u.ChatMessageCommands.UpdateRangeAsync(It.IsAny<IEnumerable<ChatMessage>>())).Returns(Task.CompletedTask);
         _unitOfWorkMock.Setup(u => u.SaveAsync()).Returns(Task.CompletedTask);
 
-        _sut = new ChatCommandService(_unitOfWorkMock.Object, logger, _realtimeNotifierMock.Object);
+        _sut = new ChatCommandService(_unitOfWorkMock.Object, logger, _realtimeNotifierMock.Object, _emailServiceMock.Object);
     }
 
     private static Customer CreateCustomer(Guid id, string firstName = "Test", string lastName = "User") =>

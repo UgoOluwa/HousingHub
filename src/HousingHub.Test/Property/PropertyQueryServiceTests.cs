@@ -53,7 +53,8 @@ public class PropertyQueryServiceTests
         Availability = PropertyAvailability.Available,
         PropertyLeaseType = PropertyLeaseType.Sale,
         Features = PropertyFeature.Parking,
-        OwnerId = OwnerId
+        OwnerId = OwnerId,
+        IsPublished = true
     };
 
     // ??? GetPropertyAsync (by Guid) ??????????????????????????????????
@@ -86,6 +87,70 @@ public class PropertyQueryServiceTests
         Assert.False(result.IsSuccessful);
         Assert.Null(result.Data);
         Assert.Contains("Not Found", result.Message);
+    }
+
+    [Fact]
+    public async Task GetPropertyAsync_WhenUnpublishedAndNoRequester_ReturnsNotFound()
+    {
+        var property = CreateSampleProperty();
+        property.IsPublished = false;
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid))
+            .ReturnsAsync(property);
+
+        var result = await _sut.GetPropertyAsync(PropertyGuid);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Null(result.Data);
+        Assert.Contains("Not Found", result.Message);
+    }
+
+    [Fact]
+    public async Task GetPropertyAsync_WhenUnpublishedAndRequesterIsOwner_ReturnsProperty()
+    {
+        var property = CreateSampleProperty();
+        property.IsPublished = false;
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid))
+            .ReturnsAsync(property);
+
+        var result = await _sut.GetPropertyAsync(PropertyGuid, requesterId: OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.NotNull(result.Data);
+        Assert.Equal(PropertyGuid, result.Data!.Id);
+    }
+
+    [Fact]
+    public async Task GetPropertyAsync_WhenUnpublishedAndRequesterIsNotOwner_ReturnsNotFound()
+    {
+        var property = CreateSampleProperty();
+        property.IsPublished = false;
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid))
+            .ReturnsAsync(property);
+
+        var result = await _sut.GetPropertyAsync(PropertyGuid, requesterId: Guid.NewGuid());
+
+        Assert.False(result.IsSuccessful);
+        Assert.Null(result.Data);
+        Assert.Contains("Not Found", result.Message);
+    }
+
+    [Fact]
+    public async Task GetPropertyAsync_WhenUnpublishedAndIncludeUnpublished_ReturnsProperty()
+    {
+        var property = CreateSampleProperty();
+        property.IsPublished = false;
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid))
+            .ReturnsAsync(property);
+
+        var result = await _sut.GetPropertyAsync(PropertyGuid, includeUnpublished: true);
+
+        Assert.True(result.IsSuccessful);
+        Assert.NotNull(result.Data);
+        Assert.Equal(PropertyGuid, result.Data!.Id);
     }
 
     [Fact]
@@ -153,7 +218,7 @@ public class PropertyQueryServiceTests
             CreateSampleProperty(Guid.NewGuid(), "PROP-003", "Third")
         };
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetAllAsync())
+            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(properties);
 
         var result = await _sut.GetAllPropertiesAsync();
@@ -169,7 +234,7 @@ public class PropertyQueryServiceTests
     public async Task GetAllPropertiesAsync_WhenEmpty_ReturnsEmptyList()
     {
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetAllAsync())
+            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(new List<HousingHub.Model.Entities.Property>());
 
         var result = await _sut.GetAllPropertiesAsync();
@@ -184,7 +249,7 @@ public class PropertyQueryServiceTests
     {
         var property = CreateSampleProperty();
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetAllAsync())
+            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(new List<HousingHub.Model.Entities.Property> { property });
 
         var result = await _sut.GetAllPropertiesAsync();
@@ -323,7 +388,7 @@ public class PropertyQueryServiceTests
             CreateSampleProperty(Guid.NewGuid(), "PROP-B", "Bravo")
         };
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetAllAsync())
+            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(properties);
 
         var result = await _sut.GetAllPropertiesAsync();
@@ -338,7 +403,7 @@ public class PropertyQueryServiceTests
     public async Task GetAllPropertiesAsync_SuccessMessageIsSet()
     {
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetAllAsync())
+            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(new List<HousingHub.Model.Entities.Property>());
 
         var result = await _sut.GetAllPropertiesAsync();
@@ -359,7 +424,7 @@ public class PropertyQueryServiceTests
 
         var properties = new List<HousingHub.Model.Entities.Property> { apt, villa, land };
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetAllAsync())
+            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync(properties);
 
         var result = await _sut.GetAllPropertiesAsync();
@@ -428,7 +493,7 @@ public class PropertyQueryServiceTests
     public async Task GetAllPropertiesAsync_WhenExceptionThrown_ReturnsFailure()
     {
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetAllAsync())
+            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ThrowsAsync(new InvalidOperationException("Timeout"));
 
         var result = await _sut.GetAllPropertiesAsync();

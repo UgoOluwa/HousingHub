@@ -16,7 +16,7 @@ public class GetPropertyByIdQueryHandler : IRequestHandler<GetPropertyByIdQuery,
 
     public async Task<BaseResponse<PropertyDto?>> Handle(GetPropertyByIdQuery request, CancellationToken cancellationToken)
     {
-        var response = await _propertyQueryService.GetPropertyAsync(request.Id);
+        var response = await _propertyQueryService.GetPropertyAsync(request.Id, request.RequesterId);
         return new BaseResponse<PropertyDto?>(response.IsSuccessful, response.Data, response.Message, null);
     }
 }

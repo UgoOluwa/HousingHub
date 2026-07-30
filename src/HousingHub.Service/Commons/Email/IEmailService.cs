@@ -8,4 +8,6 @@ public interface IEmailService
     Task<bool> SendPasswordChangedAsync(string toEmail, string firstName);
     Task<bool> SendInspectionScheduledAsync(string ownerEmail, string ownerName, string customerName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime, string? note);
     Task<bool> SendInspectionResponseAsync(string customerEmail, string customerName, string ownerName, string propertyTitle, string action, string? note, DateTime? rescheduledDate, TimeSpan? rescheduledTime);
+    /// <summary>Sent to a chat participant when they receive a new message while offline/unread.</summary>
+    Task<bool> SendNewMessageAsync(string recipientEmail, string recipientName, string senderName, string messagePreview);
 }
