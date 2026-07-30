@@ -9,8 +9,11 @@ public interface IPropertyCommandService
     Task<BaseResponse<PropertyDto>> UpdateProperty(UpdatePropertyDto request, Guid authenticatedUserId);
     Task<BaseResponse<bool>> DeleteProperty(Guid propertyId, Guid authenticatedUserId);
 
-    /// <summary>Admin: publish or unpublish a property listing.</summary>
+    /// <summary>Admin: publish or unpublish a property listing, bypassing ownership checks.</summary>
     Task<BaseResponse<bool>> SetPropertyPublishedAsync(Guid propertyId, bool isPublished);
+
+    /// <summary>Owner: publish or unpublish their own saved/draft property listing.</summary>
+    Task<BaseResponse<bool>> SetPropertyPublishedAsync(Guid propertyId, bool isPublished, Guid authenticatedUserId);
 
     /// <summary>Admin: delete any property without ownership check.</summary>
     Task<BaseResponse<bool>> AdminDeletePropertyAsync(Guid propertyId);

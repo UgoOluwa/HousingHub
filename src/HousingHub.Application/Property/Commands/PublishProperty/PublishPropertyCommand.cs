@@ -3,4 +3,4 @@ using MediatR;
 
 namespace HousingHub.Application.Property.Commands.PublishProperty;
 
-public record PublishPropertyCommand(Guid PropertyId, bool IsPublished) : IRequest<BaseResponse<bool>>;
+public record PublishPropertyCommand(Guid PropertyId, bool IsPublished, Guid AuthenticatedUserId) : IRequest<BaseResponse<bool>>;

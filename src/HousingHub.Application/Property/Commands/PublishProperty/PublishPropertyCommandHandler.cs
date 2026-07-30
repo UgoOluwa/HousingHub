@@ -15,7 +15,7 @@ public class PublishPropertyCommandHandler : IRequestHandler<PublishPropertyComm
 
     public async Task<BaseResponse<bool>> Handle(PublishPropertyCommand request, CancellationToken cancellationToken)
     {
-        var response = await _propertyCommandService.SetPropertyPublishedAsync(request.PropertyId, request.IsPublished);
+        var response = await _propertyCommandService.SetPropertyPublishedAsync(request.PropertyId, request.IsPublished, request.AuthenticatedUserId);
         return new BaseResponse<bool>(response.IsSuccessful, response.Data, response.Message, null);
     }
 }
