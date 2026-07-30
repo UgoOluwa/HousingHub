@@ -4,4 +4,4 @@ using MediatR;
 
 namespace HousingHub.Application.Property.Queries.GetById;
 
-public record GetPropertyByIdQuery(Guid Id) : IRequest<BaseResponse<PropertyDto?>>;
+public record GetPropertyByIdQuery(Guid Id, Guid? RequesterId = null) : IRequest<BaseResponse<PropertyDto?>>;

@@ -53,7 +53,8 @@ public class PropertyQueryServiceTests
         Availability = PropertyAvailability.Available,
         PropertyLeaseType = PropertyLeaseType.Sale,
         Features = PropertyFeature.Parking,
-        OwnerId = OwnerId
+        OwnerId = OwnerId,
+        IsPublished = true
     };
 
     // ??? GetPropertyAsync (by Guid) ??????????????????????????????????
@@ -86,6 +87,70 @@ public class PropertyQueryServiceTests
         Assert.False(result.IsSuccessful);
         Assert.Null(result.Data);
         Assert.Contains("Not Found", result.Message);
+    }
+
+    [Fact]
+    public async Task GetPropertyAsync_WhenUnpublishedAndNoRequester_ReturnsNotFound()
+    {
+        var property = CreateSampleProperty();
+        property.IsPublished = false;
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid))
+            .ReturnsAsync(property);
+
+        var result = await _sut.GetPropertyAsync(PropertyGuid);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Null(result.Data);
+        Assert.Contains("Not Found", result.Message);
+    }
+
+    [Fact]
+    public async Task GetPropertyAsync_WhenUnpublishedAndRequesterIsOwner_ReturnsProperty()
+    {
+        var property = CreateSampleProperty();
+        property.IsPublished = false;
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid))
+            .ReturnsAsync(property);
+
+        var result = await _sut.GetPropertyAsync(PropertyGuid, requesterId: OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.NotNull(result.Data);
+        Assert.Equal(PropertyGuid, result.Data!.Id);
+    }
+
+    [Fact]
+    public async Task GetPropertyAsync_WhenUnpublishedAndRequesterIsNotOwner_ReturnsNotFound()
+    {
+        var property = CreateSampleProperty();
+        property.IsPublished = false;
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid))
+            .ReturnsAsync(property);
+
+        var result = await _sut.GetPropertyAsync(PropertyGuid, requesterId: Guid.NewGuid());
+
+        Assert.False(result.IsSuccessful);
+        Assert.Null(result.Data);
+        Assert.Contains("Not Found", result.Message);
+    }
+
+    [Fact]
+    public async Task GetPropertyAsync_WhenUnpublishedAndIncludeUnpublished_ReturnsProperty()
+    {
+        var property = CreateSampleProperty();
+        property.IsPublished = false;
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid))
+            .ReturnsAsync(property);
+
+        var result = await _sut.GetPropertyAsync(PropertyGuid, includeUnpublished: true);
+
+        Assert.True(result.IsSuccessful);
+        Assert.NotNull(result.Data);
+        Assert.Equal(PropertyGuid, result.Data!.Id);
     }
 
     [Fact]

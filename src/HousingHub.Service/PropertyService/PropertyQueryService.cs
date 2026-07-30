@@ -23,13 +23,16 @@ public class PropertyQueryService : IPropertyQueryService
         _logger = logger;
     }
 
-    public async Task<BaseResponse<PropertyDto?>> GetPropertyAsync(Guid id)
+    public async Task<BaseResponse<PropertyDto?>> GetPropertyAsync(Guid id, Guid? requesterId = null, bool includeUnpublished = false)
     {
         try
         {
             Property? property = await _unitOfWOrk.PropertyQueries.GetByIdAsync(id);
 
             if (property is null)
+                return new BaseResponse<PropertyDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            if (!includeUnpublished && !property.IsPublished && property.OwnerId != requesterId)
                 return new BaseResponse<PropertyDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
             property.ViewCount++;
