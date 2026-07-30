@@ -2,6 +2,7 @@ using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Service.ChatService.Interfaces;
+using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Dtos.Chat;
 using Microsoft.Extensions.Logging;
 
@@ -12,12 +13,14 @@ public class ChatCommandService : IChatCommandService
     private readonly IUnitOfWOrk _unitOfWOrk;
     private readonly ILogger<ChatCommandService> _logger;
     private readonly IChatRealtimeNotifier _realtimeNotifier;
+    private readonly IEmailService _emailService;
 
-    public ChatCommandService(IUnitOfWOrk unitOfWOrk, ILogger<ChatCommandService> logger, IChatRealtimeNotifier realtimeNotifier)
+    public ChatCommandService(IUnitOfWOrk unitOfWOrk, ILogger<ChatCommandService> logger, IChatRealtimeNotifier realtimeNotifier, IEmailService emailService)
     {
         _unitOfWOrk = unitOfWOrk;
         _logger = logger;
         _realtimeNotifier = realtimeNotifier;
+        _emailService = emailService;
     }
 
     public async Task<BaseResponse<ChatMessageDto>> SendMessageAsync(SendMessageDto request, Guid senderId)
@@ -78,6 +81,8 @@ public class ChatCommandService : IChatCommandService
                 0);
             await _realtimeNotifier.NotifyConversationUpdatedAsync(request.RecipientId, conversationUpdate);
 
+            await SafeSendNewMessageEmailAsync(recipient, senderName, conversation.LastMessage);
+
             return new BaseResponse<ChatMessageDto>(dto, true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
@@ -127,5 +132,17 @@ public class ChatCommandService : IChatCommandService
         return await _unitOfWOrk.ConversationQueries.GetByAsync(
             c => (c.ParticipantOneId == userOneId && c.ParticipantTwoId == userTwoId) ||
                  (c.ParticipantOneId == userTwoId && c.ParticipantTwoId == userOneId));
+    }
+
+    private async Task SafeSendNewMessageEmailAsync(Customer recipient, string senderName, string messagePreview)
+    {
+        try
+        {
+            await _emailService.SendNewMessageAsync(recipient.Email, recipient.FirstName, senderName, messagePreview);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send new-message email to {Email}", recipient.Email);
+        }
     }
 }

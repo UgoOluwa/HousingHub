@@ -327,6 +327,59 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(customerEmail, $"Inspection {action} for {propertyTitle}", text, html);
     }
 
+    public async Task<bool> SendNewMessageAsync(string recipientEmail, string recipientName, string senderName, string messagePreview)
+    {
+        string html = $"""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>New message from {senderName}</title></head>
+            <body style="margin:0;padding:0;background-color:#f0f4f9;font-family:Arial,Helvetica,sans-serif;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f0f4f9;">
+                <tr><td align="center" style="padding:48px 16px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;">
+                    <tr>
+                      <td style="background-color:#07358B;border-radius:12px 12px 0 0;padding:32px 40px;text-align:center;">
+                        <span style="font-size:32px;font-weight:800;color:#FFCC00;font-family:Arial,Helvetica,sans-serif;letter-spacing:1px;">Housing</span><span style="font-size:32px;font-weight:800;color:#ffffff;font-family:Arial,Helvetica,sans-serif;letter-spacing:1px;">Hub</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="background-color:#ffffff;padding:44px 48px;border-radius:0 0 12px 12px;">
+                        <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">You have a new message</h1>
+                        <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {recipientName},</p>
+                        <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+                          <strong>{senderName}</strong> sent you a message on HousingHub:
+                        </p>
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
+                          <tr>
+                            <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;">
+                              <p style="margin:0;font-size:15px;color:#333333;font-style:italic;font-family:Arial,Helvetica,sans-serif;">&ldquo;{messagePreview}&rdquo;</p>
+                            </td>
+                          </tr>
+                        </table>
+                        <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+                          Log in to your HousingHub dashboard to reply.
+                        </p>
+                        <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:24px 40px;text-align:center;">
+                        <p style="margin:0 0 6px 0;font-size:12px;color:#999999;font-family:Arial,Helvetica,sans-serif;">&copy; 2025 HousingHub. All rights reserved.</p>
+                        <p style="margin:0;font-size:12px;color:#bbbbbb;font-family:Arial,Helvetica,sans-serif;">This is an automated message, please do not reply.</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td></tr>
+              </table>
+            </body>
+            </html>
+            """;
+
+        string text = $"Hi {recipientName}, {senderName} sent you a message on HousingHub: \"{messagePreview}\". Log in to reply.";
+
+        return await SendAsync(recipientEmail, $"New message from {senderName}", text, html);
+    }
+
     private async Task<bool> SendAsync(string toEmail, string subject, string text, string html)
     {
         try
