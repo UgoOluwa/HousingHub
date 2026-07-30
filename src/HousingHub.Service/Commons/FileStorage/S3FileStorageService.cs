@@ -34,7 +34,8 @@ public class S3FileStorageService : IFileStorageService
             BucketName = _bucketName,
             Key = key,
             InputStream = stream,
-            ContentType = file.ContentType
+            ContentType = file.ContentType,
+            CannedACL = S3CannedACL.PublicRead
         };
 
         await _s3Client.PutObjectAsync(putRequest);
