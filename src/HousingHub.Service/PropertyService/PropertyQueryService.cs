@@ -35,8 +35,12 @@ public class PropertyQueryService : IPropertyQueryService
             if (!includeUnpublished && !property.IsPublished && property.OwnerId != requesterId)
                 return new BaseResponse<PropertyDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
-            property.ViewCount++;
-            await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
+            // Only count views from clients, not the owner checking their own listing.
+            if (property.OwnerId != requesterId)
+            {
+                property.ViewCount++;
+                await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
+            }
 
             await AttachFilesAsync(property);
 
