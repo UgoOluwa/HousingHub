@@ -4,6 +4,7 @@ using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
+using HousingHub.Service.ChatService.Interfaces;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Dtos.Inspection;
 using HousingHub.Service.InspectionService;
@@ -20,6 +21,7 @@ public class InspectionCommandServiceTests
     private readonly Mock<IUnitOfWOrk> _unitOfWorkMock;
     private readonly Mock<IEmailService> _emailServiceMock;
     private readonly Mock<IRealtimeNotifier> _realtimeNotifierMock;
+    private readonly Mock<IChatRealtimeNotifier> _chatRealtimeNotifierMock;
     private readonly IMapper _mapper;
     private readonly InspectionCommandService _sut;
 
@@ -33,6 +35,7 @@ public class InspectionCommandServiceTests
         _unitOfWorkMock = new Mock<IUnitOfWOrk> { DefaultValue = DefaultValue.Mock };
         _emailServiceMock = new Mock<IEmailService>();
         _realtimeNotifierMock = new Mock<IRealtimeNotifier>();
+        _chatRealtimeNotifierMock = new Mock<IChatRealtimeNotifier>();
         var logger = NullLogger<InspectionCommandService>.Instance;
 
         var config = new TypeAdapterConfig();
@@ -51,7 +54,7 @@ public class InspectionCommandServiceTests
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<TimeSpan?>())).ReturnsAsync(true);
 
-        _sut = new InspectionCommandService(_unitOfWorkMock.Object, _mapper, _emailServiceMock.Object, _realtimeNotifierMock.Object, logger);
+        _sut = new InspectionCommandService(_unitOfWorkMock.Object, _mapper, _emailServiceMock.Object, _realtimeNotifierMock.Object, _chatRealtimeNotifierMock.Object, logger);
     }
 
     private static Customer CreateCustomer(Guid id, string firstName = "Test", string lastName = "User") =>
