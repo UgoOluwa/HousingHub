@@ -68,7 +68,7 @@ public class PropertyQueryService : IPropertyQueryService
     {
         try
         {
-            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync();
+            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(x => x.IsPublished);
 
             return new BaseResponse<List<PropertyDto>>(
                 _mapper.Map<List<PropertyDto>>(properties), true, string.Empty, ResponseMessages.Successful);
@@ -84,7 +84,7 @@ public class PropertyQueryService : IPropertyQueryService
     {
         try
         {
-            var allProperties = await _unitOfWOrk.PropertyQueries.GetAllAsync();
+            var allProperties = await _unitOfWOrk.PropertyQueries.GetAllAsync(x => x.IsPublished);
             var properties = allProperties.AsEnumerable();
 
             // Text search
@@ -115,6 +115,12 @@ public class PropertyQueryService : IPropertyQueryService
             {
                 properties = properties.Where(x => x.Price <= filter.MaxPrice.Value);
             }
+
+            // Bedrooms filter (requires Bedrooms field on Property entity when added)
+            // if (filter.Bedrooms.HasValue)
+            // {
+            //     properties = properties.Where(x => x.Bedrooms == filter.Bedrooms.Value);
+            // }
 
             // Location filter (by City/State)
             if (!string.IsNullOrWhiteSpace(filter.City) || !string.IsNullOrWhiteSpace(filter.State))
@@ -200,7 +206,7 @@ public class PropertyQueryService : IPropertyQueryService
     {
         try
         {
-            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync();
+            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(x => x.IsPublished);
 
             var newProperties = properties
                 .OrderByDescending(p => p.DateCreated)
@@ -221,7 +227,7 @@ public class PropertyQueryService : IPropertyQueryService
     {
         try
         {
-            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync();
+            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(x => x.IsPublished);
 
             var trending = properties
                 .OrderByDescending(p => p.ViewCount)
@@ -244,7 +250,7 @@ public class PropertyQueryService : IPropertyQueryService
         try
         {
             var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(
-                p => p.Latitude.HasValue && p.Longitude.HasValue);
+                p => p.IsPublished && p.Latitude.HasValue && p.Longitude.HasValue);
 
             var nearby = properties
                 .Select(p => new

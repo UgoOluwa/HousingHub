@@ -15,6 +15,12 @@ public class UploadKycDocumentCommandHandler : IRequestHandler<UploadKycDocument
 
     public async Task<BaseResponse<string>> Handle(UploadKycDocumentCommand request, CancellationToken cancellationToken)
     {
+        if (request.File == null || request.File.Length == 0)
+            return new BaseResponse<string>(false, null, string.Empty, "No file was provided. Please select a valid document to upload.");
+
+        if (request.CustomerId == Guid.Empty)
+            return new BaseResponse<string>(false, null, string.Empty, "Invalid customer ID.");
+
         var url = await _fileStorageService.UploadFileAsync(request.File, $"kyc/{request.CustomerId}");
         return new BaseResponse<string>(true, url, "Document uploaded successfully.", null);
     }

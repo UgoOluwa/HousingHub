@@ -13,6 +13,7 @@ using HousingHub.Application.Property.Queries.GetFiles;
 using HousingHub.Application.Property.Queries.GetNearby;
 using HousingHub.Application.Property.Queries.GetDashboardStats;
 using HousingHub.Application.Property.Queries.GetNew;
+using HousingHub.Application.Property.Commands.Publish;
 using HousingHub.Application.Property.Queries.GetTrending;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.Dtos.PropertyFile;
@@ -114,6 +115,17 @@ public class PropertyController : ControllerBase
         if (userId == null) return Unauthorized();
 
         var response = await _mediator.Send(new GetOwnerDashboardStatsQuery(userId.Value));
+        return Ok(response);
+    }
+
+    // ─── Admin Moderation ────────────────────────────────────────────
+
+    [Authorize(Policy = "Admin")]
+    [HttpPut("{id:guid}/publish")]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Publish(Guid id, [FromQuery] bool isPublished = true)
+    {
+        var response = await _mediator.Send(new PublishPropertyCommand(id, isPublished));
         return Ok(response);
     }
 
