@@ -176,6 +176,22 @@ public class PropertyCommandService : IPropertyCommandService
             if (request.Longitude.HasValue) property.Longitude = request.Longitude.Value;
 
             await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
+
+            if (request.PropertyAddress != null)
+            {
+                var existingAddress = await _unitOfWOrk.PropertyAddressQueries.GetByIdAsync(property.AddressId);
+                if (existingAddress != null)
+                {
+                    if (request.PropertyAddress.Place != null) existingAddress.Place = request.PropertyAddress.Place;
+                    if (request.PropertyAddress.City != null) existingAddress.City = request.PropertyAddress.City;
+                    if (request.PropertyAddress.State != null) existingAddress.State = request.PropertyAddress.State;
+                    if (request.PropertyAddress.Country != null) existingAddress.Country = request.PropertyAddress.Country;
+                    if (request.PropertyAddress.PostalCode != null) existingAddress.PostalCode = request.PropertyAddress.PostalCode;
+
+                    await _unitOfWOrk.PropertyAddressCommands.UpdateAsync(existingAddress);
+                }
+            }
+
             await _unitOfWOrk.SaveAsync();
 
             property.Files = (await _unitOfWOrk.PropertyFileQueries.GetAllAsync(x => x.PropertyId == property.Id)).ToList();
