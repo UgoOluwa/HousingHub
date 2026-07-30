@@ -13,7 +13,7 @@ using HousingHub.Application.Property.Queries.GetFiles;
 using HousingHub.Application.Property.Queries.GetNearby;
 using HousingHub.Application.Property.Queries.GetDashboardStats;
 using HousingHub.Application.Property.Queries.GetNew;
-using HousingHub.Application.Property.Commands.Publish;
+using HousingHub.Application.Property.Commands.PublishProperty;
 using HousingHub.Application.Property.Queries.GetTrending;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.Dtos.PropertyFile;
