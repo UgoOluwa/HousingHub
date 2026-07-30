@@ -27,14 +27,15 @@ public class PropertyQueryService : IPropertyQueryService
     {
         try
         {
-            Property? property = await _unitOfWOrk.PropertyQueries.GetByAsync(
-                x => x.Id == id);
+            Property? property = await _unitOfWOrk.PropertyQueries.GetByIdAsync(id);
 
             if (property is null)
                 return new BaseResponse<PropertyDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
             property.ViewCount++;
             await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
+
+            await AttachFilesAsync(property);
 
             return new BaseResponse<PropertyDto?>(_mapper.Map<PropertyDto>(property), true, string.Empty, ResponseMessages.Successful);
         }
@@ -55,6 +56,8 @@ public class PropertyQueryService : IPropertyQueryService
             if (property is null)
                 return new BaseResponse<PropertyDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
+            await AttachFilesAsync(property);
+
             return new BaseResponse<PropertyDto?>(_mapper.Map<PropertyDto>(property), true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
@@ -69,6 +72,8 @@ public class PropertyQueryService : IPropertyQueryService
         try
         {
             var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(x => x.IsPublished);
+
+            await AttachFilesAsync(properties);
 
             return new BaseResponse<List<PropertyDto>>(
                 _mapper.Map<List<PropertyDto>>(properties), true, string.Empty, ResponseMessages.Successful);
@@ -153,6 +158,8 @@ public class PropertyQueryService : IPropertyQueryService
                 .Take(filter.PageSize)
                 .ToList();
 
+            await AttachFilesAsync(paginatedProperties);
+
             var mappedItems = _mapper.Map<List<PropertyDto>>(paginatedProperties);
             var paginatedResult = new PaginatedResult<PropertyDto>(mappedItems, totalCount, filter.PageNumber, filter.PageSize);
 
@@ -172,6 +179,8 @@ public class PropertyQueryService : IPropertyQueryService
             var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(
                 x => x.OwnerId == ownerId);
 
+            await AttachFilesAsync(properties);
+
             return new BaseResponse<List<PropertyDto>>(
                 _mapper.Map<List<PropertyDto>>(properties), true, string.Empty, ResponseMessages.Successful);
         }
@@ -189,6 +198,8 @@ public class PropertyQueryService : IPropertyQueryService
             var (properties, totalCount) = await _unitOfWOrk.PropertyQueries.GetPagedAsync(
                 filter.PageNumber, filter.PageSize,
                 predicate: x => x.OwnerId == ownerId);
+
+            await AttachFilesAsync(properties);
 
             var mappedItems = _mapper.Map<List<PropertyDto>>(properties);
             var paginatedResult = new PaginatedResult<PropertyDto>(mappedItems, totalCount, filter.PageNumber, filter.PageSize);
@@ -213,6 +224,8 @@ public class PropertyQueryService : IPropertyQueryService
                 .Take(count)
                 .ToList();
 
+            await AttachFilesAsync(newProperties);
+
             return new BaseResponse<List<PropertyDto>>(
                 _mapper.Map<List<PropertyDto>>(newProperties), true, string.Empty, ResponseMessages.Successful);
         }
@@ -234,6 +247,8 @@ public class PropertyQueryService : IPropertyQueryService
                 .Skip(skip)
                 .Take(count)
                 .ToList();
+
+            await AttachFilesAsync(trending);
 
             return new BaseResponse<List<PropertyDto>>(
                 _mapper.Map<List<PropertyDto>>(trending), true, string.Empty, ResponseMessages.Successful);
@@ -265,6 +280,8 @@ public class PropertyQueryService : IPropertyQueryService
                 .Select(x => x.Property)
                 .ToList();
 
+            await AttachFilesAsync(nearby);
+
             return new BaseResponse<List<PropertyDto>>(
                 _mapper.Map<List<PropertyDto>>(nearby), true, string.Empty, ResponseMessages.Successful);
         }
@@ -288,6 +305,29 @@ public class PropertyQueryService : IPropertyQueryService
     }
 
     private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180.0;
+
+    // PropertyFile lives in its own DynamoDB table ([DynamoDBIgnore] on Property.Files),
+    // so it never comes back attached to a Property loaded from PropertyQueries — it must
+    // be fetched and attached separately before mapping to PropertyDto.
+    private async Task AttachFilesAsync(Property property)
+    {
+        var files = await _unitOfWOrk.PropertyFileQueries.GetAllAsync(x => x.PropertyId == property.Id);
+        property.Files = files.ToList();
+    }
+
+    private async Task AttachFilesAsync(IEnumerable<Property> properties)
+    {
+        var propertyList = properties as IReadOnlyCollection<Property> ?? properties.ToList();
+        if (propertyList.Count == 0)
+            return;
+
+        var propertyIds = propertyList.Select(p => p.Id).ToHashSet();
+        var files = await _unitOfWOrk.PropertyFileQueries.GetAllAsync(f => propertyIds.Contains(f.PropertyId));
+        var filesByProperty = files.ToLookup(f => f.PropertyId);
+
+        foreach (var property in propertyList)
+            property.Files = filesByProperty[property.Id].ToList();
+    }
 
     public async Task<BaseResponse<OwnerDashboardStatsDto>> GetOwnerDashboardStatsAsync(Guid ownerId)
     {

@@ -33,6 +33,11 @@ public class PropertyQueryServiceTests
         _unitOfWorkMock.Setup(u => u.PropertyCommands.UpdateAsync(It.IsAny<HousingHub.Model.Entities.Property>())).Returns(Task.CompletedTask);
         _unitOfWorkMock.Setup(u => u.SaveAsync()).Returns(Task.CompletedTask);
 
+        // Every read path now attaches PropertyFiles before mapping; default to none.
+        _unitOfWorkMock
+            .Setup(u => u.PropertyFileQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, bool>>>()))
+            .ReturnsAsync(new List<HousingHub.Model.Entities.PropertyFile>());
+
         _sut = new PropertyQueryService(_unitOfWorkMock.Object, _mapper, logger);
     }
 
@@ -58,8 +63,7 @@ public class PropertyQueryServiceTests
     {
         var property = CreateSampleProperty();
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
+            .Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid))
             .ReturnsAsync(property);
 
         var result = await _sut.GetPropertyAsync(PropertyGuid);
@@ -74,8 +78,7 @@ public class PropertyQueryServiceTests
     public async Task GetPropertyAsync_WhenNotFound_ReturnsFailure()
     {
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
+            .Setup(u => u.PropertyQueries.GetByIdAsync(It.IsAny<Guid>()))
             .ReturnsAsync((HousingHub.Model.Entities.Property?)null);
 
         var result = await _sut.GetPropertyAsync(Guid.NewGuid());
@@ -90,8 +93,7 @@ public class PropertyQueryServiceTests
     {
         var property = CreateSampleProperty();
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
+            .Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid))
             .ReturnsAsync(property);
 
         var result = await _sut.GetPropertyAsync(PropertyGuid);
@@ -249,8 +251,7 @@ public class PropertyQueryServiceTests
     {
         var property = CreateSampleProperty();
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
+            .Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid))
             .ReturnsAsync(property);
 
         var result = await _sut.GetPropertyAsync(PropertyGuid);
@@ -264,8 +265,7 @@ public class PropertyQueryServiceTests
     {
         var property = CreateSampleProperty(propertyId: "PROP-20250101-XYZ789");
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
+            .Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid))
             .ReturnsAsync(property);
 
         var result = await _sut.GetPropertyAsync(PropertyGuid);
@@ -399,8 +399,7 @@ public class PropertyQueryServiceTests
     public async Task GetPropertyAsync_WhenExceptionThrown_ReturnsFailure()
     {
         _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetByAsync(
-                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
+            .Setup(u => u.PropertyQueries.GetByIdAsync(It.IsAny<Guid>()))
             .ThrowsAsync(new InvalidOperationException("DB error"));
 
         var result = await _sut.GetPropertyAsync(Guid.NewGuid());

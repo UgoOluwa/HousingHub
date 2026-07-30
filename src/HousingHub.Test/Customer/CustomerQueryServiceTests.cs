@@ -46,7 +46,7 @@ public class CustomerQueryServiceTests
     {
         var customerId = Guid.NewGuid();
         var customer = CreateCustomer(customerId);
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByIdAsync(customerId)).ReturnsAsync(customer);
 
         var result = await _sut.GetCustomerAsync(customerId);
 
@@ -58,7 +58,7 @@ public class CustomerQueryServiceTests
     [Fact]
     public async Task GetCustomerAsync_WhenNotFound_ReturnsFailure()
     {
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync((HousingHub.Model.Entities.Customer?)null);
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((HousingHub.Model.Entities.Customer?)null);
 
         var result = await _sut.GetCustomerAsync(Guid.NewGuid());
 
@@ -71,7 +71,7 @@ public class CustomerQueryServiceTests
     {
         var customerId = Guid.NewGuid();
         var customer = CreateCustomer(customerId);
-        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByIdAsync(customerId)).ReturnsAsync(customer);
 
         var result = await _sut.GetCustomerAsync(customerId);
 

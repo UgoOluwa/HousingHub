@@ -9,6 +9,7 @@ using HousingHub.Service.Commons.FileStorage;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.Dtos.PropertyAddress;
 using HousingHub.Service.PropertyService;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using System.Linq.Expressions;
@@ -39,6 +40,14 @@ public class PropertyCommandServiceTests
         _unitOfWorkMock.Setup(u => u.PropertyCommands.DeleteAsync(It.IsAny<HousingHub.Model.Entities.Property>())).Returns(Task.CompletedTask);
         _unitOfWorkMock.Setup(u => u.PropertyAddressCommands.InsertAsync(It.IsAny<HousingHub.Model.Entities.PropertyAddress>())).ReturnsAsync(true);
         _unitOfWorkMock.Setup(u => u.SaveAsync()).Returns(Task.CompletedTask);
+
+        // UpdateProperty reloads PropertyFiles before mapping the response; default to none.
+        _unitOfWorkMock
+            .Setup(u => u.PropertyFileQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, bool>>>()))
+            .ReturnsAsync(new List<HousingHub.Model.Entities.PropertyFile>());
+        _unitOfWorkMock
+            .Setup(u => u.PropertyFileCommands.InsertRangeAsync(It.IsAny<IEnumerable<HousingHub.Model.Entities.PropertyFile>>()))
+            .Returns(Task.CompletedTask);
 
         _sut = new PropertyCommandService(logger, _unitOfWorkMock.Object, _mapper, _fileStorageServiceMock.Object);
     }
@@ -141,6 +150,46 @@ public class PropertyCommandServiceTests
         Assert.True(result.IsSuccessful);
         Assert.Equal("Agent Smith", result.Data!.ContactPersonName);
         Assert.Equal("smith@agency.com", result.Data.ContactPersonEmail);
+    }
+
+    private static Mock<IFormFile> CreateFormFile(string fileName = "photo.jpg", long length = 1024)
+    {
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns(fileName);
+        fileMock.Setup(f => f.Length).Returns(length);
+        return fileMock;
+    }
+
+    [Fact]
+    public async Task CreateProperty_WithFiles_PersistsPropertyFileRecords()
+    {
+        SetupOwnerLookup(CreateOwner(CustomerType.HouseOwner));
+        SetupInsertSuccess();
+        _fileStorageServiceMock
+            .Setup(f => f.UploadFileAsync(It.IsAny<IFormFile>(), It.IsAny<string>()))
+            .ReturnsAsync("https://s3.example.com/properties/photo.jpg");
+
+        var dto = CreateValidDto() with { Files = new List<IFormFile> { CreateFormFile().Object } };
+        var result = await _sut.CreateProperty(dto, OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Single(result.Data!.Files!);
+        _unitOfWorkMock.Verify(
+            u => u.PropertyFileCommands.InsertRangeAsync(It.Is<IEnumerable<HousingHub.Model.Entities.PropertyFile>>(files => files.Count() == 1)),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateProperty_WithoutFiles_DoesNotCallInsertRange()
+    {
+        SetupOwnerLookup(CreateOwner(CustomerType.HouseOwner));
+        SetupInsertSuccess();
+
+        await _sut.CreateProperty(CreateValidDto(), OwnerId);
+
+        _unitOfWorkMock.Verify(
+            u => u.PropertyFileCommands.InsertRangeAsync(It.IsAny<IEnumerable<HousingHub.Model.Entities.PropertyFile>>()),
+            Times.Never);
     }
 
     // ??? Update ???????????????????????????????????????????????????????

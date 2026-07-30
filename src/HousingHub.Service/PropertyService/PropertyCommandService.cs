@@ -107,6 +107,9 @@ public class PropertyCommandService : IPropertyCommandService
             if (!isSuccessful)
                 return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.SetCreationFailureMessage(ClassName));
 
+            if (property.Files.Count > 0)
+                await _unitOfWOrk.PropertyFileCommands.InsertRangeAsync(property.Files);
+
             await _unitOfWOrk.SaveAsync();
 
             PropertyDto response = _mapper.Map<PropertyDto>(property);
@@ -174,6 +177,8 @@ public class PropertyCommandService : IPropertyCommandService
 
             await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
             await _unitOfWOrk.SaveAsync();
+
+            property.Files = (await _unitOfWOrk.PropertyFileQueries.GetAllAsync(x => x.PropertyId == property.Id)).ToList();
 
             PropertyDto response = _mapper.Map<PropertyDto>(property);
             return new BaseResponse<PropertyDto>(response, true, string.Empty, ResponseMessages.SetUpdateSuccessMessage(ClassName));

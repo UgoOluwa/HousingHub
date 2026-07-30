@@ -28,7 +28,7 @@ public class CustomerQueryService : ICustomerQueryService
     {
         try
         {
-            Customer? customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == id);
+            Customer? customer = await _unitOfWOrk.CustomerQueries.GetByIdAsync(id);
             if (customer is null)
                 return new BaseResponse<CustomerWithDetailsDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
