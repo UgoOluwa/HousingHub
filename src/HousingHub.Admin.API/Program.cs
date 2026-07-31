@@ -28,6 +28,21 @@ public static class Program
 
         builder.Services.AddAWSLambdaHosting(LambdaEventSource.RestApi);
 
+        var allowedOrigins = builder.Configuration
+            .GetSection("Cors:AllowedOrigins")
+            .Get<string[]>() ?? [];
+
+        builder.Services.AddCors(options =>
+        {
+            options.AddDefaultPolicy(policy =>
+            {
+                policy.WithOrigins(allowedOrigins)
+                      .AllowAnyHeader()
+                      .AllowAnyMethod()
+                      .AllowCredentials();
+            });
+        });
+
         builder.Services.AddSerilog((services, lc) => lc
             .ReadFrom.Configuration(builder.Configuration)
             .ReadFrom.Services(services)
@@ -146,6 +161,7 @@ public static class Program
             app.UseHttpsRedirection();
         }
 
+        app.UseCors();
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapGet("/", () => Results.Redirect("/admin/scalar")).AllowAnonymous();
