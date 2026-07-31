@@ -14,4 +14,6 @@ public interface IEmailService
     Task<bool> SendNewMessageAsync(string recipientEmail, string recipientName, string senderName, string messagePreview);
     /// <summary>Sent to both the owner and the customer ~24 hours before a confirmed inspection.</summary>
     Task<bool> SendInspectionReminderAsync(string recipientEmail, string recipientName, string otherPartyName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime);
+    /// <summary>One-time login code for the admin dashboard's OTP-only sign-in.</summary>
+    Task<bool> SendAdminOtpAsync(string toEmail, string firstName, string otpCode);
 }

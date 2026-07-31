@@ -2,6 +2,7 @@ using Amazon.DynamoDBv2.DataModel;
 using Amazon.DynamoDBv2.DocumentModel;
 using HousingHub.Service.AdminService;
 using HousingHub.Service.Commons.Authentication;
+using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Dtos.Admin;
 using Microsoft.Extensions.Configuration;
 using Moq;
@@ -13,6 +14,7 @@ public class AdminAuthServiceTests
 {
     private readonly Mock<IDynamoDBContext> _dynamoDbMock;
     private readonly Mock<IPasswordHasher> _hasherMock;
+    private readonly Mock<IEmailService> _emailServiceMock;
     private readonly Mock<IConfiguration> _configMock;
     private readonly AdminAuthService _sut;
 
@@ -20,6 +22,7 @@ public class AdminAuthServiceTests
     {
         _dynamoDbMock = new Mock<IDynamoDBContext>();
         _hasherMock = new Mock<IPasswordHasher>();
+        _emailServiceMock = new Mock<IEmailService>();
         _configMock = new Mock<IConfiguration>();
 
         _configMock.Setup(c => c["AdminJwt:Secret"]).Returns("super-secret-key-for-tests-minimum-length-256");
@@ -27,7 +30,10 @@ public class AdminAuthServiceTests
         _configMock.Setup(c => c["AdminJwt:Audience"]).Returns("TestAudience");
         _configMock.Setup(c => c["AdminJwt:ExpirationInMinutes"]).Returns("60");
 
-        _sut = new AdminAuthService(_dynamoDbMock.Object, _hasherMock.Object, _configMock.Object);
+        _emailServiceMock.Setup(e => e.SendAdminOtpAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync(true);
+        _dynamoDbMock.Setup(d => d.SaveAsync(It.IsAny<AdminEntity>(), It.IsAny<System.Threading.CancellationToken>())).Returns(Task.CompletedTask);
+
+        _sut = new AdminAuthService(_dynamoDbMock.Object, _hasherMock.Object, _emailServiceMock.Object, _configMock.Object);
     }
 
     private static AdminEntity MakeAdmin(bool isActive = true) => new()
@@ -69,53 +75,121 @@ public class AdminAuthServiceTests
             .Returns(mockSearch.Object);
     }
 
-    // ── LoginAsync ────────────────────────────────────────────────────────────
+    // ── RequestOtpAsync ───────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Login_ValidCredentials_ReturnsTokenAndName()
+    public async Task RequestOtp_ActiveAdmin_SavesCodeAndSendsEmail()
     {
         var admin = MakeAdmin();
         SetupQuery(new[] { admin });
-        _hasherMock.Setup(h => h.Verify("pass", admin.PasswordHash)).Returns(true);
 
-        var result = await _sut.LoginAsync(admin.Email, "pass");
+        await _sut.RequestOtpAsync(admin.Email);
+
+        Assert.False(string.IsNullOrEmpty(admin.OtpCode));
+        Assert.Equal(6, admin.OtpCode!.Length);
+        Assert.NotNull(admin.OtpExpiresAt);
+        _dynamoDbMock.Verify(d => d.SaveAsync(admin, It.IsAny<System.Threading.CancellationToken>()), Times.Once);
+        _emailServiceMock.Verify(e => e.SendAdminOtpAsync(admin.Email, admin.FirstName, admin.OtpCode!), Times.Once);
+    }
+
+    [Fact]
+    public async Task RequestOtp_InactiveAdmin_DoesNotSendEmail()
+    {
+        var inactiveAdmin = MakeAdmin(isActive: false);
+        SetupQuery(new[] { inactiveAdmin });
+
+        await _sut.RequestOtpAsync(inactiveAdmin.Email);
+
+        _emailServiceMock.Verify(e => e.SendAdminOtpAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RequestOtp_EmailNotFound_DoesNotThrowOrSendEmail()
+    {
+        SetupQuery(Array.Empty<AdminEntity>());
+
+        await _sut.RequestOtpAsync("unknown@test.com");
+
+        _emailServiceMock.Verify(e => e.SendAdminOtpAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    // ── VerifyOtpAsync ────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task VerifyOtp_ValidCode_ReturnsTokenAndClearsCode()
+    {
+        var admin = MakeAdmin();
+        admin.OtpCode = "123456";
+        admin.OtpExpiresAt = DateTime.UtcNow.AddMinutes(5);
+        SetupQuery(new[] { admin });
+
+        var result = await _sut.VerifyOtpAsync(admin.Email, "123456");
 
         Assert.NotNull(result);
         Assert.Equal(admin.FirstName, result!.FirstName);
         Assert.Equal(admin.Email, result.Email);
         Assert.False(string.IsNullOrEmpty(result.Token));
+        Assert.Null(admin.OtpCode);
+        Assert.Null(admin.OtpExpiresAt);
     }
 
     [Fact]
-    public async Task Login_WrongPassword_ReturnsNull()
+    public async Task VerifyOtp_WrongCode_ReturnsNull()
+    {
+        var admin = MakeAdmin();
+        admin.OtpCode = "123456";
+        admin.OtpExpiresAt = DateTime.UtcNow.AddMinutes(5);
+        SetupQuery(new[] { admin });
+
+        var result = await _sut.VerifyOtpAsync(admin.Email, "000000");
+
+        Assert.Null(result);
+        Assert.Equal("123456", admin.OtpCode);
+    }
+
+    [Fact]
+    public async Task VerifyOtp_ExpiredCode_ReturnsNull()
+    {
+        var admin = MakeAdmin();
+        admin.OtpCode = "123456";
+        admin.OtpExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+        SetupQuery(new[] { admin });
+
+        var result = await _sut.VerifyOtpAsync(admin.Email, "123456");
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task VerifyOtp_NoCodeRequested_ReturnsNull()
     {
         var admin = MakeAdmin();
         SetupQuery(new[] { admin });
-        _hasherMock.Setup(h => h.Verify(It.IsAny<string>(), admin.PasswordHash)).Returns(false);
 
-        var result = await _sut.LoginAsync(admin.Email, "wrong");
+        var result = await _sut.VerifyOtpAsync(admin.Email, "123456");
 
         Assert.Null(result);
     }
 
     [Fact]
-    public async Task Login_InactiveAdmin_ReturnsNull()
+    public async Task VerifyOtp_InactiveAdmin_ReturnsNull()
     {
         var inactiveAdmin = MakeAdmin(isActive: false);
+        inactiveAdmin.OtpCode = "123456";
+        inactiveAdmin.OtpExpiresAt = DateTime.UtcNow.AddMinutes(5);
         SetupQuery(new[] { inactiveAdmin });
 
-        var result = await _sut.LoginAsync(inactiveAdmin.Email, "pass");
+        var result = await _sut.VerifyOtpAsync(inactiveAdmin.Email, "123456");
 
         Assert.Null(result);
-        _hasherMock.Verify(h => h.Verify(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
-    public async Task Login_EmailNotFound_ReturnsNull()
+    public async Task VerifyOtp_EmailNotFound_ReturnsNull()
     {
         SetupQuery(Array.Empty<AdminEntity>());
 
-        var result = await _sut.LoginAsync("unknown@test.com", "pass");
+        var result = await _sut.VerifyOtpAsync("unknown@test.com", "123456");
 
         Assert.Null(result);
     }
