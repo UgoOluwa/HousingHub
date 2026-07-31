@@ -7,7 +7,7 @@ public interface IPropertyQueryService
 {
     Task<BaseResponse<PropertyDto?>> GetPropertyAsync(Guid id, Guid? requesterId = null, bool includeUnpublished = false);
     Task<BaseResponse<PropertyDto?>> GetPropertyByPropertyIdAsync(string propertyId);
-    Task<BaseResponse<List<PropertyDto>>> GetAllPropertiesAsync();
+    Task<BaseResponse<List<PropertyDto>>> GetAllPropertiesAsync(bool includeUnpublished = false);
     Task<BaseResponse<PaginatedResult<PropertyDto>>> GetAllPropertiesPaginatedAsync(GetAllPropertiesFilterDto filter);
     Task<BaseResponse<List<PropertyDto>>> GetPropertiesByOwnerAsync(Guid ownerId);
     Task<BaseResponse<PaginatedResult<PropertyDto>>> GetPropertiesByOwnerPaginatedAsync(Guid ownerId, GetMyPropertiesFilterDto filter);
