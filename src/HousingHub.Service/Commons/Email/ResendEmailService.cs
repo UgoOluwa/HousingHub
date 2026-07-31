@@ -38,8 +38,6 @@ internal sealed class ResendEmailService : IEmailService
                 </td>
               </tr>
             </table>
-            <p style="margin:0 0 8px 0;font-size:13px;color:#888888;font-family:Arial,Helvetica,sans-serif;">Or copy and paste this link into your browser:</p>
-            <p style="margin:0 0 28px 0;font-size:12px;color:#07358B;word-break:break-all;font-family:Arial,Helvetica,sans-serif;">{verifyLink}</p>
             <p style="margin:0;font-size:14px;color:#888888;line-height:1.6;font-family:Arial,Helvetica,sans-serif;">
               This link expires in <strong>24 hours</strong>. If you did not create a HousingHub account, you can safely ignore this email.
             </p>
@@ -70,8 +68,6 @@ internal sealed class ResendEmailService : IEmailService
                 </td>
               </tr>
             </table>
-            <p style="margin:0 0 8px 0;font-size:13px;color:#888888;font-family:Arial,Helvetica,sans-serif;">Or copy and paste this link into your browser:</p>
-            <p style="margin:0 0 28px 0;font-size:12px;color:#07358B;word-break:break-all;font-family:Arial,Helvetica,sans-serif;">{resetLink}</p>
             <p style="margin:0;font-size:14px;color:#888888;line-height:1.6;font-family:Arial,Helvetica,sans-serif;">
               If you did not request a password reset, no action is needed. Your account remains secure.
             </p>
