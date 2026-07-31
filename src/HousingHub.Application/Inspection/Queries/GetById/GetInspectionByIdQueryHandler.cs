@@ -16,7 +16,7 @@ public class GetInspectionByIdQueryHandler : IRequestHandler<GetInspectionByIdQu
 
     public async Task<BaseResponse<InspectionDto?>> Handle(GetInspectionByIdQuery request, CancellationToken cancellationToken)
     {
-        var response = await _inspectionQueryService.GetInspectionAsync(request.Id);
+        var response = await _inspectionQueryService.GetInspectionAsync(request.Id, request.AuthenticatedUserId);
         return new BaseResponse<InspectionDto?>(response.IsSuccessful, response.Data, response.Message, null);
     }
 }

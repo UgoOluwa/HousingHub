@@ -7,6 +7,10 @@ namespace HousingHub.Service.InspectionService.Interfaces;
 
 public interface IInspectionQueryService
 {
+    /// <summary>Only the inspection's customer or the property's owner may view it.</summary>
+    Task<BaseResponse<InspectionDto?>> GetInspectionAsync(Guid id, Guid authenticatedUserId);
+
+    /// <summary>Admin: view any inspection, bypassing the participant check.</summary>
     Task<BaseResponse<InspectionDto?>> GetInspectionAsync(Guid id);
     Task<BaseResponse<PaginatedResult<InspectionDto>>> GetInspectionsByPropertyAsync(Guid propertyId, int pageNumber, int pageSize, InspectionStatus? status = null);
     Task<BaseResponse<PaginatedResult<InspectionDto>>> GetInspectionsByCustomerAsync(Guid customerId, int pageNumber, int pageSize, InspectionStatus? status = null);

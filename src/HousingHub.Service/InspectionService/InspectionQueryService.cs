@@ -24,6 +24,29 @@ public class InspectionQueryService : IInspectionQueryService
         _logger = logger;
     }
 
+    public async Task<BaseResponse<InspectionDto?>> GetInspectionAsync(Guid id, Guid authenticatedUserId)
+    {
+        try
+        {
+            var inspection = await _unitOfWOrk.PropertyInspectionQueries.GetByAsync(x => x.Id == id);
+            if (inspection is null)
+                return new BaseResponse<InspectionDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            var property = await _unitOfWOrk.PropertyQueries.GetByAsync(x => x.Id == inspection.PropertyId);
+            bool isParticipant = inspection.CustomerId == authenticatedUserId || property?.OwnerId == authenticatedUserId;
+
+            if (!isParticipant)
+                return new BaseResponse<InspectionDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            return new BaseResponse<InspectionDto?>(_mapper.Map<InspectionDto>(inspection), true, string.Empty, ResponseMessages.Successful);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in GetInspectionAsync: {Message}", ex.Message);
+            return new BaseResponse<InspectionDto?>(null, false, string.Empty, ex.Message);
+        }
+    }
+
     public async Task<BaseResponse<InspectionDto?>> GetInspectionAsync(Guid id)
     {
         try

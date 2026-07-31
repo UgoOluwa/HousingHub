@@ -63,8 +63,11 @@ public class InspectionQueryServiceTests
         _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetByAsync(
             It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
             .ReturnsAsync(inspection);
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByAsync(
+            It.IsAny<Expression<Func<Property, bool>>>()))
+            .ReturnsAsync(CreateProperty());
 
-        var result = await _sut.GetInspectionAsync(InspectionId);
+        var result = await _sut.GetInspectionAsync(InspectionId, CustomerId);
 
         Assert.True(result.IsSuccessful);
         Assert.NotNull(result.Data);
@@ -78,10 +81,44 @@ public class InspectionQueryServiceTests
             It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
             .ReturnsAsync((PropertyInspection?)null);
 
-        var result = await _sut.GetInspectionAsync(Guid.NewGuid());
+        var result = await _sut.GetInspectionAsync(Guid.NewGuid(), Guid.NewGuid());
 
         Assert.False(result.IsSuccessful);
         Assert.Null(result.Data);
+    }
+
+    [Fact]
+    public async Task GetInspectionAsync_WhenRequesterIsNeitherCustomerNorOwner_ReturnsFailure()
+    {
+        var inspection = CreateInspection();
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetByAsync(
+            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync(inspection);
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByAsync(
+            It.IsAny<Expression<Func<Property, bool>>>()))
+            .ReturnsAsync(CreateProperty());
+
+        var result = await _sut.GetInspectionAsync(InspectionId, Guid.NewGuid());
+
+        Assert.False(result.IsSuccessful);
+        Assert.Null(result.Data);
+    }
+
+    [Fact]
+    public async Task GetInspectionAsync_WhenRequesterIsOwner_ReturnsSuccess()
+    {
+        var inspection = CreateInspection();
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetByAsync(
+            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync(inspection);
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByAsync(
+            It.IsAny<Expression<Func<Property, bool>>>()))
+            .ReturnsAsync(CreateProperty());
+
+        var result = await _sut.GetInspectionAsync(InspectionId, OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.NotNull(result.Data);
     }
 
     // ── GetInspectionsByPropertyAsync ────────────────────────────
