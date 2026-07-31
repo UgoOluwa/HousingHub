@@ -39,7 +39,7 @@ public class InspectionQueryService : IInspectionQueryService
                 return new BaseResponse<InspectionDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
             var imageUrl = await GetFirstPropertyImageUrlAsync(inspection.PropertyId);
-            var dto = _mapper.Map<InspectionDto>(inspection) with { PropertyImageUrl = imageUrl };
+            var dto = _mapper.Map<InspectionDto>(inspection) with { PropertyImageUrl = imageUrl, PropertyOwnerId = property?.OwnerId };
 
             return new BaseResponse<InspectionDto?>(dto, true, string.Empty, ResponseMessages.Successful);
         }

@@ -13,7 +13,7 @@ public class PropertyAddressQueryService : IPropertyAddressQueryService
     private readonly IUnitOfWOrk _unitOfWOrk;
     private readonly IMapper _mapper;
     private readonly ILogger<PropertyAddressQueryService> _logger;
-    private const string ClassName = "property";
+    private const string ClassName = "property address";
 
     public PropertyAddressQueryService(IUnitOfWOrk unitOfWOrk, IMapper mapper, ILogger<PropertyAddressQueryService> logger)
     {

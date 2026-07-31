@@ -72,6 +72,7 @@ public class InspectionQueryServiceTests
         Assert.True(result.IsSuccessful);
         Assert.NotNull(result.Data);
         Assert.Equal(InspectionId, result.Data!.Id);
+        Assert.Equal(OwnerId, result.Data.PropertyOwnerId);
     }
 
     [Fact]

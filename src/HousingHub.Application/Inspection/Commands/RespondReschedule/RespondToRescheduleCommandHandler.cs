@@ -16,7 +16,7 @@ public class RespondToRescheduleCommandHandler : IRequestHandler<RespondToResche
 
     public async Task<BaseResponse<InspectionDto?>> Handle(RespondToRescheduleCommand request, CancellationToken cancellationToken)
     {
-        var response = await _inspectionCommandService.RespondToRescheduleAsync(request.InspectionId, request.Accept, request.AuthenticatedUserId);
+        var response = await _inspectionCommandService.RespondToRescheduleAsync(request.InspectionId, request.Accept, request.AuthenticatedUserId, request.Note);
         return new BaseResponse<InspectionDto?>(response.IsSuccessful, response.Data, response.Message, null);
     }
 }

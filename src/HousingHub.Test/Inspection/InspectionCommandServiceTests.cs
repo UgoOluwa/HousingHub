@@ -384,31 +384,58 @@ public class InspectionCommandServiceTests
     }
 
     [Fact]
-    public async Task RespondToReschedule_Decline_CancelsInspection()
+    public async Task RespondToReschedule_Decline_RevertsToConfirmedWithNote()
     {
+        var originalDate = DateTime.UtcNow.AddDays(7);
+        var originalTime = TimeSpan.FromHours(10);
         var inspection = CreateInspection(status: InspectionStatus.Rescheduled);
+        inspection.ScheduledDate = originalDate;
+        inspection.ScheduledTime = originalTime;
         inspection.RescheduledDate = DateTime.UtcNow.AddDays(14);
         inspection.RescheduledTime = TimeSpan.FromHours(14);
         SetupInspectionLookup(inspection);
         SetupPropertyLookup(CreateProperty(ownerId: OwnerId));
         SetupCustomerLookupSequence(CreateCustomer(CustomerId), CreateCustomer(OwnerId, "Owner", "User"));
 
-        var result = await _sut.RespondToRescheduleAsync(InspectionId, false, CustomerId);
+        var result = await _sut.RespondToRescheduleAsync(InspectionId, false, CustomerId, "Doesn't work for me");
 
         Assert.True(result.IsSuccessful);
-        Assert.Equal(InspectionStatus.Cancelled, inspection.Status);
+        Assert.Equal(InspectionStatus.Confirmed, inspection.Status);
+        Assert.Equal(originalDate, inspection.ScheduledDate);
+        Assert.Equal(originalTime, inspection.ScheduledTime);
+        Assert.Equal("Doesn't work for me", inspection.DeclineNote);
     }
 
     [Fact]
-    public async Task RespondToReschedule_WhenNotCustomer_ReturnsFailure()
+    public async Task RespondToReschedule_ByOwner_Succeeds()
     {
+        var rescheduledDate = DateTime.UtcNow.AddDays(14);
+        var rescheduledTime = TimeSpan.FromHours(14);
         var inspection = CreateInspection(status: InspectionStatus.Rescheduled);
+        inspection.RescheduledDate = rescheduledDate;
+        inspection.RescheduledTime = rescheduledTime;
         SetupInspectionLookup(inspection);
+        SetupPropertyLookup(CreateProperty(ownerId: OwnerId));
+        SetupCustomerLookupSequence(CreateCustomer(OwnerId, "Owner", "User"), CreateCustomer(CustomerId));
 
         var result = await _sut.RespondToRescheduleAsync(InspectionId, true, OwnerId);
 
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(InspectionStatus.Confirmed, inspection.Status);
+        Assert.Equal(rescheduledDate, inspection.ScheduledDate);
+    }
+
+    [Fact]
+    public async Task RespondToReschedule_WhenNotParticipant_ReturnsFailure()
+    {
+        var inspection = CreateInspection(status: InspectionStatus.Rescheduled);
+        SetupInspectionLookup(inspection);
+        SetupPropertyLookup(CreateProperty(ownerId: OwnerId));
+
+        var result = await _sut.RespondToRescheduleAsync(InspectionId, true, Guid.NewGuid());
+
         Assert.False(result.IsSuccessful);
-        Assert.Equal(ResponseMessages.InspectionNotCustomer, result.Message);
+        Assert.Equal(ResponseMessages.InspectionNotParticipant, result.Message);
     }
 
     [Fact]
@@ -416,6 +443,7 @@ public class InspectionCommandServiceTests
     {
         var inspection = CreateInspection(status: InspectionStatus.Pending);
         SetupInspectionLookup(inspection);
+        SetupPropertyLookup(CreateProperty(ownerId: OwnerId));
 
         var result = await _sut.RespondToRescheduleAsync(InspectionId, true, CustomerId);
 

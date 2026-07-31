@@ -6,6 +6,8 @@ using HousingHub.Service.ChatService;
 using HousingHub.Service.ChatService.Interfaces;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Dtos.Chat;
+using HousingHub.Service.Dtos.Notification;
+using HousingHub.Service.NotificationService.Interfaces;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using System.Linq.Expressions;
@@ -16,6 +18,7 @@ public class ChatCommandServiceTests
 {
     private readonly Mock<IUnitOfWOrk> _unitOfWorkMock;
     private readonly Mock<IChatRealtimeNotifier> _realtimeNotifierMock;
+    private readonly Mock<IRealtimeNotifier> _bellNotifierMock;
     private readonly Mock<IEmailService> _emailServiceMock;
     private readonly ChatCommandService _sut;
 
@@ -27,6 +30,7 @@ public class ChatCommandServiceTests
     {
         _unitOfWorkMock = new Mock<IUnitOfWOrk> { DefaultValue = DefaultValue.Mock };
         _realtimeNotifierMock = new Mock<IChatRealtimeNotifier>();
+        _bellNotifierMock = new Mock<IRealtimeNotifier>();
         _emailServiceMock = new Mock<IEmailService>();
         var logger = NullLogger<ChatCommandService>.Instance;
 
@@ -35,9 +39,10 @@ public class ChatCommandServiceTests
         _unitOfWorkMock.Setup(u => u.ConversationCommands.UpdateAsync(It.IsAny<Conversation>())).Returns(Task.CompletedTask);
         _unitOfWorkMock.Setup(u => u.ChatMessageCommands.InsertAsync(It.IsAny<ChatMessage>())).ReturnsAsync(true);
         _unitOfWorkMock.Setup(u => u.ChatMessageCommands.UpdateRangeAsync(It.IsAny<IEnumerable<ChatMessage>>())).Returns(Task.CompletedTask);
+        _unitOfWorkMock.Setup(u => u.NotificationCommands.InsertAsync(It.IsAny<Notification>())).ReturnsAsync(true);
         _unitOfWorkMock.Setup(u => u.SaveAsync()).Returns(Task.CompletedTask);
 
-        _sut = new ChatCommandService(_unitOfWorkMock.Object, logger, _realtimeNotifierMock.Object, _emailServiceMock.Object);
+        _sut = new ChatCommandService(_unitOfWorkMock.Object, logger, _realtimeNotifierMock.Object, _bellNotifierMock.Object, _emailServiceMock.Object);
     }
 
     private static Customer CreateCustomer(Guid id, string firstName = "Test", string lastName = "User") =>
@@ -226,6 +231,24 @@ public class ChatCommandServiceTests
 
         _realtimeNotifierMock.Verify(
             n => n.NotifyConversationUpdatedAsync(RecipientId, It.IsAny<ConversationDto>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_CreatesAndPushesBellNotification()
+    {
+        SetupSenderAndRecipient();
+        SetupConversationLookup(CreateConversation());
+        SetupSaveAsync();
+
+        var dto = new SendMessageDto(RecipientId, "Bell test");
+        await _sut.SendMessageAsync(dto, SenderId);
+
+        _unitOfWorkMock.Verify(u => u.NotificationCommands.InsertAsync(
+            It.Is<Notification>(n => n.RecipientId == RecipientId && n.Type == NotificationType.NewMessage)),
+            Times.Once);
+        _bellNotifierMock.Verify(
+            n => n.SendNotificationAsync(RecipientId, It.Is<NotificationDto>(d => d.Type == NotificationType.NewMessage)),
             Times.Once);
     }
 

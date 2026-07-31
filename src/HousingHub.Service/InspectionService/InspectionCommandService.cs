@@ -317,7 +317,7 @@ public class InspectionCommandService : IInspectionCommandService
         }
     }
 
-    public async Task<BaseResponse<InspectionDto>> RespondToRescheduleAsync(Guid inspectionId, bool accept, Guid authenticatedUserId)
+    public async Task<BaseResponse<InspectionDto>> RespondToRescheduleAsync(Guid inspectionId, bool accept, Guid authenticatedUserId, string? note = null)
     {
         try
         {
@@ -327,8 +327,20 @@ public class InspectionCommandService : IInspectionCommandService
             if (inspection == null)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
-            if (inspection.CustomerId != authenticatedUserId)
-                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionNotCustomer);
+            var property = await _unitOfWOrk.PropertyQueries.GetByAsync(
+                x => x.Id == inspection.PropertyId);
+
+            if (property == null)
+                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("property"));
+
+            bool isOwner = property.OwnerId == authenticatedUserId;
+            bool isCustomer = inspection.CustomerId == authenticatedUserId;
+
+            // Either party can propose a reschedule, so either party must be able to
+            // respond to one — this used to be hardcoded to the customer only, which
+            // left owners with no way to respond to a customer-proposed reschedule.
+            if (!isOwner && !isCustomer)
+                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionNotParticipant);
 
             if (inspection.Status != InspectionStatus.Rescheduled)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionNotPendingOrRescheduled);
@@ -341,40 +353,46 @@ public class InspectionCommandService : IInspectionCommandService
             }
             else
             {
-                inspection.Status = InspectionStatus.Cancelled;
+                // Rejecting the proposed time isn't the same as cancelling the
+                // inspection — it reverts to the original (already-unchanged)
+                // scheduled date/time, still confirmed.
+                inspection.Status = InspectionStatus.Confirmed;
+                inspection.DeclineNote = note;
             }
 
             await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
 
-            // Notify property owner (in-app)
-            var property = await _unitOfWOrk.PropertyQueries.GetByAsync(
-                x => x.Id == inspection.PropertyId);
+            // Notify whichever party didn't just respond
+            var responder = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == authenticatedUserId);
+            Guid recipientId = isOwner ? inspection.CustomerId : property.OwnerId;
+            var recipient = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == recipientId);
 
-            var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId);
-
-            if (property != null && customer != null)
+            if (responder != null && recipient != null)
             {
-                var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                    x => x.Id == property.OwnerId);
+                string action = accept ? "accepted" : "declined";
+                string responderRole = isOwner ? "property owner" : "customer";
+                var notificationType = accept ? NotificationType.InspectionConfirmed : NotificationType.InspectionDeclined;
+                var notification = new Notification(
+                    recipient.Id,
+                    inspection.Id,
+                    notificationType,
+                    $"Reschedule {(accept ? "Accepted" : "Declined")}",
+                    $"The {responderRole} ({responder.FirstName} {responder.LastName}) has {action} the proposed reschedule for \"{property.Title}\"." +
+                    (string.IsNullOrWhiteSpace(note) ? "" : $" Note: {note}"));
 
-                if (owner != null)
-                {
-                    string action = accept ? "accepted" : "declined";
-                    var notificationType = accept ? NotificationType.InspectionConfirmed : NotificationType.InspectionCancelled;
-                    var notification = new Notification(
-                        owner.Id,
-                        inspection.Id,
-                        notificationType,
-                        $"Reschedule {(accept ? "Accepted" : "Declined")}",
-                        $"{customer.FirstName} {customer.LastName} has {action} the rescheduled inspection for \"{property.Title}\".");
-
-                    await _unitOfWOrk.NotificationCommands.InsertAsync(notification);
-                    await PushRealtimeNotificationAsync(notification);
-                }
+                await _unitOfWOrk.NotificationCommands.InsertAsync(notification);
+                await PushRealtimeNotificationAsync(notification);
             }
 
             await _unitOfWOrk.SaveAsync();
+
+            if (recipient != null && responder != null)
+            {
+                _ = _emailService.SendInspectionResponseAsync(
+                    recipient.Email, recipient.FirstName,
+                    $"{responder.FirstName} {responder.LastName}",
+                    property.Title, accept ? "Confirmed" : "Declined", note, null, null);
+            }
 
             return new BaseResponse<InspectionDto>(_mapper.Map<InspectionDto>(inspection), true, string.Empty, ResponseMessages.SetUpdateSuccessMessage(ClassName));
         }

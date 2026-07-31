@@ -34,7 +34,7 @@ public class NotificationQueryServiceTests
     }
 
     private static HousingHub.Model.Entities.Notification CreateNotification(
-        Guid? id = null, Guid? recipientId = null, bool isRead = false) => new()
+        Guid? id = null, Guid? recipientId = null, bool isRead = false, DateTime? dateCreated = null) => new()
     {
         Id = id ?? Guid.NewGuid(),
         RecipientId = recipientId ?? UserId,
@@ -43,7 +43,7 @@ public class NotificationQueryServiceTests
         Title = "Test Notification",
         Message = "Test message",
         IsRead = isRead,
-        DateCreated = DateTime.UtcNow
+        DateCreated = dateCreated ?? DateTime.UtcNow
     };
 
     // ── GetNotificationsAsync ────────────────────────────────────
@@ -57,9 +57,9 @@ public class NotificationQueryServiceTests
             CreateNotification()
         };
 
-        _unitOfWorkMock.Setup(u => u.NotificationQueries.GetPagedAsync(
-            1, 10, It.IsAny<Expression<Func<HousingHub.Model.Entities.Notification, bool>>>()))
-            .ReturnsAsync((notifications.AsEnumerable(), 2));
+        _unitOfWorkMock.Setup(u => u.NotificationQueries.GetAllAsync(
+            It.IsAny<Expression<Func<HousingHub.Model.Entities.Notification, bool>>>()))
+            .ReturnsAsync(notifications);
 
         var result = await _sut.GetNotificationsAsync(UserId, 1, 10);
 
@@ -72,23 +72,23 @@ public class NotificationQueryServiceTests
     [Fact]
     public async Task GetNotificationsAsync_WithUnreadFilter_PassesPredicate()
     {
-        _unitOfWorkMock.Setup(u => u.NotificationQueries.GetPagedAsync(
-            1, 10, It.IsAny<Expression<Func<HousingHub.Model.Entities.Notification, bool>>>()))
-            .ReturnsAsync((Enumerable.Empty<HousingHub.Model.Entities.Notification>(), 0));
+        _unitOfWorkMock.Setup(u => u.NotificationQueries.GetAllAsync(
+            It.IsAny<Expression<Func<HousingHub.Model.Entities.Notification, bool>>>()))
+            .ReturnsAsync(Enumerable.Empty<HousingHub.Model.Entities.Notification>());
 
         var result = await _sut.GetNotificationsAsync(UserId, 1, 10, unreadOnly: true);
 
         Assert.True(result.IsSuccessful);
-        _unitOfWorkMock.Verify(u => u.NotificationQueries.GetPagedAsync(
-            1, 10, It.IsAny<Expression<Func<HousingHub.Model.Entities.Notification, bool>>>()), Times.Once);
+        _unitOfWorkMock.Verify(u => u.NotificationQueries.GetAllAsync(
+            It.IsAny<Expression<Func<HousingHub.Model.Entities.Notification, bool>>>()), Times.Once);
     }
 
     [Fact]
     public async Task GetNotificationsAsync_WhenEmpty_ReturnsEmptyResult()
     {
-        _unitOfWorkMock.Setup(u => u.NotificationQueries.GetPagedAsync(
-            1, 10, It.IsAny<Expression<Func<HousingHub.Model.Entities.Notification, bool>>>()))
-            .ReturnsAsync((Enumerable.Empty<HousingHub.Model.Entities.Notification>(), 0));
+        _unitOfWorkMock.Setup(u => u.NotificationQueries.GetAllAsync(
+            It.IsAny<Expression<Func<HousingHub.Model.Entities.Notification, bool>>>()))
+            .ReturnsAsync(Enumerable.Empty<HousingHub.Model.Entities.Notification>());
 
         var result = await _sut.GetNotificationsAsync(UserId, 1, 10);
 
@@ -100,14 +100,32 @@ public class NotificationQueryServiceTests
     public async Task GetNotificationsAsync_MapsFieldsCorrectly()
     {
         var notification = CreateNotification();
-        _unitOfWorkMock.Setup(u => u.NotificationQueries.GetPagedAsync(
-            1, 10, It.IsAny<Expression<Func<HousingHub.Model.Entities.Notification, bool>>>()))
-            .ReturnsAsync((new[] { notification }.AsEnumerable(), 1));
+        _unitOfWorkMock.Setup(u => u.NotificationQueries.GetAllAsync(
+            It.IsAny<Expression<Func<HousingHub.Model.Entities.Notification, bool>>>()))
+            .ReturnsAsync(new[] { notification });
 
         var result = await _sut.GetNotificationsAsync(UserId, 1, 10);
 
         Assert.Equal("Test Notification", result.Data!.Items[0].Title);
         Assert.Equal("Test message", result.Data.Items[0].Message);
+    }
+
+    [Fact]
+    public async Task GetNotificationsAsync_ReturnsNewestFirst()
+    {
+        var oldest = CreateNotification(dateCreated: DateTime.UtcNow.AddDays(-2));
+        var newest = CreateNotification(dateCreated: DateTime.UtcNow);
+        var middle = CreateNotification(dateCreated: DateTime.UtcNow.AddDays(-1));
+
+        _unitOfWorkMock.Setup(u => u.NotificationQueries.GetAllAsync(
+            It.IsAny<Expression<Func<HousingHub.Model.Entities.Notification, bool>>>()))
+            .ReturnsAsync(new[] { oldest, newest, middle });
+
+        var result = await _sut.GetNotificationsAsync(UserId, 1, 10);
+
+        Assert.Equal(newest.Id, result.Data!.Items[0].Id);
+        Assert.Equal(middle.Id, result.Data.Items[1].Id);
+        Assert.Equal(oldest.Id, result.Data.Items[2].Id);
     }
 
     // ── GetUnreadCountAsync ──────────────────────────────────────

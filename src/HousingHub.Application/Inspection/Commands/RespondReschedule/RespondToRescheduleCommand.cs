@@ -7,4 +7,5 @@ namespace HousingHub.Application.Inspection.Commands.RespondReschedule;
 public record RespondToRescheduleCommand(
     Guid InspectionId,
     bool Accept,
-    Guid AuthenticatedUserId) : IRequest<BaseResponse<InspectionDto?>>;
+    Guid AuthenticatedUserId,
+    string? Note = null) : IRequest<BaseResponse<InspectionDto?>>;

@@ -3,6 +3,7 @@ using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.FileStorage;
+using HousingHub.Service.Commons.Geocoding;
 using HousingHub.Service.Commons.Mappings;
 using HousingHub.Service.PropertyService;
 using Mapster;
@@ -24,11 +25,13 @@ public class AdminPropertyCommandServiceTests
         new PropertyMapper().Register(config);
         var mapper = new ObjectMapper(config);
         var fileStorage = new Mock<IFileStorageService>();
+        var geocodingService = new Mock<IGeocodingService>();
         _sut = new PropertyCommandService(
             NullLogger<PropertyCommandService>.Instance,
             _unitOfWorkMock.Object,
             mapper,
-            fileStorage.Object);
+            fileStorage.Object,
+            geocodingService.Object);
     }
 
     private static Property MakeProperty(bool isPublished = false) => new("Title", "Desc",

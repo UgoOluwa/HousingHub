@@ -7,6 +7,7 @@ using HousingHub.Service.ChatService.Interfaces;
 using HousingHub.Service.Commons.Authentication;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.FileStorage;
+using HousingHub.Service.Commons.Geocoding;
 using HousingHub.Service.Commons.Utilities;
 using HousingHub.Service.CustomerAddressService;
 using HousingHub.Service.CustomerAddressService.Interfaces;
@@ -47,6 +48,10 @@ public static class ConfigureServices
         // Email (Resend)
         services.AddHttpClient<ResendEmailService>();
         services.AddScoped<IEmailService, ResendEmailService>();
+
+        // Geocoding (Nominatim/OpenStreetMap)
+        services.AddHttpClient<NominatimGeocodingService>();
+        services.AddScoped<IGeocodingService, NominatimGeocodingService>();
 
         services.AddScoped<ICustomerCommandService, CustomerCommandService>();
         services.AddScoped<ICustomerQueryService, CustomerQueryService>();
