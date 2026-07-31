@@ -38,7 +38,10 @@ public class InspectionQueryService : IInspectionQueryService
             if (!isParticipant)
                 return new BaseResponse<InspectionDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
-            return new BaseResponse<InspectionDto?>(_mapper.Map<InspectionDto>(inspection), true, string.Empty, ResponseMessages.Successful);
+            var imageUrl = await GetFirstPropertyImageUrlAsync(inspection.PropertyId);
+            var dto = _mapper.Map<InspectionDto>(inspection) with { PropertyImageUrl = imageUrl };
+
+            return new BaseResponse<InspectionDto?>(dto, true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
         {
@@ -55,7 +58,10 @@ public class InspectionQueryService : IInspectionQueryService
             if (inspection is null)
                 return new BaseResponse<InspectionDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
-            return new BaseResponse<InspectionDto?>(_mapper.Map<InspectionDto>(inspection), true, string.Empty, ResponseMessages.Successful);
+            var imageUrl = await GetFirstPropertyImageUrlAsync(inspection.PropertyId);
+            var dto = _mapper.Map<InspectionDto>(inspection) with { PropertyImageUrl = imageUrl };
+
+            return new BaseResponse<InspectionDto?>(dto, true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
         {
@@ -95,7 +101,10 @@ public class InspectionQueryService : IInspectionQueryService
                 : x => x.CustomerId == customerId;
 
             var (inspections, totalCount) = await _unitOfWOrk.PropertyInspectionQueries.GetPagedAsync(pageNumber, pageSize, predicate: predicate);
-            var mappedItems = _mapper.Map<List<InspectionDto>>(inspections);
+            var imageUrlByProperty = await GetPropertyImageUrlsAsync(inspections.Select(i => i.PropertyId));
+            var mappedItems = _mapper.Map<List<InspectionDto>>(inspections)
+                .Select(dto => dto with { PropertyImageUrl = imageUrlByProperty.GetValueOrDefault(dto.PropertyId) })
+                .ToList();
 
             return new BaseResponse<PaginatedResult<InspectionDto>>(
                 new PaginatedResult<InspectionDto>(mappedItems, totalCount, pageNumber, pageSize),
@@ -132,12 +141,13 @@ public class InspectionQueryService : IInspectionQueryService
             var pagedInspections = ordered.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
             var pagedPropertyIds = pagedInspections.Select(i => i.PropertyId).ToHashSet();
             var propertyMap = properties.Where(p => pagedPropertyIds.Contains(p.Id)).ToDictionary(p => p.Id);
+            var imageUrlByProperty = await GetPropertyImageUrlsAsync(pagedPropertyIds);
 
             var items = pagedInspections.Select(i =>
             {
                 var property = propertyMap[i.PropertyId];
                 return new OwnerInspectionDto(i.Id, i.InspectionId, property.Title, property.Latitude, property.Longitude,
-                    i.ScheduledDate, i.ScheduledTime, i.DateCreated, i.Status);
+                    i.ScheduledDate, i.ScheduledTime, i.DateCreated, i.Status, imageUrlByProperty.GetValueOrDefault(i.PropertyId));
             }).ToList();
 
             return new BaseResponse<PaginatedResult<OwnerInspectionDto>>(
@@ -283,6 +293,24 @@ public class InspectionQueryService : IInspectionQueryService
             _logger.LogError(ex, "An error occurred in GetTodaysInspectionsPaginatedAsync: {Message}", ex.Message);
             return new BaseResponse<PaginatedResult<AdminTodayInspectionDto>>(null, false, string.Empty, ex.Message);
         }
+    }
+
+    private async Task<string?> GetFirstPropertyImageUrlAsync(Guid propertyId)
+    {
+        var files = await _unitOfWOrk.PropertyFileQueries.GetAllAsync(f => f.PropertyId == propertyId);
+        return files.OrderBy(f => f.DateUploaded).FirstOrDefault()?.FileUrl;
+    }
+
+    private async Task<Dictionary<Guid, string?>> GetPropertyImageUrlsAsync(IEnumerable<Guid> propertyIds)
+    {
+        var ids = propertyIds.ToHashSet();
+        if (ids.Count == 0)
+            return new Dictionary<Guid, string?>();
+
+        var files = await _unitOfWOrk.PropertyFileQueries.GetAllAsync(f => ids.Contains(f.PropertyId));
+        return files
+            .GroupBy(f => f.PropertyId)
+            .ToDictionary(g => g.Key, g => (string?)g.OrderBy(f => f.DateUploaded).First().FileUrl);
     }
 
     public async Task<BaseResponse<List<AdminRecentActivityDto>>> GetRecentActivityAsync(int count = 20)

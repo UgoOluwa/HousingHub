@@ -121,6 +121,37 @@ public class InspectionQueryServiceTests
         Assert.NotNull(result.Data);
     }
 
+    [Fact]
+    public async Task GetInspectionAsync_PopulatesEarliestUploadedPropertyImage()
+    {
+        var inspection = CreateInspection();
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetByAsync(
+            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync(inspection);
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByAsync(
+            It.IsAny<Expression<Func<Property, bool>>>()))
+            .ReturnsAsync(CreateProperty());
+
+        var olderFile = new HousingHub.Model.Entities.PropertyFile("https://files/first.jpg", PropertyFileType.Image, 1024)
+        {
+            PropertyId = PropertyId,
+            DateUploaded = DateTime.UtcNow.AddDays(-2)
+        };
+        var newerFile = new HousingHub.Model.Entities.PropertyFile("https://files/second.jpg", PropertyFileType.Image, 1024)
+        {
+            PropertyId = PropertyId,
+            DateUploaded = DateTime.UtcNow.AddDays(-1)
+        };
+        _unitOfWorkMock.Setup(u => u.PropertyFileQueries.GetAllAsync(
+            It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, bool>>>()))
+            .ReturnsAsync(new List<HousingHub.Model.Entities.PropertyFile> { newerFile, olderFile });
+
+        var result = await _sut.GetInspectionAsync(InspectionId, CustomerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal("https://files/first.jpg", result.Data!.PropertyImageUrl);
+    }
+
     // ── GetInspectionsByPropertyAsync ────────────────────────────
 
     [Fact]
@@ -229,6 +260,35 @@ public class InspectionQueryServiceTests
         Assert.True(result.IsSuccessful);
         Assert.Equal(1, result.Data!.TotalCount);
         Assert.Equal(property.Title, result.Data.Items[0].PropertyName);
+    }
+
+    [Fact]
+    public async Task GetInspectionsByOwnerAsync_PopulatesPropertyImageUrl()
+    {
+        var property = CreateProperty(ownerId: OwnerId);
+        var inspection = CreateInspection(propertyId: property.Id);
+
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetAllAsync(
+            It.IsAny<Expression<Func<Property, bool>>>()))
+            .ReturnsAsync(new[] { property });
+
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetAllAsync(
+            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync(new[] { inspection });
+
+        var file = new HousingHub.Model.Entities.PropertyFile("https://files/owner-view.jpg", PropertyFileType.Image, 1024)
+        {
+            PropertyId = property.Id,
+            DateUploaded = DateTime.UtcNow
+        };
+        _unitOfWorkMock.Setup(u => u.PropertyFileQueries.GetAllAsync(
+            It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, bool>>>()))
+            .ReturnsAsync(new List<HousingHub.Model.Entities.PropertyFile> { file });
+
+        var result = await _sut.GetInspectionsByOwnerAsync(OwnerId, 1, 10);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal("https://files/owner-view.jpg", result.Data!.Items[0].PropertyImageUrl);
     }
 
     [Fact]

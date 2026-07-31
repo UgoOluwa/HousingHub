@@ -14,4 +14,5 @@ public record OwnerInspectionDto(
     DateTime ScheduledDate,
     TimeSpan ScheduledTime,
     DateTime DateCreated,
-    InspectionStatus Status);
+    InspectionStatus Status,
+    string? PropertyImageUrl = null);

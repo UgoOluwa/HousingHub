@@ -16,4 +16,5 @@ public record InspectionDto(
     string? DeclineNote,
     DateTime? RescheduledDate,
     TimeSpan? RescheduledTime,
-    string? RescheduleNote);
+    string? RescheduleNote,
+    string? PropertyImageUrl = null);
