@@ -59,7 +59,7 @@ public class AdminInspectionController(
     {
         var adminId = GetAdminId();
         var dto = new RespondToInspectionDto(id, true, null);
-        var result = await inspectionCommandService.RespondToInspectionAsync(dto, adminId);
+        var result = await inspectionCommandService.RespondToInspectionAsync(dto, adminId, isAdminAction: true);
         if (!result.IsSuccessful) return NotFound(result);
         return Ok(result);
     }
@@ -76,7 +76,7 @@ public class AdminInspectionController(
     {
         var adminId = GetAdminId();
         var dto = new RespondToInspectionDto(id, false, declineNote);
-        var result = await inspectionCommandService.RespondToInspectionAsync(dto, adminId);
+        var result = await inspectionCommandService.RespondToInspectionAsync(dto, adminId, isAdminAction: true);
         if (!result.IsSuccessful) return NotFound(result);
         return Ok(result);
     }
@@ -91,7 +91,7 @@ public class AdminInspectionController(
     public async Task<IActionResult> Cancel(Guid id)
     {
         var adminId = GetAdminId();
-        var result = await inspectionCommandService.CancelInspectionAsync(id, adminId);
+        var result = await inspectionCommandService.CancelInspectionAsync(id, adminId, isAdminAction: true);
         if (!result.IsSuccessful) return NotFound(result);
         return NoContent();
     }

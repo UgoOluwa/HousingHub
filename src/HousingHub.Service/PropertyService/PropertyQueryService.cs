@@ -74,11 +74,11 @@ public class PropertyQueryService : IPropertyQueryService
         }
     }
 
-    public async Task<BaseResponse<List<PropertyDto>>> GetAllPropertiesAsync()
+    public async Task<BaseResponse<List<PropertyDto>>> GetAllPropertiesAsync(bool includeUnpublished = false)
     {
         try
         {
-            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(x => x.IsPublished);
+            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(x => includeUnpublished || x.IsPublished);
 
             await AttachFilesAsync(properties);
 

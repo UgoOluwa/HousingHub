@@ -259,6 +259,44 @@ public class PropertyQueryServiceTests
         Assert.Equal(property.Title, result.Data[0].Title);
     }
 
+    [Fact]
+    public async Task GetAllPropertiesAsync_Default_FiltersToPublishedOnly()
+    {
+        Expression<Func<HousingHub.Model.Entities.Property, bool>>? capturedPredicate = null;
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
+            .Callback<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(p => capturedPredicate = p)
+            .ReturnsAsync(new List<HousingHub.Model.Entities.Property>());
+
+        await _sut.GetAllPropertiesAsync();
+
+        var published = CreateSampleProperty();
+        var unpublished = CreateSampleProperty();
+        unpublished.IsPublished = false;
+
+        var predicate = capturedPredicate!.Compile();
+        Assert.True(predicate(published));
+        Assert.False(predicate(unpublished));
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesAsync_IncludeUnpublished_ReturnsUnpublishedToo()
+    {
+        Expression<Func<HousingHub.Model.Entities.Property, bool>>? capturedPredicate = null;
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
+            .Callback<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(p => capturedPredicate = p)
+            .ReturnsAsync(new List<HousingHub.Model.Entities.Property>());
+
+        await _sut.GetAllPropertiesAsync(includeUnpublished: true);
+
+        var unpublished = CreateSampleProperty();
+        unpublished.IsPublished = false;
+
+        var predicate = capturedPredicate!.Compile();
+        Assert.True(predicate(unpublished));
+    }
+
     // ??? GetPropertiesByOwnerAsync ????????????????????????????????????
 
     [Fact]

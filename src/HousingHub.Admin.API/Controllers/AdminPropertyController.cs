@@ -30,7 +30,7 @@ public class AdminPropertyController(
     [ProducesResponseType(typeof(BaseResponse<PaginatedResult<AdminPropertyListDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll([FromQuery] AdminPropertyFilterDto filter)
     {
-        var allResult = await propertyQueryService.GetAllPropertiesAsync();
+        var allResult = await propertyQueryService.GetAllPropertiesAsync(includeUnpublished: true);
         var all = allResult.Data ?? [];
 
         IEnumerable<PropertyDto> query = all;

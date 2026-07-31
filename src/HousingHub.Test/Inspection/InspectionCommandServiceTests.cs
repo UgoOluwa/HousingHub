@@ -323,6 +323,25 @@ public class InspectionCommandServiceTests
         Assert.False(result.IsSuccessful);
     }
 
+    [Fact]
+    public async Task RespondToInspection_AsAdmin_BypassesOwnerCheckAndSucceeds()
+    {
+        var adminId = Guid.NewGuid();
+        var inspection = CreateInspection(status: InspectionStatus.Pending);
+        SetupInspectionLookup(inspection);
+        SetupPropertyLookup(CreateProperty(ownerId: OwnerId));
+        SetupCustomerLookupSequence(CreateCustomer(CustomerId), CreateCustomer(OwnerId, "Owner", "User"));
+
+        var dto = new RespondToInspectionDto(InspectionId, true, null);
+        var result = await _sut.RespondToInspectionAsync(dto, adminId, isAdminAction: true);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(InspectionStatus.Confirmed, inspection.Status);
+        _chatRealtimeNotifierMock.Verify(
+            n => n.SendMessageAsync(OwnerId, It.Is<ChatMessageDto>(d => d.IsSystemMessage)),
+            Times.Once);
+    }
+
     // ── RescheduleInspectionAsync ────────────────────────────────
 
     [Fact]
@@ -547,6 +566,21 @@ public class InspectionCommandServiceTests
 
         _unitOfWorkMock.Verify(u => u.NotificationCommands.InsertAsync(It.IsAny<Notification>()), Times.Once);
         _realtimeNotifierMock.Verify(r => r.SendNotificationAsync(OwnerId, It.IsAny<Service.Dtos.Notification.NotificationDto>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CancelInspection_AsAdmin_BypassesCustomerCheckAndSucceeds()
+    {
+        var adminId = Guid.NewGuid();
+        var inspection = CreateInspection(status: InspectionStatus.Confirmed);
+        SetupInspectionLookup(inspection);
+        SetupPropertyLookup(CreateProperty(ownerId: OwnerId));
+        SetupCustomerLookupSequence(CreateCustomer(CustomerId));
+
+        var result = await _sut.CancelInspectionAsync(InspectionId, adminId, isAdminAction: true);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(InspectionStatus.Cancelled, inspection.Status);
     }
 
     // ── SendDueInspectionRemindersAsync ───────────────────────────
