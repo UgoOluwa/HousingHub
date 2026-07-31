@@ -41,8 +41,13 @@ public class AdminDashboardServiceTests
             "Customer", scheduledDate ?? DateTime.UtcNow.AddDays(3), TimeSpan.FromHours(10),
             DateTime.UtcNow, status, null, null);
 
+    private static AdminCustomerListDto MakeKycCustomer(bool kycPending) =>
+        new(Guid.NewGuid(), "First", "Last", $"{Guid.NewGuid():N}@test.com", "08000000000",
+            DateTime.UtcNow, true, !kycPending, kycPending, (int)CustomerType.Customer, 0);
+
     private void Setup(
         IEnumerable<CustomerDto>? customers = null,
+        IEnumerable<AdminCustomerListDto>? kycCustomers = null,
         IEnumerable<PropertyDto>? properties = null,
         IEnumerable<AdminInspectionListDto>? inspections = null)
     {
@@ -50,6 +55,13 @@ public class AdminDashboardServiceTests
             .Setup(s => s.GetAllCustomersAsync())
             .ReturnsAsync(new BaseResponse<List<CustomerDto>>(
                 (customers ?? []).ToList(), true, string.Empty, "OK"));
+
+        var kycItems = (kycCustomers ?? []).ToList();
+        _customersMock
+            .Setup(s => s.GetCustomersFilteredAsync(It.IsAny<AdminCustomerFilterDto>(), null))
+            .ReturnsAsync(new BaseResponse<PaginatedResult<AdminCustomerListDto>>(
+                new PaginatedResult<AdminCustomerListDto>(kycItems, kycItems.Count, 1, int.MaxValue),
+                true, string.Empty, "OK"));
 
         _propertiesMock
             .Setup(s => s.GetAllPropertiesAsync())
@@ -118,14 +130,13 @@ public class AdminDashboardServiceTests
     // ── PendingKyc ────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetStats_PendingKyc_CountsNonAdminsWithNonDefaultDateModified()
+    public async Task GetStats_PendingKyc_CountsOnlyCustomersWithSubmittedUnverifiedKyc()
     {
-        Setup(customers: new[]
+        Setup(kycCustomers: new[]
         {
-            MakeCustomer(CustomerType.Customer, dateModified: DateTime.UtcNow),   // KYC submitted
-            MakeCustomer(CustomerType.Customer, dateModified: default),            // never touched
-            MakeCustomer(CustomerType.HouseOwner, dateModified: DateTime.UtcNow), // KYC submitted
-            MakeCustomer(CustomerType.Admin, dateModified: DateTime.UtcNow),      // admin — excluded
+            MakeKycCustomer(kycPending: true),
+            MakeKycCustomer(kycPending: true),
+            MakeKycCustomer(kycPending: false), // already verified, or never submitted
         });
 
         var stats = await _sut.GetStatsAsync();
