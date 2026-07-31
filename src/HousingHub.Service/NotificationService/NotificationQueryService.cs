@@ -29,11 +29,13 @@ public class NotificationQueryService : INotificationQueryService
                 ? x => x.RecipientId == recipientId && !x.IsRead
                 : x => x.RecipientId == recipientId;
 
-            var (notifications, totalCount) = await _unitOfWOrk.NotificationQueries.GetPagedAsync(
-                pageNumber, pageSize,
-                predicate: predicate);
+            var notifications = await _unitOfWOrk.NotificationQueries.GetAllAsync(predicate);
+            var ordered = notifications.OrderByDescending(n => n.DateCreated).ToList();
+            var totalCount = ordered.Count;
 
-            var mappedItems = _mapper.Map<List<NotificationDto>>(notifications);
+            var pagedItems = ordered.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
+
+            var mappedItems = _mapper.Map<List<NotificationDto>>(pagedItems);
             var paginatedResult = new PaginatedResult<NotificationDto>(mappedItems, totalCount, pageNumber, pageSize);
 
             return new BaseResponse<PaginatedResult<NotificationDto>>(paginatedResult, true, string.Empty, ResponseMessages.Successful);
