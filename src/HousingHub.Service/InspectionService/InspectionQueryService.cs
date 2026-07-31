@@ -113,7 +113,7 @@ public class InspectionQueryService : IInspectionQueryService
             var items = pagedInspections.Select(i =>
             {
                 var property = propertyMap[i.PropertyId];
-                return new OwnerInspectionDto(i.InspectionId, property.Title, property.Latitude, property.Longitude,
+                return new OwnerInspectionDto(i.Id, i.InspectionId, property.Title, property.Latitude, property.Longitude,
                     i.ScheduledDate, i.ScheduledTime, i.DateCreated, i.Status);
             }).ToList();
 
