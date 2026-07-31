@@ -20,5 +20,9 @@ public record
     string? ContactPersonEmail,
     string? ContactPersonPhoneNumber,
     Guid OwnerId,
-    CreatePropertyAddressDto? PropertyAddress,
+    // UpdatePropertyAddressDto, not CreatePropertyAddressDto — this is nested inside a
+    // property that doesn't exist yet, so there's no PropertyId to bind from the form
+    // (CreatePropertyAddressDto requires one; form binding silently dropped the whole
+    // object when it was missing, so no address ever got saved on create).
+    UpdatePropertyAddressDto? PropertyAddress,
     IList<IFormFile>? Files = null) : IRequest<BaseResponse<PropertyDto?>>;

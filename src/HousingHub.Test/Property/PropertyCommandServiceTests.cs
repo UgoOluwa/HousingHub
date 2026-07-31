@@ -69,7 +69,7 @@ public class PropertyCommandServiceTests
         ContactPersonEmail: "smith@agency.com",
         ContactPersonPhoneNumber: "08099887766",
         OwnerId: OwnerId,
-        PropertyAddress: new CreatePropertyAddressDto("10 Main St", "Lagos", "Lagos", "Nigeria", "100001", Guid.Empty),
+        PropertyAddress: new UpdatePropertyAddressDto("10 Main St", "Lagos", "Lagos", "Nigeria", "100001"),
         Latitude: null,
         Longitude: null);
 
