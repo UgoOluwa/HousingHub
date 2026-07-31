@@ -27,4 +27,6 @@ public record PropertyDto(
     DateTime? PublishedAt,
     bool IsVerified,
     DateTime? VerifiedAt,
-    List<PropertyFileDto>? Files = null);
+    List<PropertyFileDto>? Files = null,
+    // Count of open (Pending or Rescheduled) inspection requests for this property.
+    int InspectionCount = 0);
