@@ -4,6 +4,7 @@ using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.FileStorage;
+using HousingHub.Service.Commons.Geocoding;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.PropertyService.Interfaces;
 using Microsoft.AspNetCore.Http;
@@ -17,6 +18,7 @@ public class PropertyCommandService : IPropertyCommandService
     private readonly ILogger<PropertyCommandService> _logger;
     private readonly IMapper _mapper;
     private readonly IFileStorageService _fileStorageService;
+    private readonly IGeocodingService _geocodingService;
     private const string ClassName = "property";
     private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
 
@@ -34,12 +36,14 @@ public class PropertyCommandService : IPropertyCommandService
         ILogger<PropertyCommandService> logger,
         IUnitOfWOrk unitOfWOrk,
         IMapper mapper,
-        IFileStorageService fileStorageService)
+        IFileStorageService fileStorageService,
+        IGeocodingService geocodingService)
     {
         _logger = logger;
         _unitOfWOrk = unitOfWOrk;
         _mapper = mapper;
         _fileStorageService = fileStorageService;
+        _geocodingService = geocodingService;
     }
 
     public async Task<BaseResponse<PropertyDto>> CreateProperty(CreatePropertyDto request, Guid authenticatedUserId)
@@ -87,6 +91,19 @@ public class PropertyCommandService : IPropertyCommandService
                 bool addressSaved = await _unitOfWOrk.PropertyAddressCommands.InsertAsync(address);
                 if (!addressSaved)
                     return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.SetCreationFailureMessage("property address"));
+
+                // The client never supplies coordinates directly — geocode the address so
+                // the property can actually be found via "properties near me". Best-effort:
+                // a geocoding failure shouldn't block property creation.
+                if (!property.Latitude.HasValue || !property.Longitude.HasValue)
+                {
+                    var coordinates = await _geocodingService.GeocodeAsync(address.Place, address.City, address.State, address.Country);
+                    if (coordinates.HasValue)
+                    {
+                        property.Latitude = coordinates.Value.Latitude;
+                        property.Longitude = coordinates.Value.Longitude;
+                    }
+                }
 
                 property.Address = address;
                 property.AddressId = address.Id;
@@ -190,6 +207,12 @@ public class PropertyCommandService : IPropertyCommandService
                 var existingAddress = await _unitOfWOrk.PropertyAddressQueries.GetByIdAsync(property.AddressId);
                 if (existingAddress != null)
                 {
+                    bool addressChanged =
+                        (request.PropertyAddress.Place != null && request.PropertyAddress.Place != existingAddress.Place) ||
+                        (request.PropertyAddress.City != null && request.PropertyAddress.City != existingAddress.City) ||
+                        (request.PropertyAddress.State != null && request.PropertyAddress.State != existingAddress.State) ||
+                        (request.PropertyAddress.Country != null && request.PropertyAddress.Country != existingAddress.Country);
+
                     if (request.PropertyAddress.Place != null) existingAddress.Place = request.PropertyAddress.Place;
                     if (request.PropertyAddress.City != null) existingAddress.City = request.PropertyAddress.City;
                     if (request.PropertyAddress.State != null) existingAddress.State = request.PropertyAddress.State;
@@ -197,6 +220,20 @@ public class PropertyCommandService : IPropertyCommandService
                     if (request.PropertyAddress.PostalCode != null) existingAddress.PostalCode = request.PropertyAddress.PostalCode;
 
                     await _unitOfWOrk.PropertyAddressCommands.UpdateAsync(existingAddress);
+
+                    // Re-geocode when the address actually changed, or as a one-time backfill
+                    // for properties saved before geocoding existed.
+                    if (addressChanged || !property.Latitude.HasValue || !property.Longitude.HasValue)
+                    {
+                        var coordinates = await _geocodingService.GeocodeAsync(
+                            existingAddress.Place, existingAddress.City, existingAddress.State, existingAddress.Country);
+                        if (coordinates.HasValue)
+                        {
+                            property.Latitude = coordinates.Value.Latitude;
+                            property.Longitude = coordinates.Value.Longitude;
+                            await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
+                        }
+                    }
                 }
             }
 

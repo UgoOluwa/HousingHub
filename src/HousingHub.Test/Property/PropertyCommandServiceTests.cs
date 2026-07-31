@@ -6,6 +6,7 @@ using HousingHub.Data.RepositoryInterfaces.Queries;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.FileStorage;
+using HousingHub.Service.Commons.Geocoding;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.Dtos.PropertyAddress;
 using HousingHub.Service.PropertyService;
@@ -20,6 +21,7 @@ public class PropertyCommandServiceTests
 {
     private readonly Mock<IUnitOfWOrk> _unitOfWorkMock;
     private readonly Mock<IFileStorageService> _fileStorageServiceMock;
+    private readonly Mock<IGeocodingService> _geocodingServiceMock;
     private readonly IMapper _mapper;
     private readonly PropertyCommandService _sut;
 
@@ -30,6 +32,7 @@ public class PropertyCommandServiceTests
     {
         _unitOfWorkMock = new Mock<IUnitOfWOrk> { DefaultValue = DefaultValue.Mock };
         _fileStorageServiceMock = new Mock<IFileStorageService>();
+        _geocodingServiceMock = new Mock<IGeocodingService>();
         var config = new TypeAdapterConfig();
         new PropertyMapper().Register(config);
         _mapper = new ObjectMapper(config);
@@ -49,7 +52,12 @@ public class PropertyCommandServiceTests
             .Setup(u => u.PropertyFileCommands.InsertRangeAsync(It.IsAny<IEnumerable<HousingHub.Model.Entities.PropertyFile>>()))
             .Returns(Task.CompletedTask);
 
-        _sut = new PropertyCommandService(logger, _unitOfWorkMock.Object, _mapper, _fileStorageServiceMock.Object);
+        // Geocoding is best-effort and network-dependent — default to "couldn't resolve" in tests.
+        _geocodingServiceMock
+            .Setup(g => g.GeocodeAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .ReturnsAsync(((double, double)?)null);
+
+        _sut = new PropertyCommandService(logger, _unitOfWorkMock.Object, _mapper, _fileStorageServiceMock.Object, _geocodingServiceMock.Object);
     }
 
     private Customer CreateOwner(CustomerType type) => new("John", "Doe", "john@test.com", "08012345678", type, "hash")
@@ -213,6 +221,36 @@ public class PropertyCommandServiceTests
         Assert.True(result.IsSuccessful);
         Assert.Equal("New Title", result.Data!.Title);
         Assert.Equal(600000m, result.Data.Price);
+    }
+
+    [Fact]
+    public async Task UpdateProperty_WhenAddressChanges_ReGeocodes()
+    {
+        var addressId = Guid.NewGuid();
+        SetupOwnerLookup(CreateOwner(CustomerType.HouseOwner));
+        SetupPropertyLookup(new HousingHub.Model.Entities.Property
+        {
+            Id = PropertyId,
+            PropertyId = "PROP-TEST",
+            Title = "Title",
+            Description = "Desc",
+            OwnerId = OwnerId,
+            AddressId = addressId
+        });
+        var existingAddress = new HousingHub.Model.Entities.PropertyAddress("Old St", "Ikeja", "Lagos", "Nigeria", "100001") { Id = addressId };
+        _unitOfWorkMock.Setup(u => u.PropertyAddressQueries.GetByIdAsync(addressId)).ReturnsAsync(existingAddress);
+        _unitOfWorkMock.Setup(u => u.PropertyAddressCommands.UpdateAsync(It.IsAny<HousingHub.Model.Entities.PropertyAddress>())).Returns(Task.CompletedTask);
+        _geocodingServiceMock
+            .Setup(g => g.GeocodeAsync("New St", "Ikeja", "Lagos", "Nigeria"))
+            .ReturnsAsync((6.6, 3.3));
+
+        var dto = new UpdatePropertyDto(PropertyId, null, null, null, null, null, null, null, null, null, null,
+            new UpdatePropertyAddressDto("New St", null, null, null, null), null, null);
+        var result = await _sut.UpdateProperty(dto, OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(6.6, result.Data!.Latitude);
+        Assert.Equal(3.3, result.Data.Longitude);
     }
 
     [Fact]
@@ -519,6 +557,35 @@ public class PropertyCommandServiceTests
 
         Assert.True(result.IsSuccessful);
         Assert.NotEqual(Guid.Empty, result.Data!.AddressId);
+    }
+
+    [Fact]
+    public async Task CreateProperty_GeocodesAddress_SetsCoordinates()
+    {
+        SetupOwnerLookup(CreateOwner(CustomerType.HouseOwner));
+        SetupInsertSuccess();
+        _geocodingServiceMock
+            .Setup(g => g.GeocodeAsync("10 Main St", "Lagos", "Lagos", "Nigeria"))
+            .ReturnsAsync((6.5244, 3.3792));
+
+        var result = await _sut.CreateProperty(CreateValidDto(), OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(6.5244, result.Data!.Latitude);
+        Assert.Equal(3.3792, result.Data.Longitude);
+    }
+
+    [Fact]
+    public async Task CreateProperty_WhenGeocodingFails_StillSucceedsWithNullCoordinates()
+    {
+        SetupOwnerLookup(CreateOwner(CustomerType.HouseOwner));
+        SetupInsertSuccess();
+
+        var result = await _sut.CreateProperty(CreateValidDto(), OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Null(result.Data!.Latitude);
+        Assert.Null(result.Data.Longitude);
     }
 
     [Fact]
