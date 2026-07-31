@@ -1,11 +1,13 @@
 using Mapster;
 using HousingHub.Service.Commons.Mappings;
+using HousingHub.Core;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
 using HousingHub.Service.ChatService.Interfaces;
 using HousingHub.Service.Commons.Email;
+using HousingHub.Service.Dtos.Chat;
 using HousingHub.Service.Dtos.Inspection;
 using HousingHub.Service.InspectionService;
 using HousingHub.Service.NotificationService.Interfaces;
@@ -242,6 +244,28 @@ public class InspectionCommandServiceTests
 
         Assert.True(result.IsSuccessful);
         Assert.Equal(InspectionStatus.Confirmed, inspection.Status);
+    }
+
+    [Fact]
+    public async Task RespondToInspection_Accept_PostsSystemChatMessageToBothParties()
+    {
+        var inspection = CreateInspection(status: InspectionStatus.Pending);
+        SetupInspectionLookup(inspection);
+        SetupPropertyLookup(CreateProperty(ownerId: OwnerId));
+        SetupCustomerLookupSequence(CreateCustomer(CustomerId), CreateCustomer(OwnerId, "Owner", "User"));
+
+        var dto = new RespondToInspectionDto(InspectionId, true, null);
+        await _sut.RespondToInspectionAsync(dto, OwnerId);
+
+        _unitOfWorkMock.Verify(u => u.ChatMessageCommands.InsertAsync(
+            It.Is<ChatMessage>(m => m.SenderId == SystemSender.Id)),
+            Times.Once);
+        _chatRealtimeNotifierMock.Verify(
+            n => n.SendMessageAsync(CustomerId, It.Is<ChatMessageDto>(d => d.IsSystemMessage && d.SenderName == SystemSender.DisplayName)),
+            Times.Once);
+        _chatRealtimeNotifierMock.Verify(
+            n => n.SendMessageAsync(OwnerId, It.Is<ChatMessageDto>(d => d.IsSystemMessage && d.SenderName == SystemSender.DisplayName)),
+            Times.Once);
     }
 
     [Fact]
