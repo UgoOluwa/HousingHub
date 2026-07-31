@@ -30,6 +30,10 @@ public class DynamoDbTableInitializer
         {
             CreateGsi("PropertyId-index", "PropertyId"),
         }),
+        ["PropertyReports"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            CreateGsi("PropertyId-index", "PropertyId"),
+        }),
         ["PropertyAddresses"] = ("Id", new List<GlobalSecondaryIndex>
         {
             CreateGsi("PropertyId-index", "PropertyId"),

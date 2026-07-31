@@ -4,6 +4,7 @@ using HousingHub.Application.Commons.Bases;
 using HousingHub.Application.Property.Commands.Create;
 using HousingHub.Application.Property.Commands.Delete;
 using HousingHub.Application.Property.Commands.DeleteFile;
+using HousingHub.Application.Property.Commands.CreateReport;
 using HousingHub.Application.Property.Commands.Update;
 using HousingHub.Application.Property.Commands.UploadFiles;
 using HousingHub.Application.Property.Queries.GetAll;
@@ -200,6 +201,20 @@ public class PropertyController : ControllerBase
         return Ok(response);
     }
 
+    // ─── Reporting ──────────────────────────────────────────────────
+
+    [Authorize]
+    [HttpPost("{id:guid}/report")]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Report(Guid id, [FromBody] ReportPropertyRequest request)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId == null) return Unauthorized();
+
+        var response = await _mediator.Send(new CreatePropertyReportCommand(id, request.Reason, request.Note, userId.Value));
+        return Ok(response);
+    }
+
     private Guid? GetAuthenticatedUserId()
     {
         var claim = User.FindFirst(JwtRegisteredClaimNames.Sub)
@@ -215,4 +230,10 @@ public class PropertyController : ControllerBase
 public class UploadFilesRequest
 {
     public List<IFormFile> Files { get; set; } = [];
+}
+
+public class ReportPropertyRequest
+{
+    public string Reason { get; set; } = string.Empty;
+    public string? Note { get; set; }
 }

@@ -15,6 +15,8 @@ public interface IUnitOfWOrk : IDisposable
     IPropertyAddressQueryRepository PropertyAddressQueries { get; }
     IPropertyFileCommandRepository PropertyFileCommands { get; }
     IPropertyFileQueryRepository PropertyFileQueries { get; }
+    IPropertyReportCommandRepository PropertyReportCommands { get; }
+    IPropertyReportQueryRepository PropertyReportQueries { get; }
     IPropertyCommandRepository PropertyCommands { get; }
     IPropertyQueryRepository PropertyQueries { get; }
     INotificationCommandRepository NotificationCommands { get; }

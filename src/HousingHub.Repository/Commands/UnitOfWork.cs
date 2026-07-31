@@ -16,6 +16,8 @@ public class UnitOfWork : IUnitOfWOrk
     public IPropertyAddressQueryRepository PropertyAddressQueries { get; }
     public IPropertyFileCommandRepository PropertyFileCommands { get; }
     public IPropertyFileQueryRepository PropertyFileQueries { get; }
+    public IPropertyReportCommandRepository PropertyReportCommands { get; }
+    public IPropertyReportQueryRepository PropertyReportQueries { get; }
     public IPropertyCommandRepository PropertyCommands { get; }
     public IPropertyQueryRepository PropertyQueries { get; }
     public INotificationCommandRepository NotificationCommands { get; }
@@ -36,6 +38,8 @@ public class UnitOfWork : IUnitOfWOrk
         IPropertyAddressQueryRepository propertyAddressQueries,
         IPropertyFileCommandRepository propertyFileCommands,
         IPropertyFileQueryRepository propertyFileQueries,
+        IPropertyReportCommandRepository propertyReportCommands,
+        IPropertyReportQueryRepository propertyReportQueries,
         IPropertyCommandRepository propertyCommands,
         IPropertyQueryRepository propertyQueries,
         INotificationCommandRepository notificationCommands,
@@ -55,6 +59,8 @@ public class UnitOfWork : IUnitOfWOrk
         PropertyAddressQueries = propertyAddressQueries;
         PropertyFileCommands = propertyFileCommands;
         PropertyFileQueries = propertyFileQueries;
+        PropertyReportCommands = propertyReportCommands;
+        PropertyReportQueries = propertyReportQueries;
         PropertyCommands = propertyCommands;
         PropertyQueries = propertyQueries;
         NotificationCommands = notificationCommands;

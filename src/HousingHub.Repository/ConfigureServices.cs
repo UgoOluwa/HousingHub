@@ -17,10 +17,12 @@ public static class ConfigureServices
         services.AddScoped<IPropertyQueryRepository, PropertyQueryRepository>();
         services.AddScoped<IPropertyAddressQueryRepository, PropertyAddressQueryRepository>();
         services.AddScoped<IPropertyFileQueryRepository, PropertyFileQueryRepository>();
+        services.AddScoped<IPropertyReportQueryRepository, PropertyReportQueryRepository>();
         services.AddScoped<IPropertyInspectionQueryRepository, PropertyInspectionQueryRepository>();
         services.AddScoped<IPropertyCommandRepository, PropertyCommandRepository>();
         services.AddScoped<IPropertyAddressCommandRepository, PropertyAddressCommandRepository>();
         services.AddScoped<IPropertyFileCommandRepository, PropertyFileCommandRepository>();
+        services.AddScoped<IPropertyReportCommandRepository, PropertyReportCommandRepository>();
         services.AddScoped<IPropertyInspectionCommandRepository, PropertyInspectionCommandRepository>();
         services.AddScoped<INotificationCommandRepository, NotificationCommandRepository>();
         services.AddScoped<INotificationQueryRepository, NotificationQueryRepository>();

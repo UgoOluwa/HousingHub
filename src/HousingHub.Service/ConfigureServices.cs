@@ -20,6 +20,8 @@ using HousingHub.Service.PropertyAddressService;
 using HousingHub.Service.PropertyAddressService.Interfaces;
 using HousingHub.Service.PropertyFileService;
 using HousingHub.Service.PropertyFileService.Interfaces;
+using HousingHub.Service.PropertyReportService;
+using HousingHub.Service.PropertyReportService.Interfaces;
 using HousingHub.Service.PropertyService;
 using HousingHub.Service.PropertyService.Interfaces;
 using HousingHub.Service.Commons.Mappings;
@@ -54,6 +56,7 @@ public static class ConfigureServices
         services.AddScoped<ICustomerAddressQueryService, CustomerAddressQueryService>();
         services.AddScoped<IPropertyAddressQueryService, PropertyAddressQueryService>();
         services.AddScoped<IPropertyAddressCommandService, PropertyAddressCommandService>();
+        services.AddScoped<IPropertyReportCommandService, PropertyReportCommandService>();
         services.AddScoped<IInspectionCommandService, InspectionCommandService>();
         services.AddScoped<IInspectionQueryService, InspectionQueryService>();
         services.AddScoped<INotificationCommandService, NotificationCommandService>();
