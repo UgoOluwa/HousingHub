@@ -548,4 +548,89 @@ public class InspectionCommandServiceTests
         _unitOfWorkMock.Verify(u => u.NotificationCommands.InsertAsync(It.IsAny<Notification>()), Times.Once);
         _realtimeNotifierMock.Verify(r => r.SendNotificationAsync(OwnerId, It.IsAny<Service.Dtos.Notification.NotificationDto>()), Times.Once);
     }
+
+    // ── SendDueInspectionRemindersAsync ───────────────────────────
+
+    private PropertyInspection CreateConfirmedInspection(DateTime scheduledAt, DateTime? reminderSentAt = null)
+    {
+        var inspection = CreateInspection(status: InspectionStatus.Confirmed);
+        inspection.ScheduledDate = scheduledAt.Date;
+        inspection.ScheduledTime = scheduledAt.TimeOfDay;
+        inspection.ReminderSentAt = reminderSentAt;
+        return inspection;
+    }
+
+    [Fact]
+    public async Task SendDueReminders_WhenDueWithin24Hours_SendsEmailAndChatToBothParties()
+    {
+        var inspection = CreateConfirmedInspection(DateTime.UtcNow.AddHours(20));
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetAllAsync(
+            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync(new[] { inspection });
+        SetupPropertyLookup(CreateProperty(ownerId: OwnerId));
+        SetupCustomerLookupSequence(CreateCustomer(CustomerId), CreateCustomer(OwnerId, "Owner", "User"));
+
+        var result = await _sut.SendDueInspectionRemindersAsync();
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(1, result.Data);
+        Assert.NotNull(inspection.ReminderSentAt);
+
+        _emailServiceMock.Verify(e => e.SendInspectionReminderAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<TimeSpan>()),
+            Times.Exactly(2));
+        _unitOfWorkMock.Verify(u => u.ChatMessageCommands.InsertAsync(
+            It.Is<ChatMessage>(m => m.SenderId == SystemSender.Id)), Times.Once);
+        _chatRealtimeNotifierMock.Verify(n => n.SendMessageAsync(CustomerId, It.Is<ChatMessageDto>(d => d.IsSystemMessage)), Times.Once);
+        _chatRealtimeNotifierMock.Verify(n => n.SendMessageAsync(OwnerId, It.Is<ChatMessageDto>(d => d.IsSystemMessage)), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendDueReminders_WhenAlreadyReminded_SkipsIt()
+    {
+        var inspection = CreateConfirmedInspection(DateTime.UtcNow.AddHours(20), reminderSentAt: DateTime.UtcNow.AddMinutes(-5));
+        // The real repository predicate excludes already-reminded inspections —
+        // simulate that by returning an empty result, since the mock doesn't
+        // evaluate the predicate itself.
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetAllAsync(
+            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync(Enumerable.Empty<PropertyInspection>());
+
+        var result = await _sut.SendDueInspectionRemindersAsync();
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(0, result.Data);
+        _unitOfWorkMock.Verify(u => u.ChatMessageCommands.InsertAsync(It.IsAny<ChatMessage>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SendDueReminders_WhenNotDueYet_SkipsIt()
+    {
+        var inspection = CreateConfirmedInspection(DateTime.UtcNow.AddHours(48));
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetAllAsync(
+            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync(new[] { inspection });
+
+        var result = await _sut.SendDueInspectionRemindersAsync();
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(0, result.Data);
+        Assert.Null(inspection.ReminderSentAt);
+        _unitOfWorkMock.Verify(u => u.ChatMessageCommands.InsertAsync(It.IsAny<ChatMessage>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SendDueReminders_WhenAlreadyPast_SkipsIt()
+    {
+        var inspection = CreateConfirmedInspection(DateTime.UtcNow.AddHours(-1));
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetAllAsync(
+            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync(new[] { inspection });
+
+        var result = await _sut.SendDueInspectionRemindersAsync();
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(0, result.Data);
+        _unitOfWorkMock.Verify(u => u.ChatMessageCommands.InsertAsync(It.IsAny<ChatMessage>()), Times.Never);
+    }
 }
