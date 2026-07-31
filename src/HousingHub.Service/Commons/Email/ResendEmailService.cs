@@ -255,6 +255,36 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(recipientEmail, $"New message from {senderName}", text, html);
     }
 
+    public async Task<bool> SendInspectionReminderAsync(string recipientEmail, string recipientName, string otherPartyName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime)
+    {
+        string body = $"""
+            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Inspection Reminder</h1>
+            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {recipientName},</p>
+            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+              This is a reminder that your inspection with <strong>{otherPartyName}</strong> for <strong>{propertyTitle}</strong> is coming up in about 24 hours.
+            </p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
+              <tr>
+                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;">
+                  <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#07358B;text-transform:uppercase;letter-spacing:0.8px;font-family:Arial,Helvetica,sans-serif;">Inspection Details</p>
+                  <p style="margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Property:</strong> {propertyTitle}</p>
+                  <p style="margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Date:</strong> {scheduledDate:yyyy-MM-dd}</p>
+                  <p style="margin:0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Time:</strong> {scheduledTime:hh\:mm}</p>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+              Please arrive on time and bring a valid ID. Log in to your HousingHub dashboard or message the other party via chat if you have any questions.
+            </p>
+            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            """;
+
+        string html = WrapInLayout("Inspection Reminder", body);
+        string text = $"Hi {recipientName}, reminder: your inspection with {otherPartyName} for {propertyTitle} is in about 24 hours, on {scheduledDate:yyyy-MM-dd} at {scheduledTime:hh\\:mm}.";
+
+        return await SendAsync(recipientEmail, $"Reminder: Inspection for {propertyTitle} in 24 hours", text, html);
+    }
+
     /// <summary>
     /// Wraps a body-content HTML fragment in the shared HousingHub email shell
     /// (brand header, white content card, footer) so every email method only

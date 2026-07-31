@@ -33,6 +33,9 @@ public class PropertyInspection : BaseEntity
 
     public string? RescheduleNote { get; set; }
 
+    /// <summary>Set once the 24-hour reminder has been sent, so the reminder worker never sends it twice.</summary>
+    public DateTime? ReminderSentAt { get; set; }
+
     [DynamoDBIgnore]
     public TimeSpan ScheduledTime
     {

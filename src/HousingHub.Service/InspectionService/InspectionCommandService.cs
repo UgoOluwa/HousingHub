@@ -171,45 +171,9 @@ public class InspectionCommandService : IInspectionCommandService
             // to both parties.
             if (request.Accept && owner != null && customer != null)
             {
-                var conversation = await _unitOfWOrk.ConversationQueries.GetByAsync(
-                    c => (c.ParticipantOneId == owner.Id && c.ParticipantTwoId == customer.Id) ||
-                         (c.ParticipantOneId == customer.Id && c.ParticipantTwoId == owner.Id));
-
-                if (conversation == null)
-                {
-                    conversation = new Conversation(owner.Id, customer.Id);
-                    await _unitOfWOrk.ConversationCommands.InsertAsync(conversation);
-                }
-
-                string chatContent = $"Your inspection for \"{property.Title}\" has been confirmed for {inspection.ScheduledDate:yyyy-MM-dd} at {DateTime.Today.Add(inspection.ScheduledTime):hh:mm tt}. Please arrive on time and bring a valid ID. Contact the other party via this chat if you have any questions.";
-
-                var chatMessage = new ChatMessage(conversation.Id, SystemSender.Id, chatContent);
-                await _unitOfWOrk.ChatMessageCommands.InsertAsync(chatMessage);
-
-                conversation.LastMessage = chatContent.Length > 100 ? chatContent[..100] + "..." : chatContent;
-                conversation.LastMessageAt = chatMessage.DateCreated;
-                await _unitOfWOrk.ConversationCommands.UpdateAsync(conversation);
-
-                // Push real-time chat notification to both participants
-                string ownerName = $"{owner.FirstName} {owner.LastName}";
-                string customerName = $"{customer.FirstName} {customer.LastName}";
-                var chatMessageDto = new ChatMessageDto(
-                    chatMessage.Id,
-                    chatMessage.ConversationId,
-                    chatMessage.SenderId,
-                    SystemSender.DisplayName,
-                    chatMessage.Content,
-                    chatMessage.IsRead,
-                    chatMessage.DateCreated,
-                    IsSystemMessage: true);
-
-                _ = _chatRealtimeNotifier.SendMessageAsync(customer.Id, chatMessageDto);
-                _ = _chatRealtimeNotifier.SendMessageAsync(owner.Id, chatMessageDto);
-
-                _ = _chatRealtimeNotifier.NotifyConversationUpdatedAsync(customer.Id, new ConversationDto(
-                    conversation.Id, owner.Id, ownerName, conversation.LastMessage, conversation.LastMessageAt, 1));
-                _ = _chatRealtimeNotifier.NotifyConversationUpdatedAsync(owner.Id, new ConversationDto(
-                    conversation.Id, customer.Id, customerName, conversation.LastMessage, conversation.LastMessageAt, 1));
+                await PostSystemChatMessageAsync(
+                    owner, customer,
+                    $"Your inspection for \"{property.Title}\" has been confirmed for {inspection.ScheduledDate:yyyy-MM-dd} at {DateTime.Today.Add(inspection.ScheduledTime):hh:mm tt}. Please arrive on time and bring a valid ID. Contact the other party via this chat if you have any questions.");
             }
 
             string action = request.Accept ? "Confirmed" : "Declined";
@@ -453,6 +417,99 @@ public class InspectionCommandService : IInspectionCommandService
             _logger.LogError(ex, "An error occurred in CancelInspectionAsync: {Message}", ex.Message);
             return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
         }
+    }
+
+    public async Task<BaseResponse<int>> SendDueInspectionRemindersAsync()
+    {
+        try
+        {
+            var now = DateTime.UtcNow;
+            var reminderCutoff = now.AddHours(24);
+
+            var candidates = await _unitOfWOrk.PropertyInspectionQueries.GetAllAsync(
+                i => i.Status == InspectionStatus.Confirmed && i.ReminderSentAt == null);
+
+            int sentCount = 0;
+
+            foreach (var inspection in candidates)
+            {
+                var scheduledAt = inspection.ScheduledDate.Date + inspection.ScheduledTime;
+
+                // Due within the next 24 hours, and not already in the past.
+                if (scheduledAt <= now || scheduledAt > reminderCutoff)
+                    continue;
+
+                var property = await _unitOfWOrk.PropertyQueries.GetByAsync(x => x.Id == inspection.PropertyId);
+                if (property == null) continue;
+
+                var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == inspection.CustomerId);
+                var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == property.OwnerId);
+                if (customer == null || owner == null) continue;
+
+                string ownerName = $"{owner.FirstName} {owner.LastName}";
+                string customerName = $"{customer.FirstName} {customer.LastName}";
+
+                _ = _emailService.SendInspectionReminderAsync(
+                    customer.Email, customer.FirstName, ownerName, property.Title, inspection.ScheduledDate, inspection.ScheduledTime);
+                _ = _emailService.SendInspectionReminderAsync(
+                    owner.Email, owner.FirstName, customerName, property.Title, inspection.ScheduledDate, inspection.ScheduledTime);
+
+                await PostSystemChatMessageAsync(
+                    owner, customer,
+                    $"Reminder: your inspection for \"{property.Title}\" is scheduled for {inspection.ScheduledDate:yyyy-MM-dd} at {DateTime.Today.Add(inspection.ScheduledTime):hh:mm tt} — about 24 hours from now. Please arrive on time and bring a valid ID.");
+
+                inspection.ReminderSentAt = now;
+                await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
+
+                sentCount++;
+            }
+
+            await _unitOfWOrk.SaveAsync();
+
+            return new BaseResponse<int>(sentCount, true, string.Empty, $"Sent {sentCount} inspection reminder(s).");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in SendDueInspectionRemindersAsync: {Message}", ex.Message);
+            return new BaseResponse<int>(0, false, string.Empty, ex.Message);
+        }
+    }
+
+    /// <summary>Posts an automated message (attributed to Admin, not either user) into the owner-customer conversation, live to both.</summary>
+    private async Task PostSystemChatMessageAsync(Customer owner, Customer customer, string content)
+    {
+        var conversation = await _unitOfWOrk.ConversationQueries.GetByAsync(
+            c => (c.ParticipantOneId == owner.Id && c.ParticipantTwoId == customer.Id) ||
+                 (c.ParticipantOneId == customer.Id && c.ParticipantTwoId == owner.Id));
+
+        if (conversation == null)
+        {
+            conversation = new Conversation(owner.Id, customer.Id);
+            await _unitOfWOrk.ConversationCommands.InsertAsync(conversation);
+        }
+
+        var chatMessage = new ChatMessage(conversation.Id, SystemSender.Id, content);
+        await _unitOfWOrk.ChatMessageCommands.InsertAsync(chatMessage);
+
+        conversation.LastMessage = content.Length > 100 ? content[..100] + "..." : content;
+        conversation.LastMessageAt = chatMessage.DateCreated;
+        await _unitOfWOrk.ConversationCommands.UpdateAsync(conversation);
+
+        var chatMessageDto = new ChatMessageDto(
+            chatMessage.Id, chatMessage.ConversationId, chatMessage.SenderId,
+            SystemSender.DisplayName, chatMessage.Content, chatMessage.IsRead, chatMessage.DateCreated,
+            IsSystemMessage: true);
+
+        _ = _chatRealtimeNotifier.SendMessageAsync(customer.Id, chatMessageDto);
+        _ = _chatRealtimeNotifier.SendMessageAsync(owner.Id, chatMessageDto);
+
+        string ownerName = $"{owner.FirstName} {owner.LastName}";
+        string customerName = $"{customer.FirstName} {customer.LastName}";
+
+        _ = _chatRealtimeNotifier.NotifyConversationUpdatedAsync(customer.Id, new ConversationDto(
+            conversation.Id, owner.Id, ownerName, conversation.LastMessage, conversation.LastMessageAt, 1));
+        _ = _chatRealtimeNotifier.NotifyConversationUpdatedAsync(owner.Id, new ConversationDto(
+            conversation.Id, customer.Id, customerName, conversation.LastMessage, conversation.LastMessageAt, 1));
     }
 
     private async Task PushRealtimeNotificationAsync(Notification notification)

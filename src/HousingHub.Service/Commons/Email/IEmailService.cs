@@ -12,4 +12,6 @@ public interface IEmailService
     Task<bool> SendInspectionResponseAsync(string customerEmail, string customerName, string ownerName, string propertyTitle, string action, string? note, DateTime? rescheduledDate, TimeSpan? rescheduledTime);
     /// <summary>Sent to a chat participant when they receive a new message while offline/unread.</summary>
     Task<bool> SendNewMessageAsync(string recipientEmail, string recipientName, string senderName, string messagePreview);
+    /// <summary>Sent to both the owner and the customer ~24 hours before a confirmed inspection.</summary>
+    Task<bool> SendInspectionReminderAsync(string recipientEmail, string recipientName, string otherPartyName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime);
 }
