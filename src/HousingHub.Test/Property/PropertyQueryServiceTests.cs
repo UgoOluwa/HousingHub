@@ -519,4 +519,60 @@ public class PropertyQueryServiceTests
         Assert.Empty(result.Data);
         Assert.Contains("Network error", result.Message);
     }
+
+    // ??? GetPropertiesByOwnerPaginatedAsync ? InspectionCount ??????????
+
+    private static PropertyInspection CreateInspection(Guid propertyId, InspectionStatus status) =>
+        new(Guid.NewGuid(), propertyId, DateTime.UtcNow.AddDays(7), TimeSpan.FromHours(10), null)
+        {
+            Status = status
+        };
+
+    [Fact]
+    public async Task GetPropertiesByOwnerPaginatedAsync_CountsOnlyOpenInspections()
+    {
+        var property = CreateSampleProperty();
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetPagedAsync(1, 10, It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
+            .ReturnsAsync((new List<HousingHub.Model.Entities.Property> { property }, 1));
+
+        // The mocked repository stands in for a DynamoDB query that already applies
+        // the predicate server-side, so it returns only the open (Pending/Rescheduled)
+        // inspections the real production predicate would match — Completed and
+        // Cancelled inspections for this property are deliberately excluded here.
+        var openInspections = new List<PropertyInspection>
+        {
+            CreateInspection(property.Id, InspectionStatus.Pending),
+            CreateInspection(property.Id, InspectionStatus.Rescheduled),
+        };
+        _unitOfWorkMock
+            .Setup(u => u.PropertyInspectionQueries.GetAllAsync(
+                It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync(openInspections);
+
+        var result = await _sut.GetPropertiesByOwnerPaginatedAsync(OwnerId, new GetMyPropertiesFilterDto { PageNumber = 1, PageSize = 10 });
+
+        Assert.True(result.IsSuccessful);
+        var dto = Assert.Single(result.Data!.Items);
+        Assert.Equal(2, dto.InspectionCount);
+    }
+
+    [Fact]
+    public async Task GetPropertiesByOwnerPaginatedAsync_WithNoInspections_ReturnsZeroCount()
+    {
+        var property = CreateSampleProperty();
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetPagedAsync(1, 10, It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
+            .ReturnsAsync((new List<HousingHub.Model.Entities.Property> { property }, 1));
+        _unitOfWorkMock
+            .Setup(u => u.PropertyInspectionQueries.GetAllAsync(
+                It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync(new List<PropertyInspection>());
+
+        var result = await _sut.GetPropertiesByOwnerPaginatedAsync(OwnerId, new GetMyPropertiesFilterDto { PageNumber = 1, PageSize = 10 });
+
+        Assert.True(result.IsSuccessful);
+        var dto = Assert.Single(result.Data!.Items);
+        Assert.Equal(0, dto.InspectionCount);
+    }
 }

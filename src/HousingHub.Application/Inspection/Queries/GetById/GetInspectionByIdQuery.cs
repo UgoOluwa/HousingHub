@@ -4,4 +4,4 @@ using MediatR;
 
 namespace HousingHub.Application.Inspection.Queries.GetById;
 
-public record GetInspectionByIdQuery(Guid Id) : IRequest<BaseResponse<InspectionDto?>>;
+public record GetInspectionByIdQuery(Guid Id, Guid AuthenticatedUserId) : IRequest<BaseResponse<InspectionDto?>>;

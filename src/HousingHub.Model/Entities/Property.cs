@@ -47,6 +47,8 @@ public class Property : BaseEntity
     // Admin moderation
     public bool IsPublished { get; set; } = false;
     public DateTime? PublishedAt { get; set; }
+    public bool IsVerified { get; set; } = false;
+    public DateTime? VerifiedAt { get; set; }
 
     public Property() { }
 

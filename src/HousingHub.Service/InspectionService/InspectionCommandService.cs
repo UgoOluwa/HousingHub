@@ -59,6 +59,12 @@ public class InspectionCommandService : IInspectionCommandService
             if (property.OwnerId == authenticatedUserId)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.CannotInspectOwnProperty);
 
+            bool hasPendingRequest = await _unitOfWOrk.PropertyInspectionQueries.AnyAsync(
+                x => x.CustomerId == authenticatedUserId && x.PropertyId == request.PropertyId && x.Status == InspectionStatus.Pending);
+
+            if (hasPendingRequest)
+                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionAlreadyPending);
+
             var inspection = new PropertyInspection(authenticatedUserId, request.PropertyId, request.ScheduledDate, request.ScheduledTime, request.Note);
 
             bool isSuccessful = await _unitOfWOrk.PropertyInspectionCommands.InsertAsync(inspection);
@@ -82,6 +88,17 @@ public class InspectionCommandService : IInspectionCommandService
                 await PushRealtimeNotificationAsync(notification);
             }
 
+            // Notify customer (in-app) that their request was submitted
+            var customerNotification = new Notification(
+                customer.Id,
+                inspection.Id,
+                NotificationType.InspectionScheduled,
+                "Inspection Request Submitted",
+                $"Your inspection request for \"{property.Title}\" on {request.ScheduledDate:yyyy-MM-dd} at {request.ScheduledTime:hh\\:mm} has been submitted.");
+
+            await _unitOfWOrk.NotificationCommands.InsertAsync(customerNotification);
+            await PushRealtimeNotificationAsync(customerNotification);
+
             await _unitOfWOrk.SaveAsync();
 
             // Notify property owner (email - fire and forget)
@@ -92,6 +109,11 @@ public class InspectionCommandService : IInspectionCommandService
                     $"{customer.FirstName} {customer.LastName}",
                     property.Title, request.ScheduledDate, request.ScheduledTime, request.Note);
             }
+
+            // Notify customer (email - fire and forget)
+            _ = _emailService.SendInspectionBookingConfirmationAsync(
+                customer.Email, customer.FirstName,
+                property.Title, request.ScheduledDate, request.ScheduledTime, request.Note);
 
             return new BaseResponse<InspectionDto>(_mapper.Map<InspectionDto>(inspection), true, string.Empty, ResponseMessages.SetCreationSuccessMessage(ClassName));
         }

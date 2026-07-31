@@ -38,8 +38,6 @@ internal sealed class ResendEmailService : IEmailService
                 </td>
               </tr>
             </table>
-            <p style="margin:0 0 8px 0;font-size:13px;color:#888888;font-family:Arial,Helvetica,sans-serif;">Or copy and paste this link into your browser:</p>
-            <p style="margin:0 0 28px 0;font-size:12px;color:#07358B;word-break:break-all;font-family:Arial,Helvetica,sans-serif;">{verifyLink}</p>
             <p style="margin:0;font-size:14px;color:#888888;line-height:1.6;font-family:Arial,Helvetica,sans-serif;">
               This link expires in <strong>24 hours</strong>. If you did not create a HousingHub account, you can safely ignore this email.
             </p>
@@ -70,8 +68,6 @@ internal sealed class ResendEmailService : IEmailService
                 </td>
               </tr>
             </table>
-            <p style="margin:0 0 8px 0;font-size:13px;color:#888888;font-family:Arial,Helvetica,sans-serif;">Or copy and paste this link into your browser:</p>
-            <p style="margin:0 0 28px 0;font-size:12px;color:#07358B;word-break:break-all;font-family:Arial,Helvetica,sans-serif;">{resetLink}</p>
             <p style="margin:0;font-size:14px;color:#888888;line-height:1.6;font-family:Arial,Helvetica,sans-serif;">
               If you did not request a password reset, no action is needed. Your account remains secure.
             </p>
@@ -159,6 +155,41 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(ownerEmail, $"New Inspection Request for {propertyTitle}", text, html);
     }
 
+    public async Task<bool> SendInspectionBookingConfirmationAsync(string customerEmail, string customerName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime, string? note)
+    {
+        string noteSection = string.IsNullOrWhiteSpace(note) ? "" : $"<p><strong>Your Note:</strong> {note}</p>";
+
+        string body = $"""
+            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Inspection Request Submitted</h1>
+            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {customerName},</p>
+            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+              Your inspection request for <strong>{propertyTitle}</strong> has been submitted. The property owner will review it and respond shortly.
+            </p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
+              <tr>
+                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;">
+                  <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#07358B;text-transform:uppercase;letter-spacing:0.8px;font-family:Arial,Helvetica,sans-serif;">Inspection Details</p>
+                  <p style="margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Property:</strong> {propertyTitle}</p>
+                  <p style="margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Date:</strong> {scheduledDate:yyyy-MM-dd}</p>
+                  <p style="margin:0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Time:</strong> {scheduledTime:hh\:mm}</p>
+                </td>
+              </tr>
+            </table>
+            <div style="font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;line-height:1.7;">
+              {noteSection}
+            </div>
+            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+              We'll notify you as soon as the owner responds. You can also track its status from your HousingHub dashboard.
+            </p>
+            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            """;
+
+        string html = WrapInLayout("Inspection Request Submitted", body);
+        string text = $"Hi {customerName}, your inspection request for {propertyTitle} on {scheduledDate:yyyy-MM-dd} at {scheduledTime:hh\\:mm} has been submitted. We'll notify you when the owner responds.";
+
+        return await SendAsync(customerEmail, $"Inspection Request Submitted for {propertyTitle}", text, html);
+    }
+
     public async Task<bool> SendInspectionResponseAsync(string customerEmail, string customerName, string ownerName, string propertyTitle, string action, string? note, DateTime? rescheduledDate, TimeSpan? rescheduledTime)
     {
         string noteSection = string.IsNullOrWhiteSpace(note) ? "" : $"<p><strong>Note from owner:</strong> {note}</p>";
@@ -229,36 +260,43 @@ internal sealed class ResendEmailService : IEmailService
     /// (brand header, white content card, footer) so every email method only
     /// needs to supply its own heading/paragraphs/buttons, not the full document.
     /// </summary>
-    private static string WrapInLayout(string title, string bodyHtml) => $"""
-        <!DOCTYPE html>
-        <html lang="en">
-        <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>{title}</title></head>
-        <body style="margin:0;padding:0;background-color:#f0f4f9;font-family:Arial,Helvetica,sans-serif;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f0f4f9;">
-            <tr><td align="center" style="padding:48px 16px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;">
-                <tr>
-                  <td style="background-color:#07358B;border-radius:12px 12px 0 0;padding:32px 40px;text-align:center;">
-                    <span style="font-size:32px;font-weight:800;color:#FFCC00;font-family:Arial,Helvetica,sans-serif;letter-spacing:1px;">Housing</span><span style="font-size:32px;font-weight:800;color:#ffffff;font-family:Arial,Helvetica,sans-serif;letter-spacing:1px;">Hub</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="background-color:#ffffff;padding:44px 48px;border-radius:0 0 12px 12px;">
-                    {bodyHtml}
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:24px 40px;text-align:center;">
-                    <p style="margin:0 0 6px 0;font-size:12px;color:#999999;font-family:Arial,Helvetica,sans-serif;">&copy; 2025 HousingHub. All rights reserved.</p>
-                    <p style="margin:0;font-size:12px;color:#bbbbbb;font-family:Arial,Helvetica,sans-serif;">This is an automated message, please do not reply.</p>
-                  </td>
-                </tr>
+    private string WrapInLayout(string title, string bodyHtml)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        int year = DateTime.UtcNow.Year;
+
+        return $"""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>{title}</title></head>
+            <body style="margin:0;padding:0;background-color:#f0f4f9;font-family:Arial,Helvetica,sans-serif;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f0f4f9;">
+                <tr><td align="center" style="padding:48px 16px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;box-shadow:0 4px 24px rgba(7,53,139,0.12);border-radius:12px;">
+                    <tr>
+                      <td style="background-color:#07358B;border-radius:12px 12px 0 0;padding:36px 40px;text-align:center;">
+                        <img src="{baseUrl}/images/footerlogo.png" width="48" height="52" alt="HousingHub" style="display:inline-block;vertical-align:middle;margin-right:12px;">
+                        <span style="font-size:26px;font-weight:800;color:#ffffff;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.5px;vertical-align:middle;">HousingHub</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="background-color:#ffffff;padding:44px 48px;border-radius:0 0 12px 12px;">
+                        {bodyHtml}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:24px 40px;text-align:center;">
+                        <p style="margin:0 0 6px 0;font-size:12px;color:#999999;font-family:Arial,Helvetica,sans-serif;">&copy; {year} HousingHub. All rights reserved.</p>
+                        <p style="margin:0;font-size:12px;color:#bbbbbb;font-family:Arial,Helvetica,sans-serif;">This is an automated message, please do not reply.</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td></tr>
               </table>
-            </td></tr>
-          </table>
-        </body>
-        </html>
-        """;
+            </body>
+            </html>
+            """;
+    }
 
     private async Task<bool> SendAsync(string toEmail, string subject, string text, string html)
     {

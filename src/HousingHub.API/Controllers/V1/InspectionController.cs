@@ -48,7 +48,10 @@ public class InspectionController : ControllerBase
     [ProducesResponseType(typeof(BaseResponse<InspectionDto?>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetById(Guid id)
     {
-        var response = await _mediator.Send(new GetInspectionByIdQuery(id));
+        var userId = GetAuthenticatedUserId();
+        if (userId == null) return Unauthorized();
+
+        var response = await _mediator.Send(new GetInspectionByIdQuery(id, userId.Value));
         return Ok(response);
     }
 

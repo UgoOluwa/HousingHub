@@ -208,7 +208,16 @@ public class PropertyQueryService : IPropertyQueryService
 
             await AttachFilesAsync(properties);
 
-            var mappedItems = _mapper.Map<List<PropertyDto>>(properties);
+            var propertyIds = properties.Select(p => p.Id).ToHashSet();
+            var openInspections = await _unitOfWOrk.PropertyInspectionQueries.GetAllAsync(
+                i => propertyIds.Contains(i.PropertyId) && (i.Status == InspectionStatus.Pending || i.Status == InspectionStatus.Rescheduled));
+            var inspectionCountByProperty = openInspections
+                .GroupBy(i => i.PropertyId)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            var mappedItems = _mapper.Map<List<PropertyDto>>(properties)
+                .Select(dto => dto with { InspectionCount = inspectionCountByProperty.GetValueOrDefault(dto.Id, 0) })
+                .ToList();
             var paginatedResult = new PaginatedResult<PropertyDto>(mappedItems, totalCount, filter.PageNumber, filter.PageSize);
 
             return new BaseResponse<PaginatedResult<PropertyDto>>(paginatedResult, true, string.Empty, ResponseMessages.Successful);

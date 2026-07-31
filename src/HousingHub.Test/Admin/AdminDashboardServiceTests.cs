@@ -32,7 +32,7 @@ public class AdminDashboardServiceTests
         new(Guid.NewGuid(), "PROP-1", DateTime.UtcNow, DateTime.UtcNow, "Title", "Desc",
             PropertyType.Apartment, 100_000m, availability, PropertyLeaseType.Rent,
             PropertyFeature.None, null, null, null, Guid.NewGuid(), Guid.NewGuid(),
-            null, null, 0, isPublished, isPublished ? DateTime.UtcNow : null);
+            null, null, 0, isPublished, isPublished ? DateTime.UtcNow : null, false, null);
 
     private static AdminInspectionListDto MakeInspectionDto(
         InspectionStatus status = InspectionStatus.Pending,

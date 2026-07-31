@@ -93,7 +93,7 @@ public class PropertyMappingTests
             "Test", "Desc", PropertyType.House, 1_000_000m, PropertyAvailability.Available,
             PropertyLeaseType.Rent, PropertyFeature.None, "Jane", "jane@test.com", "080",
             Guid.NewGuid(),
-            new Service.Dtos.PropertyAddress.CreatePropertyAddressDto("Place", "City", "State", "Country", "100001", Guid.Empty),
+            new Service.Dtos.PropertyAddress.UpdatePropertyAddressDto("Place", "City", "State", "Country", "100001"),
             files);
 
         var dto = mapper.Map<Service.Dtos.Property.CreatePropertyDto>(command);
