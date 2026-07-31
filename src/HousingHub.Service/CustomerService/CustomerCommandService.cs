@@ -243,7 +243,7 @@ public class CustomerCommandService : ICustomerCommandService
         }
     }
 
-    public async Task<BaseResponse<bool>> VerifyKyc(Guid customerId, bool isApproved)
+    public async Task<BaseResponse<bool>> VerifyKyc(Guid customerId, bool isApproved, string? rejectionReason = null)
     {
         try
         {
@@ -251,7 +251,7 @@ public class CustomerCommandService : ICustomerCommandService
             if (customer is null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
-            customer.UpdateKycStatus(isApproved);
+            customer.UpdateKycStatus(isApproved, rejectionReason);
 
             await _unitOfWOrk.CustomerCommands.UpdateAsync(customer);
             await _unitOfWOrk.SaveAsync();
