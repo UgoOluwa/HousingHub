@@ -115,12 +115,12 @@ public class InspectionController : ControllerBase
 
     [HttpPut("{id:guid}/respond-reschedule")]
     [ProducesResponseType(typeof(BaseResponse<InspectionDto?>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> RespondToReschedule(Guid id, [FromQuery] bool accept)
+    public async Task<IActionResult> RespondToReschedule(Guid id, [FromQuery] bool accept, [FromQuery] string? note = null)
     {
         var userId = GetAuthenticatedUserId();
         if (userId == null) return Unauthorized();
 
-        var response = await _mediator.Send(new RespondToRescheduleCommand(id, accept, userId.Value));
+        var response = await _mediator.Send(new RespondToRescheduleCommand(id, accept, userId.Value, note));
         return Ok(response);
     }
 
