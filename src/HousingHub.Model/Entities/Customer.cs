@@ -48,6 +48,8 @@ public class Customer : BaseEntity
     public string? IdDocumentUrl { get; set; } = null!;
     public DateTime? KycSubmittedAt { get; set; }
     public bool IsKycVerified { get; set; } = false;
+    /// <summary>Set when an admin rejects a KYC submission; cleared on the next submission or approval.</summary>
+    public string? KycRejectionReason { get; set; }
 
     // ----------------------------
     // Occupation Details
@@ -84,9 +86,10 @@ public class Customer : BaseEntity
         PasswordHash = passwordHash;
     }
 
-    public void UpdateKycStatus(bool isVerified)
+    public void UpdateKycStatus(bool isVerified, string? rejectionReason = null)
     {
         IsKycVerified = isVerified;
+        KycRejectionReason = isVerified ? null : rejectionReason;
     }
 
     public void AddKYCDetails(DateTime? dateOfBirth, string? nationalIdNumber, IDType idType, string? idDocumentUrl, DateTime submittedAt, string? jobTitle, string? companyName, string? industry)
@@ -99,5 +102,6 @@ public class Customer : BaseEntity
         JobTitle = jobTitle;
         CompanyName = companyName;
         Industry = industry;
+        KycRejectionReason = null;
     }
 }

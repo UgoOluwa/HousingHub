@@ -68,6 +68,22 @@ public class AdminAccountController(IAdminAuthService adminAuthService) : Contro
 
     // ── Staff Management ─────────────────────────────────────────────────────
 
+    /// <summary>Invites a new admin staff member.</summary>
+    /// <remarks>
+    /// No seed key required — any already-authenticated admin can add staff.
+    /// Login is OTP-only, so no password is collected; the new staff member
+    /// logs in with their email the same way any other admin does.
+    /// </remarks>
+    /// <param name="dto">New staff member's email and name.</param>
+    /// <response code="200">Staff member created.</response>
+    [HttpPost("staff")]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CreateStaff([FromBody] CreateStaffDto dto)
+    {
+        await adminAuthService.CreateStaffAsync(dto.Email, dto.FirstName, dto.LastName);
+        return Ok(new BaseResponse<bool>(true, true, string.Empty, "Staff member created."));
+    }
+
     /// <summary>Returns a list of all admin staff members.</summary>
     /// <response code="200">List of staff.</response>
     [HttpGet("staff")]

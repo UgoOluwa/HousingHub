@@ -47,14 +47,15 @@ public class AdminCustomerController(
     /// <summary>Approves or rejects a customer's KYC submission.</summary>
     /// <param name="id">Customer's database ID.</param>
     /// <param name="approve">True to approve, false to reject.</param>
+    /// <param name="reason">Optional reason shown to the customer when rejecting.</param>
     /// <response code="200">KYC decision applied.</response>
     /// <response code="404">Customer not found.</response>
     [HttpPut("{id:guid}/kyc/verify")]
     [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> VerifyKyc(Guid id, [FromQuery] bool approve)
+    public async Task<IActionResult> VerifyKyc(Guid id, [FromQuery] bool approve, [FromQuery] string? reason = null)
     {
-        var result = await customerCommandService.VerifyKyc(id, approve);
+        var result = await customerCommandService.VerifyKyc(id, approve, reason);
         if (!result.IsSuccessful) return NotFound(result);
         return Ok(result);
     }

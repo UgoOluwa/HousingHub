@@ -4,6 +4,7 @@ using Amazon.DynamoDBv2.DataModel;
 using Amazon.DynamoDBv2.DocumentModel;
 using HousingHub.Model.Entities;
 using HousingHub.Service.Commons.Authentication;
+using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Dtos.Admin;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -14,9 +15,31 @@ namespace HousingHub.Service.AdminService;
 public class AdminAuthService(
     IDynamoDBContext dynamoDb,
     IPasswordHasher passwordHasher,
+    IEmailService emailService,
     IConfiguration configuration) : IAdminAuthService
 {
-    public async Task<AdminLoginResultDto?> LoginAsync(string email, string password)
+    private static readonly TimeSpan OtpValidity = TimeSpan.FromMinutes(10);
+
+    public async Task RequestOtpAsync(string email)
+    {
+        var results = await dynamoDb.QueryAsync<Admin>(
+            email,
+            new DynamoDBOperationConfig { IndexName = "Email-index" })
+            .GetRemainingAsync();
+
+        var admin = results.FirstOrDefault(a => a.IsActive);
+        if (admin == null) return; // don't reveal whether the email exists
+
+        string code = Random.Shared.Next(0, 1_000_000).ToString("D6");
+        admin.OtpCode = code;
+        admin.OtpExpiresAt = DateTime.UtcNow.Add(OtpValidity);
+        admin.DateModified = DateTime.UtcNow;
+        await dynamoDb.SaveAsync(admin);
+
+        await emailService.SendAdminOtpAsync(admin.Email, admin.FirstName, code);
+    }
+
+    public async Task<AdminLoginResultDto?> VerifyOtpAsync(string email, string code)
     {
         var results = await dynamoDb.QueryAsync<Admin>(
             email,
@@ -26,10 +49,29 @@ public class AdminAuthService(
         var admin = results.FirstOrDefault(a => a.IsActive);
         if (admin == null) return null;
 
-        if (!passwordHasher.Verify(password, admin.PasswordHash)) return null;
+        if (string.IsNullOrEmpty(admin.OtpCode)
+            || admin.OtpExpiresAt == null
+            || admin.OtpExpiresAt < DateTime.UtcNow
+            || admin.OtpCode != code)
+            return null;
+
+        // One-time use — invalidate immediately so it can't be replayed.
+        admin.OtpCode = null;
+        admin.OtpExpiresAt = null;
+        admin.DateModified = DateTime.UtcNow;
+        await dynamoDb.SaveAsync(admin);
 
         var token = CreateToken(admin);
         return new AdminLoginResultDto(token, admin.FirstName, admin.LastName, admin.Email);
+    }
+
+    public async Task CreateStaffAsync(string email, string firstName, string lastName)
+    {
+        // Login is OTP-only, so this password is never used to authenticate —
+        // generate a throwaway value purely to satisfy Admin.PasswordHash's
+        // non-null constraint.
+        string throwawayPassword = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
+        await CreateAdminAsync(email, throwawayPassword, firstName, lastName);
     }
 
     public async Task CreateAdminAsync(string email, string password, string firstName, string lastName)

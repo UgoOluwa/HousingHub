@@ -10,4 +10,8 @@ public class Admin : BaseEntity
     public string PasswordHash { get; set; } = null!;
     public string FirstName { get; set; } = null!;
     public string LastName { get; set; } = null!;
+
+    /// <summary>Set while a login OTP is outstanding; cleared once it's used or replaced.</summary>
+    public string? OtpCode { get; set; }
+    public DateTime? OtpExpiresAt { get; set; }
 }

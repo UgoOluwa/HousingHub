@@ -266,6 +266,34 @@ public class CustomerCommandServiceTests
     }
 
     [Fact]
+    public async Task VerifyKyc_Reject_PersistsRejectionReason()
+    {
+        var customer = new HousingHub.Model.Entities.Customer("John", "Doe", "john@test.com", "08012345678", CustomerType.Customer, TestPasswordHash) { Id = Guid.NewGuid() };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
+
+        var result = await _sut.VerifyKyc(customer.Id, false, "Document image is blurry");
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal("Document image is blurry", customer.KycRejectionReason);
+    }
+
+    [Fact]
+    public async Task VerifyKyc_Approve_ClearsAnyPriorRejectionReason()
+    {
+        var customer = new HousingHub.Model.Entities.Customer("John", "Doe", "john@test.com", "08012345678", CustomerType.Customer, TestPasswordHash)
+        {
+            Id = Guid.NewGuid(),
+            KycRejectionReason = "Previously rejected"
+        };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
+
+        var result = await _sut.VerifyKyc(customer.Id, true);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Null(customer.KycRejectionReason);
+    }
+
+    [Fact]
     public async Task VerifyKyc_WhenCustomerNotFound_ReturnsFailure()
     {
         _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync((HousingHub.Model.Entities.Customer?)null);

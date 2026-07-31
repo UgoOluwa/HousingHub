@@ -14,13 +14,15 @@ public class AdminDashboardService(
     public async Task<AdminDashboardStatsDto> GetStatsAsync()
     {
         var customersTask = customerQueryService.GetAllCustomersAsync();
+        var kycTask = customerQueryService.GetCustomersFilteredAsync(new AdminCustomerFilterDto(1, int.MaxValue));
         var propertiesTask = propertyQueryService.GetAllPropertiesAsync();
         var inspectionsTask = inspectionQueryService.GetAllInspectionsPaginatedAsync(
             new AdminInspectionFilterDto(1, int.MaxValue));
 
-        await Task.WhenAll(customersTask, propertiesTask, inspectionsTask);
+        await Task.WhenAll(customersTask, kycTask, propertiesTask, inspectionsTask);
 
         var customers = customersTask.Result.Data ?? [];
+        var kycCustomers = kycTask.Result.Data?.Items ?? [];
         var properties = propertiesTask.Result.Data ?? [];
         var inspections = inspectionsTask.Result.Data?.Items ?? [];
 
@@ -30,8 +32,7 @@ public class AdminDashboardService(
             TotalCustomers: customers.Count(c => (CustomerType)c.CustomerType == CustomerType.Customer),
             TotalOwners: customers.Count(c => ((CustomerType)c.CustomerType).HasFlag(CustomerType.HouseOwner)),
             TotalAgents: customers.Count(c => ((CustomerType)c.CustomerType).HasFlag(CustomerType.Agent)),
-            PendingKyc: customers.Count(c => !((CustomerType)c.CustomerType).HasFlag(CustomerType.Admin)
-                                          && c.DateModified != default),
+            PendingKyc: kycCustomers.Count(c => c.KycPending),
             ActiveListings: properties.Count(p => p.IsPublished && p.Availability == PropertyAvailability.Available),
             TotalProperties: properties.Count,
             PendingInspections: inspections.Count(i => i.Status == InspectionStatus.Pending),

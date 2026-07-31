@@ -8,12 +8,22 @@ namespace HousingHub.Admin.API.Controllers;
 [Route("api/[controller]")]
 public class AdminAuthController(IAdminAuthService adminAuthService) : ControllerBase
 {
+    /// <summary>Requests a one-time login code by email. Always responds the same way regardless of whether the email is registered, to avoid account enumeration.</summary>
     [AllowAnonymous]
-    [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] AdminLoginRequest request)
+    [HttpPost("otp/request")]
+    public async Task<IActionResult> RequestOtp([FromBody] AdminOtpRequest request)
     {
-        var result = await adminAuthService.LoginAsync(request.Email, request.Password);
-        if (result == null) return Unauthorized(new { message = "Invalid credentials" });
+        await adminAuthService.RequestOtpAsync(request.Email);
+        return Ok(new { message = "If that email is registered, a login code has been sent." });
+    }
+
+    /// <summary>Verifies a one-time login code and, on success, issues a JWT.</summary>
+    [AllowAnonymous]
+    [HttpPost("otp/verify")]
+    public async Task<IActionResult> VerifyOtp([FromBody] AdminOtpVerifyRequest request)
+    {
+        var result = await adminAuthService.VerifyOtpAsync(request.Email, request.Code);
+        if (result == null) return Unauthorized(new { message = "Invalid or expired code" });
         return Ok(result);
     }
 
@@ -31,5 +41,6 @@ public class AdminAuthController(IAdminAuthService adminAuthService) : Controlle
     }
 }
 
-public record AdminLoginRequest(string Email, string Password);
+public record AdminOtpRequest(string Email);
+public record AdminOtpVerifyRequest(string Email, string Code);
 public record CreateAdminRequest(string SeedKey, string Email, string Password, string FirstName, string LastName);

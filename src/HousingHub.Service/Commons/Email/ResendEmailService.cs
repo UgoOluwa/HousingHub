@@ -285,6 +285,33 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(recipientEmail, $"Reminder: Inspection for {propertyTitle} in 24 hours", text, html);
     }
 
+    public async Task<bool> SendAdminOtpAsync(string toEmail, string firstName, string otpCode)
+    {
+        string body = $"""
+            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Your Admin Login Code</h1>
+            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {firstName},</p>
+            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+              Use the code below to sign in to the HousingHub Admin dashboard. This code expires in <strong>10 minutes</strong>.
+            </p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
+              <tr>
+                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;text-align:center;">
+                  <p style="margin:0;font-size:32px;font-weight:800;letter-spacing:8px;color:#07358B;font-family:Arial,Helvetica,sans-serif;">{otpCode}</p>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0;font-size:14px;color:#888888;line-height:1.6;font-family:Arial,Helvetica,sans-serif;">
+              If you did not request this code, you can safely ignore this email.
+            </p>
+            <hr style="border:none;border-top:1px solid #eeeeee;margin:32px 0 0 0;">
+            """;
+
+        string html = WrapInLayout("Your HousingHub Admin login code", body);
+        string text = $"Hi {firstName}, your HousingHub Admin login code is {otpCode}. It expires in 10 minutes.";
+
+        return await SendAsync(toEmail, "Your HousingHub Admin login code", text, html);
+    }
+
     /// <summary>
     /// Wraps a body-content HTML fragment in the shared HousingHub email shell
     /// (brand header, white content card, footer) so every email method only

@@ -42,8 +42,11 @@ public class AdminOwnerController(
 
             await Task.WhenAll(ownersTask, agentsTask);
 
+            // CustomerType is a [Flags] enum, so a dual-role (HouseOwner | Agent)
+            // customer matches both queries above — dedupe before paginating.
             var combined = (ownersTask.Result.Data?.Items ?? [])
                 .Concat(agentsTask.Result.Data?.Items ?? [])
+                .DistinctBy(c => c.Id)
                 .OrderByDescending(c => c.DateJoined)
                 .ToList();
 
@@ -79,14 +82,15 @@ public class AdminOwnerController(
     /// <summary>Approves or rejects an owner/agent's KYC submission.</summary>
     /// <param name="id">Owner/agent's database ID.</param>
     /// <param name="approve">True to approve, false to reject.</param>
+    /// <param name="reason">Optional reason shown to the owner/agent when rejecting.</param>
     /// <response code="200">KYC decision applied.</response>
     /// <response code="404">Not found.</response>
     [HttpPut("{id:guid}/kyc/verify")]
     [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> VerifyKyc(Guid id, [FromQuery] bool approve)
+    public async Task<IActionResult> VerifyKyc(Guid id, [FromQuery] bool approve, [FromQuery] string? reason = null)
     {
-        var result = await customerCommandService.VerifyKyc(id, approve);
+        var result = await customerCommandService.VerifyKyc(id, approve, reason);
         if (!result.IsSuccessful) return NotFound(result);
         return Ok(result);
     }
