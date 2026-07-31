@@ -65,6 +65,15 @@ public class AdminAuthService(
         return new AdminLoginResultDto(token, admin.FirstName, admin.LastName, admin.Email);
     }
 
+    public async Task CreateStaffAsync(string email, string firstName, string lastName)
+    {
+        // Login is OTP-only, so this password is never used to authenticate —
+        // generate a throwaway value purely to satisfy Admin.PasswordHash's
+        // non-null constraint.
+        string throwawayPassword = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
+        await CreateAdminAsync(email, throwawayPassword, firstName, lastName);
+    }
+
     public async Task CreateAdminAsync(string email, string password, string firstName, string lastName)
     {
         var admin = new Admin

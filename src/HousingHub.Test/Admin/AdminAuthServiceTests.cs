@@ -215,6 +215,28 @@ public class AdminAuthServiceTests
         Assert.True(saved.IsActive);
     }
 
+    // ── CreateStaffAsync ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateStaff_SavesActiveAdminWithoutRequiringACallerSuppliedPassword()
+    {
+        _hasherMock.Setup(h => h.Hash(It.IsAny<string>())).Returns<string>(p => $"hashed-{p}");
+        AdminEntity? saved = null;
+        _dynamoDbMock
+            .Setup(d => d.SaveAsync(It.IsAny<AdminEntity>(), It.IsAny<CancellationToken>()))
+            .Callback<AdminEntity, CancellationToken>((a, _) => saved = a)
+            .Returns(Task.CompletedTask);
+
+        await _sut.CreateStaffAsync("staff@test.com", "Staff", "Member");
+
+        Assert.NotNull(saved);
+        Assert.Equal("staff@test.com", saved!.Email);
+        Assert.Equal("Staff", saved.FirstName);
+        Assert.Equal("Member", saved.LastName);
+        Assert.True(saved.IsActive);
+        Assert.False(string.IsNullOrEmpty(saved.PasswordHash));
+    }
+
     // ── GetAdminProfileAsync ──────────────────────────────────────────────────
 
     [Fact]
