@@ -59,6 +59,12 @@ public class InspectionCommandService : IInspectionCommandService
             if (property.OwnerId == authenticatedUserId)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.CannotInspectOwnProperty);
 
+            bool hasPendingRequest = await _unitOfWOrk.PropertyInspectionQueries.AnyAsync(
+                x => x.CustomerId == authenticatedUserId && x.PropertyId == request.PropertyId && x.Status == InspectionStatus.Pending);
+
+            if (hasPendingRequest)
+                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionAlreadyPending);
+
             var inspection = new PropertyInspection(authenticatedUserId, request.PropertyId, request.ScheduledDate, request.ScheduledTime, request.Note);
 
             bool isSuccessful = await _unitOfWOrk.PropertyInspectionCommands.InsertAsync(inspection);

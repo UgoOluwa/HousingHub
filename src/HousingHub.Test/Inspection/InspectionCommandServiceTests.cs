@@ -165,6 +165,22 @@ public class InspectionCommandServiceTests
     }
 
     [Fact]
+    public async Task ScheduleInspection_WhenPendingRequestExistsForSameProperty_ReturnsFailure()
+    {
+        SetupCustomerLookupSequence(CreateCustomer(CustomerId));
+        SetupPropertyLookup(CreateProperty());
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.AnyAsync(
+            It.IsAny<Expression<Func<PropertyInspection, bool>>>())).ReturnsAsync(true);
+
+        var dto = new ScheduleInspectionDto(PropertyId, DateTime.UtcNow.AddDays(7), TimeSpan.FromHours(10), null);
+        var result = await _sut.ScheduleInspectionAsync(dto, CustomerId);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.InspectionAlreadyPending, result.Message);
+        _unitOfWorkMock.Verify(u => u.PropertyInspectionCommands.InsertAsync(It.IsAny<PropertyInspection>()), Times.Never);
+    }
+
+    [Fact]
     public async Task ScheduleInspection_WhenInsertFails_ReturnsFailure()
     {
         SetupCustomerLookupSequence(CreateCustomer(CustomerId));
