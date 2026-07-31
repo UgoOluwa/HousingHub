@@ -306,4 +306,29 @@ public class PropertyCommandService : IPropertyCommandService
             return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
         }
     }
+
+    public async Task<BaseResponse<bool>> SetPropertyVerifiedAsync(Guid propertyId, bool isVerified)
+    {
+        try
+        {
+            var property = await _unitOfWOrk.PropertyQueries.GetByAsync(x => x.Id == propertyId);
+            if (property == null)
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            property.IsVerified = isVerified;
+            property.VerifiedAt = isVerified ? DateTime.UtcNow : null;
+            property.DateModified = DateTime.UtcNow;
+
+            await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
+            await _unitOfWOrk.SaveAsync();
+
+            var message = isVerified ? "Property verified successfully." : "Property unverified successfully.";
+            return new BaseResponse<bool>(true, true, string.Empty, message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in SetPropertyVerifiedAsync: {Message}", ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+        }
+    }
 }

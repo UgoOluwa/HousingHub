@@ -134,6 +134,34 @@ public class AdminPropertyController(
         return Ok(result);
     }
 
+    /// <summary>Marks a property as verified.</summary>
+    /// <param name="id">Property's database ID.</param>
+    /// <response code="200">Property verified.</response>
+    /// <response code="404">Property not found.</response>
+    [HttpPut("{id:guid}/verify")]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Verify(Guid id)
+    {
+        var result = await propertyCommandService.SetPropertyVerifiedAsync(id, true);
+        if (!result.IsSuccessful) return NotFound(result);
+        return Ok(result);
+    }
+
+    /// <summary>Removes a property's verified status.</summary>
+    /// <param name="id">Property's database ID.</param>
+    /// <response code="200">Property unverified.</response>
+    /// <response code="404">Property not found.</response>
+    [HttpPut("{id:guid}/unverify")]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Unverify(Guid id)
+    {
+        var result = await propertyCommandService.SetPropertyVerifiedAsync(id, false);
+        if (!result.IsSuccessful) return NotFound(result);
+        return Ok(result);
+    }
+
     /// <summary>Permanently deletes a property (admin bypass — no ownership check).</summary>
     /// <param name="id">Property's database ID.</param>
     /// <response code="204">Property deleted.</response>

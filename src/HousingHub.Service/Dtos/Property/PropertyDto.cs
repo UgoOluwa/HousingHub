@@ -25,4 +25,6 @@ public record PropertyDto(
     long ViewCount,
     bool IsPublished,
     DateTime? PublishedAt,
+    bool IsVerified,
+    DateTime? VerifiedAt,
     List<PropertyFileDto>? Files = null);

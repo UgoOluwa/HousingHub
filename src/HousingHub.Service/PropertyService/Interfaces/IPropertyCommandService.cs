@@ -17,4 +17,7 @@ public interface IPropertyCommandService
 
     /// <summary>Admin: delete any property without ownership check.</summary>
     Task<BaseResponse<bool>> AdminDeletePropertyAsync(Guid propertyId);
+
+    /// <summary>Admin: mark a property as verified or unverified.</summary>
+    Task<BaseResponse<bool>> SetPropertyVerifiedAsync(Guid propertyId, bool isVerified);
 }
