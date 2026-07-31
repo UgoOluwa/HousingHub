@@ -155,6 +155,41 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(ownerEmail, $"New Inspection Request for {propertyTitle}", text, html);
     }
 
+    public async Task<bool> SendInspectionBookingConfirmationAsync(string customerEmail, string customerName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime, string? note)
+    {
+        string noteSection = string.IsNullOrWhiteSpace(note) ? "" : $"<p><strong>Your Note:</strong> {note}</p>";
+
+        string body = $"""
+            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Inspection Request Submitted</h1>
+            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {customerName},</p>
+            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+              Your inspection request for <strong>{propertyTitle}</strong> has been submitted. The property owner will review it and respond shortly.
+            </p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
+              <tr>
+                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;">
+                  <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#07358B;text-transform:uppercase;letter-spacing:0.8px;font-family:Arial,Helvetica,sans-serif;">Inspection Details</p>
+                  <p style="margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Property:</strong> {propertyTitle}</p>
+                  <p style="margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Date:</strong> {scheduledDate:yyyy-MM-dd}</p>
+                  <p style="margin:0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Time:</strong> {scheduledTime:hh\:mm}</p>
+                </td>
+              </tr>
+            </table>
+            <div style="font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;line-height:1.7;">
+              {noteSection}
+            </div>
+            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+              We'll notify you as soon as the owner responds. You can also track its status from your HousingHub dashboard.
+            </p>
+            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            """;
+
+        string html = WrapInLayout("Inspection Request Submitted", body);
+        string text = $"Hi {customerName}, your inspection request for {propertyTitle} on {scheduledDate:yyyy-MM-dd} at {scheduledTime:hh\\:mm} has been submitted. We'll notify you when the owner responds.";
+
+        return await SendAsync(customerEmail, $"Inspection Request Submitted for {propertyTitle}", text, html);
+    }
+
     public async Task<bool> SendInspectionResponseAsync(string customerEmail, string customerName, string ownerName, string propertyTitle, string action, string? note, DateTime? rescheduledDate, TimeSpan? rescheduledTime)
     {
         string noteSection = string.IsNullOrWhiteSpace(note) ? "" : $"<p><strong>Note from owner:</strong> {note}</p>";

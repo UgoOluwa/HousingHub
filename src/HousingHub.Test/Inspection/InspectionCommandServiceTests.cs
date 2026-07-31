@@ -50,6 +50,9 @@ public class InspectionCommandServiceTests
         _emailServiceMock.Setup(e => e.SendInspectionScheduledAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<string?>())).ReturnsAsync(true);
+        _emailServiceMock.Setup(e => e.SendInspectionBookingConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<string?>())).ReturnsAsync(true);
         _emailServiceMock.Setup(e => e.SendInspectionResponseAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<TimeSpan?>())).ReturnsAsync(true);
@@ -202,8 +205,26 @@ public class InspectionCommandServiceTests
         var dto = new ScheduleInspectionDto(PropertyId, DateTime.UtcNow.AddDays(7), TimeSpan.FromHours(10), null);
         await _sut.ScheduleInspectionAsync(dto, CustomerId);
 
-        _unitOfWorkMock.Verify(u => u.NotificationCommands.InsertAsync(It.IsAny<Notification>()), Times.Once);
+        _unitOfWorkMock.Verify(u => u.NotificationCommands.InsertAsync(It.IsAny<Notification>()), Times.Exactly(2));
         _realtimeNotifierMock.Verify(r => r.SendNotificationAsync(OwnerId, It.IsAny<Service.Dtos.Notification.NotificationDto>()), Times.Once);
+        _realtimeNotifierMock.Verify(r => r.SendNotificationAsync(CustomerId, It.IsAny<Service.Dtos.Notification.NotificationDto>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ScheduleInspection_SendsConfirmationEmailToCustomerAndOwner()
+    {
+        SetupCustomerLookupSequence(CreateCustomer(CustomerId), CreateCustomer(OwnerId, "Owner", "User"));
+        SetupPropertyLookup(CreateProperty());
+
+        var dto = new ScheduleInspectionDto(PropertyId, DateTime.UtcNow.AddDays(7), TimeSpan.FromHours(10), null);
+        await _sut.ScheduleInspectionAsync(dto, CustomerId);
+
+        _emailServiceMock.Verify(e => e.SendInspectionScheduledAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<string?>()), Times.Once);
+        _emailServiceMock.Verify(e => e.SendInspectionBookingConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<string?>()), Times.Once);
     }
 
     // ── RespondToInspectionAsync ─────────────────────────────────
