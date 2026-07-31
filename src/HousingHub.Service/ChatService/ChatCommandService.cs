@@ -1,9 +1,12 @@
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
+using HousingHub.Model.Enums;
 using HousingHub.Service.ChatService.Interfaces;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Dtos.Chat;
+using HousingHub.Service.Dtos.Notification;
+using HousingHub.Service.NotificationService.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace HousingHub.Service.ChatService;
@@ -13,13 +16,20 @@ public class ChatCommandService : IChatCommandService
     private readonly IUnitOfWOrk _unitOfWOrk;
     private readonly ILogger<ChatCommandService> _logger;
     private readonly IChatRealtimeNotifier _realtimeNotifier;
+    private readonly IRealtimeNotifier _bellRealtimeNotifier;
     private readonly IEmailService _emailService;
 
-    public ChatCommandService(IUnitOfWOrk unitOfWOrk, ILogger<ChatCommandService> logger, IChatRealtimeNotifier realtimeNotifier, IEmailService emailService)
+    public ChatCommandService(
+        IUnitOfWOrk unitOfWOrk,
+        ILogger<ChatCommandService> logger,
+        IChatRealtimeNotifier realtimeNotifier,
+        IRealtimeNotifier bellRealtimeNotifier,
+        IEmailService emailService)
     {
         _unitOfWOrk = unitOfWOrk;
         _logger = logger;
         _realtimeNotifier = realtimeNotifier;
+        _bellRealtimeNotifier = bellRealtimeNotifier;
         _emailService = emailService;
     }
 
@@ -57,9 +67,18 @@ public class ChatCommandService : IChatCommandService
             conversation.LastMessageAt = message.DateCreated;
             await _unitOfWOrk.ConversationCommands.UpdateAsync(conversation);
 
+            string senderName = $"{sender.FirstName} {sender.LastName}";
+
+            var notification = new Notification(
+                request.RecipientId,
+                null,
+                NotificationType.NewMessage,
+                $"New message from {senderName}",
+                conversation.LastMessage);
+            await _unitOfWOrk.NotificationCommands.InsertAsync(notification);
+
             await _unitOfWOrk.SaveAsync();
 
-            string senderName = $"{sender.FirstName} {sender.LastName}";
             var dto = new ChatMessageDto(
                 message.Id,
                 message.ConversationId,
@@ -71,6 +90,17 @@ public class ChatCommandService : IChatCommandService
 
             // Push real-time notification to the recipient
             await _realtimeNotifier.SendMessageAsync(request.RecipientId, dto);
+
+            var notificationDto = new NotificationDto(
+                notification.Id,
+                notification.DateCreated,
+                notification.RecipientId,
+                notification.InspectionId,
+                notification.Type,
+                notification.Title,
+                notification.Message,
+                notification.IsRead);
+            await _bellRealtimeNotifier.SendNotificationAsync(request.RecipientId, notificationDto);
 
             var conversationUpdate = new ConversationDto(
                 conversation.Id,

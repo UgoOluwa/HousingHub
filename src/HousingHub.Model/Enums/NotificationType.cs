@@ -17,5 +17,8 @@ public enum NotificationType
     InspectionRescheduled = 3,
 
     [Description("Inspection Cancelled")]
-    InspectionCancelled = 4
+    InspectionCancelled = 4,
+
+    [Description("New Message")]
+    NewMessage = 5
 }
