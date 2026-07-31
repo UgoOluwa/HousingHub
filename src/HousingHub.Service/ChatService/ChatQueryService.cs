@@ -1,3 +1,4 @@
+using HousingHub.Core;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Service.ChatService.Interfaces;
@@ -104,10 +105,11 @@ public class ChatQueryService : IChatQueryService
                     m.Id,
                     m.ConversationId,
                     m.SenderId,
-                    senderMap.GetValueOrDefault(m.SenderId, "Unknown User"),
+                    m.SenderId == SystemSender.Id ? SystemSender.DisplayName : senderMap.GetValueOrDefault(m.SenderId, "Unknown User"),
                     m.Content,
                     m.IsRead,
-                    m.DateCreated))
+                    m.DateCreated,
+                    IsSystemMessage: m.SenderId == SystemSender.Id))
                 .ToList();
 
             var paginatedResult = new PaginatedResult<ChatMessageDto>(messageDtos, totalCount, pageNumber, pageSize);

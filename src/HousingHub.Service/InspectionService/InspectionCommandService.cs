@@ -1,4 +1,5 @@
 using HousingHub.Service.Commons.Mappings;
+using HousingHub.Core;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
@@ -165,7 +166,9 @@ public class InspectionCommandService : IInspectionCommandService
             var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
                 x => x.Id == authenticatedUserId);
 
-            // Send a chat message from owner to customer when inspection is confirmed
+            // Post an automated confirmation into the owner-customer conversation,
+            // attributed to the platform (not personally to the owner) and visible
+            // to both parties.
             if (request.Accept && owner != null && customer != null)
             {
                 var conversation = await _unitOfWOrk.ConversationQueries.GetByAsync(
@@ -178,36 +181,35 @@ public class InspectionCommandService : IInspectionCommandService
                     await _unitOfWOrk.ConversationCommands.InsertAsync(conversation);
                 }
 
-                string chatContent = $"Your inspection for \"{property.Title}\" has been confirmed for {inspection.ScheduledDate:yyyy-MM-dd} at {DateTime.Today.Add(inspection.ScheduledTime):hh:mm tt}. Please arrive on time and bring a valid ID. Contact us via this chat if you have any questions. — {owner.FirstName} {owner.LastName}";
+                string chatContent = $"Your inspection for \"{property.Title}\" has been confirmed for {inspection.ScheduledDate:yyyy-MM-dd} at {DateTime.Today.Add(inspection.ScheduledTime):hh:mm tt}. Please arrive on time and bring a valid ID. Contact the other party via this chat if you have any questions.";
 
-                var chatMessage = new ChatMessage(conversation.Id, owner.Id, chatContent);
+                var chatMessage = new ChatMessage(conversation.Id, SystemSender.Id, chatContent);
                 await _unitOfWOrk.ChatMessageCommands.InsertAsync(chatMessage);
 
                 conversation.LastMessage = chatContent.Length > 100 ? chatContent[..100] + "..." : chatContent;
                 conversation.LastMessageAt = chatMessage.DateCreated;
                 await _unitOfWOrk.ConversationCommands.UpdateAsync(conversation);
 
-                // Push real-time chat notification to customer
+                // Push real-time chat notification to both participants
                 string ownerName = $"{owner.FirstName} {owner.LastName}";
+                string customerName = $"{customer.FirstName} {customer.LastName}";
                 var chatMessageDto = new ChatMessageDto(
                     chatMessage.Id,
                     chatMessage.ConversationId,
                     chatMessage.SenderId,
-                    ownerName,
+                    SystemSender.DisplayName,
                     chatMessage.Content,
                     chatMessage.IsRead,
-                    chatMessage.DateCreated);
+                    chatMessage.DateCreated,
+                    IsSystemMessage: true);
 
                 _ = _chatRealtimeNotifier.SendMessageAsync(customer.Id, chatMessageDto);
+                _ = _chatRealtimeNotifier.SendMessageAsync(owner.Id, chatMessageDto);
 
-                var conversationDto = new ConversationDto(
-                    conversation.Id,
-                    owner.Id,
-                    ownerName,
-                    conversation.LastMessage,
-                    conversation.LastMessageAt,
-                    1);
-                _ = _chatRealtimeNotifier.NotifyConversationUpdatedAsync(customer.Id, conversationDto);
+                _ = _chatRealtimeNotifier.NotifyConversationUpdatedAsync(customer.Id, new ConversationDto(
+                    conversation.Id, owner.Id, ownerName, conversation.LastMessage, conversation.LastMessageAt, 1));
+                _ = _chatRealtimeNotifier.NotifyConversationUpdatedAsync(owner.Id, new ConversationDto(
+                    conversation.Id, customer.Id, customerName, conversation.LastMessage, conversation.LastMessageAt, 1));
             }
 
             string action = request.Accept ? "Confirmed" : "Declined";

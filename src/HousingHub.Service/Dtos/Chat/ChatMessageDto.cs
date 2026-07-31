@@ -7,4 +7,5 @@ public record ChatMessageDto(
     string SenderName,
     string Content,
     bool IsRead,
-    DateTime DateCreated);
+    DateTime DateCreated,
+    bool IsSystemMessage = false);
