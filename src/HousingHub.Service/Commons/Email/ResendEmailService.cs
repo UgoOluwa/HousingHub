@@ -225,36 +225,43 @@ internal sealed class ResendEmailService : IEmailService
     /// (brand header, white content card, footer) so every email method only
     /// needs to supply its own heading/paragraphs/buttons, not the full document.
     /// </summary>
-    private static string WrapInLayout(string title, string bodyHtml) => $"""
-        <!DOCTYPE html>
-        <html lang="en">
-        <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>{title}</title></head>
-        <body style="margin:0;padding:0;background-color:#f0f4f9;font-family:Arial,Helvetica,sans-serif;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f0f4f9;">
-            <tr><td align="center" style="padding:48px 16px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;">
-                <tr>
-                  <td style="background-color:#07358B;border-radius:12px 12px 0 0;padding:32px 40px;text-align:center;">
-                    <span style="font-size:32px;font-weight:800;color:#FFCC00;font-family:Arial,Helvetica,sans-serif;letter-spacing:1px;">Housing</span><span style="font-size:32px;font-weight:800;color:#ffffff;font-family:Arial,Helvetica,sans-serif;letter-spacing:1px;">Hub</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="background-color:#ffffff;padding:44px 48px;border-radius:0 0 12px 12px;">
-                    {bodyHtml}
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:24px 40px;text-align:center;">
-                    <p style="margin:0 0 6px 0;font-size:12px;color:#999999;font-family:Arial,Helvetica,sans-serif;">&copy; 2025 HousingHub. All rights reserved.</p>
-                    <p style="margin:0;font-size:12px;color:#bbbbbb;font-family:Arial,Helvetica,sans-serif;">This is an automated message, please do not reply.</p>
-                  </td>
-                </tr>
+    private string WrapInLayout(string title, string bodyHtml)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        int year = DateTime.UtcNow.Year;
+
+        return $"""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>{title}</title></head>
+            <body style="margin:0;padding:0;background-color:#f0f4f9;font-family:Arial,Helvetica,sans-serif;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f0f4f9;">
+                <tr><td align="center" style="padding:48px 16px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;box-shadow:0 4px 24px rgba(7,53,139,0.12);border-radius:12px;">
+                    <tr>
+                      <td style="background-color:#07358B;border-radius:12px 12px 0 0;padding:36px 40px;text-align:center;">
+                        <img src="{baseUrl}/images/footerlogo.png" width="48" height="52" alt="HousingHub" style="display:inline-block;vertical-align:middle;margin-right:12px;">
+                        <span style="font-size:26px;font-weight:800;color:#ffffff;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.5px;vertical-align:middle;">HousingHub</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="background-color:#ffffff;padding:44px 48px;border-radius:0 0 12px 12px;">
+                        {bodyHtml}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:24px 40px;text-align:center;">
+                        <p style="margin:0 0 6px 0;font-size:12px;color:#999999;font-family:Arial,Helvetica,sans-serif;">&copy; {year} HousingHub. All rights reserved.</p>
+                        <p style="margin:0;font-size:12px;color:#bbbbbb;font-family:Arial,Helvetica,sans-serif;">This is an automated message, please do not reply.</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td></tr>
               </table>
-            </td></tr>
-          </table>
-        </body>
-        </html>
-        """;
+            </body>
+            </html>
+            """;
+    }
 
     private async Task<bool> SendAsync(string toEmail, string subject, string text, string html)
     {
