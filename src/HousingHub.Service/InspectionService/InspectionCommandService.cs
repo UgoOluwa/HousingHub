@@ -125,7 +125,7 @@ public class InspectionCommandService : IInspectionCommandService
         }
     }
 
-    public async Task<BaseResponse<InspectionDto>> RespondToInspectionAsync(RespondToInspectionDto request, Guid authenticatedUserId)
+    public async Task<BaseResponse<InspectionDto>> RespondToInspectionAsync(RespondToInspectionDto request, Guid authenticatedUserId, bool isAdminAction = false)
     {
         try
         {
@@ -141,7 +141,7 @@ public class InspectionCommandService : IInspectionCommandService
             if (property == null)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("property"));
 
-            if (property.OwnerId != authenticatedUserId)
+            if (!isAdminAction && property.OwnerId != authenticatedUserId)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionNotOwner);
 
             if (inspection.Status != InspectionStatus.Pending)
@@ -164,7 +164,7 @@ public class InspectionCommandService : IInspectionCommandService
                 x => x.Id == inspection.CustomerId);
 
             var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId);
+                x => x.Id == property.OwnerId);
 
             // Post an automated confirmation into the owner-customer conversation,
             // attributed to the platform (not personally to the owner) and visible
@@ -369,7 +369,7 @@ public class InspectionCommandService : IInspectionCommandService
         }
     }
 
-    public async Task<BaseResponse<bool>> CancelInspectionAsync(Guid inspectionId, Guid authenticatedUserId)
+    public async Task<BaseResponse<bool>> CancelInspectionAsync(Guid inspectionId, Guid authenticatedUserId, bool isAdminAction = false)
     {
         try
         {
@@ -379,7 +379,7 @@ public class InspectionCommandService : IInspectionCommandService
             if (inspection == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
-            if (inspection.CustomerId != authenticatedUserId)
+            if (!isAdminAction && inspection.CustomerId != authenticatedUserId)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.InspectionNotCustomer);
 
             if (inspection.Status == InspectionStatus.Completed || inspection.Status == InspectionStatus.Cancelled)
@@ -393,7 +393,7 @@ public class InspectionCommandService : IInspectionCommandService
                 x => x.Id == inspection.PropertyId);
 
             var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId);
+                x => x.Id == inspection.CustomerId);
 
             if (property != null && customer != null)
             {
