@@ -13,4 +13,5 @@ public record AdminPropertyListDto(
     DateTime? PublishedAt,
     PropertyAvailability Availability,
     decimal Price,
-    int InspectionCount);
+    int InspectionCount,
+    string? ThumbnailUrl = null);
