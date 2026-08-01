@@ -18,6 +18,12 @@ public class Customer : BaseEntity
     public string? PasswordResetToken { get; set; }
     public DateTime? PasswordResetTokenExpiry { get; set; }
 
+    /// <summary>
+    /// When the last password-reset email went out. Used to throttle resends
+    /// server-side so the endpoint can't be used to spam an inbox.
+    /// </summary>
+    public DateTime? LastPasswordResetRequestedAt { get; set; }
+
     public string? GoogleId { get; set; }
     public AuthProvider AuthProvider { get; set; } = AuthProvider.Local;
 
