@@ -13,16 +13,18 @@ public class AdminDashboardService(
 {
     public async Task<AdminDashboardStatsDto> GetStatsAsync()
     {
+        // One scan per table, shared across every count below — GetCustomersFilteredAsync
+        // was previously called a second time just for the KYC count, doubling the
+        // customer (and, via its own pending-inspection lookup, inspection) scan for
+        // no reason: CustomerDto already carries the fields needed to compute it here.
         var customersTask = customerQueryService.GetAllCustomersAsync();
-        var kycTask = customerQueryService.GetCustomersFilteredAsync(new AdminCustomerFilterDto(1, int.MaxValue));
         var propertiesTask = propertyQueryService.GetAllPropertiesAsync();
         var inspectionsTask = inspectionQueryService.GetAllInspectionsPaginatedAsync(
             new AdminInspectionFilterDto(1, int.MaxValue));
 
-        await Task.WhenAll(customersTask, kycTask, propertiesTask, inspectionsTask);
+        await Task.WhenAll(customersTask, propertiesTask, inspectionsTask);
 
         var customers = customersTask.Result.Data ?? [];
-        var kycCustomers = kycTask.Result.Data?.Items ?? [];
         var properties = propertiesTask.Result.Data ?? [];
         var inspections = inspectionsTask.Result.Data?.Items ?? [];
 
@@ -32,7 +34,7 @@ public class AdminDashboardService(
             TotalCustomers: customers.Count(c => (CustomerType)c.CustomerType == CustomerType.Customer),
             TotalOwners: customers.Count(c => ((CustomerType)c.CustomerType).HasFlag(CustomerType.HouseOwner)),
             TotalAgents: customers.Count(c => ((CustomerType)c.CustomerType).HasFlag(CustomerType.Agent)),
-            PendingKyc: kycCustomers.Count(c => c.KycPending),
+            PendingKyc: customers.Count(c => c.KycSubmittedAt.HasValue && !c.IsKycVerified),
             ActiveListings: properties.Count(p => p.IsPublished && p.Availability == PropertyAvailability.Available),
             TotalProperties: properties.Count,
             PendingInspections: inspections.Count(i => i.Status == InspectionStatus.Pending),
