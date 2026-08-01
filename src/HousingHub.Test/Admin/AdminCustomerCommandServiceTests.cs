@@ -4,6 +4,7 @@ using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.Authentication;
+using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.Mappings;
 using HousingHub.Service.CustomerService;
 using Mapster;
@@ -16,6 +17,7 @@ namespace HousingHub.Test.Admin;
 public class AdminCustomerCommandServiceTests
 {
     private readonly Mock<IUnitOfWOrk> _unitOfWorkMock;
+    private readonly Mock<IEmailService> _emailServiceMock;
     private readonly CustomerCommandService _sut;
 
     public AdminCustomerCommandServiceTests()
@@ -32,7 +34,8 @@ public class AdminCustomerCommandServiceTests
             mapper,
             passwordHasher.Object,
             tokenProvider.Object,
-            new Mock<IFileStorageService>().Object);
+            new Mock<IFileStorageService>().Object,
+            (_emailServiceMock = new Mock<IEmailService>()).Object);
     }
 
     private static Customer MakeCustomer(bool isActive = true) =>
@@ -100,6 +103,7 @@ public class AdminCustomerCommandServiceTests
 
         Assert.True(result.IsSuccessful);
         Assert.True(customer.IsActive);
+        _emailServiceMock.Verify(e => e.SendAccountReactivatedAsync(customer.Email, customer.FirstName), Times.Once);
     }
 
     [Fact]

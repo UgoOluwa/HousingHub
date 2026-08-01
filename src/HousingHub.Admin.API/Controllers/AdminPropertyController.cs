@@ -141,14 +141,15 @@ public class AdminPropertyController(
 
     /// <summary>Unpublishes a property, hiding it from the public.</summary>
     /// <param name="id">Property's database ID.</param>
+    /// <param name="reason">Reason shown to the owner for why the listing was unpublished.</param>
     /// <response code="200">Property unpublished.</response>
     /// <response code="404">Property not found.</response>
     [HttpPut("{id:guid}/unpublish")]
     [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Unpublish(Guid id)
+    public async Task<IActionResult> Unpublish(Guid id, [FromQuery] string reason)
     {
-        var result = await propertyCommandService.SetPropertyPublishedAsync(id, false);
+        var result = await propertyCommandService.SetPropertyPublishedAsync(id, false, reason);
         if (!result.IsSuccessful) return NotFound(result);
         return Ok(result);
     }
@@ -183,14 +184,15 @@ public class AdminPropertyController(
 
     /// <summary>Permanently deletes a property (admin bypass — no ownership check).</summary>
     /// <param name="id">Property's database ID.</param>
+    /// <param name="reason">Reason shown to the owner for why the listing was deleted.</param>
     /// <response code="204">Property deleted.</response>
     /// <response code="404">Property not found.</response>
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id, [FromQuery] string reason)
     {
-        var result = await propertyCommandService.AdminDeletePropertyAsync(id);
+        var result = await propertyCommandService.AdminDeletePropertyAsync(id, reason);
         if (!result.IsSuccessful) return NotFound(result);
         return NoContent();
     }

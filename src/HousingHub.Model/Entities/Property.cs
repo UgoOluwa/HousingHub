@@ -49,6 +49,8 @@ public class Property : BaseEntity
     public DateTime? PublishedAt { get; set; }
     public bool IsVerified { get; set; } = false;
     public DateTime? VerifiedAt { get; set; }
+    /// <summary>Reason an admin gave when unpublishing this listing; cleared on republish.</summary>
+    public string? UnpublishReason { get; set; }
 
     public Property() { }
 

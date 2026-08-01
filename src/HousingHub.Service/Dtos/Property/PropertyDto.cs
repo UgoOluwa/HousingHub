@@ -32,4 +32,5 @@ public record PropertyDto(
     // Count of open (Pending or Rescheduled) inspection requests for this property.
     int InspectionCount = 0,
     PropertyAddressDto? PropertyAddress = null,
-    string? OwnerName = null);
+    string? OwnerName = null,
+    string? UnpublishReason = null);

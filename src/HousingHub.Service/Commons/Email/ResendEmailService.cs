@@ -312,6 +312,141 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(toEmail, "Your HousingHub Admin login code", text, html);
     }
 
+    public async Task<bool> SendKycApprovedAsync(string toEmail, string firstName)
+    {
+        string body = $"""
+            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Your KYC Has Been Approved</h1>
+            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {firstName},</p>
+            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+              Great news! Your identity verification (KYC) has been reviewed and <strong>approved</strong>. You now have full access to your HousingHub account.
+            </p>
+            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            """;
+
+        string html = WrapInLayout("Your KYC Has Been Approved", body);
+        string text = $"Hi {firstName}, your HousingHub KYC verification has been approved. You now have full access to your account.";
+
+        return await SendAsync(toEmail, "Your HousingHub KYC Has Been Approved", text, html);
+    }
+
+    public async Task<bool> SendKycRejectedAsync(string toEmail, string firstName, string reason)
+    {
+        string body = $"""
+            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Your KYC Was Not Approved</h1>
+            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {firstName},</p>
+            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+              We reviewed your identity verification (KYC) submission and were unable to approve it at this time.
+            </p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
+              <tr>
+                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;">
+                  <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#07358B;text-transform:uppercase;letter-spacing:0.8px;font-family:Arial,Helvetica,sans-serif;">Reason</p>
+                  <p style="margin:0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;">{reason}</p>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+              Please log in to your HousingHub account to review and resubmit your documents.
+            </p>
+            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            """;
+
+        string html = WrapInLayout("Your KYC Was Not Approved", body);
+        string text = $"Hi {firstName}, your HousingHub KYC verification was not approved. Reason: {reason}. Please log in to review and resubmit your documents.";
+
+        return await SendAsync(toEmail, "Your HousingHub KYC Was Not Approved", text, html);
+    }
+
+    public async Task<bool> SendAccountReactivatedAsync(string toEmail, string firstName)
+    {
+        string body = $"""
+            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Your Account Has Been Reactivated</h1>
+            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {firstName},</p>
+            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+              Your HousingHub account has been reactivated and you can now log in and use the platform as usual.
+            </p>
+            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            """;
+
+        string html = WrapInLayout("Your Account Has Been Reactivated", body);
+        string text = $"Hi {firstName}, your HousingHub account has been reactivated. You can now log in and use the platform as usual.";
+
+        return await SendAsync(toEmail, "Your HousingHub Account Has Been Reactivated", text, html);
+    }
+
+    public async Task<bool> SendPropertyVerifiedAsync(string ownerEmail, string ownerName, string propertyTitle)
+    {
+        string body = $"""
+            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Your Property Has Been Verified</h1>
+            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {ownerName},</p>
+            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+              Good news! Your listing <strong>{propertyTitle}</strong> has been reviewed and marked as <strong>verified</strong> on HousingHub, giving it a trust badge visible to prospective tenants/buyers.
+            </p>
+            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            """;
+
+        string html = WrapInLayout("Your Property Has Been Verified", body);
+        string text = $"Hi {ownerName}, your listing \"{propertyTitle}\" has been verified on HousingHub.";
+
+        return await SendAsync(ownerEmail, $"Your Property \"{propertyTitle}\" Has Been Verified", text, html);
+    }
+
+    public async Task<bool> SendPropertyUnpublishedAsync(string ownerEmail, string ownerName, string propertyTitle, string reason)
+    {
+        string body = $"""
+            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Your Property Has Been Unpublished</h1>
+            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {ownerName},</p>
+            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+              Your listing <strong>{propertyTitle}</strong> has been unpublished by a HousingHub administrator and is no longer visible to the public.
+            </p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
+              <tr>
+                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;">
+                  <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#07358B;text-transform:uppercase;letter-spacing:0.8px;font-family:Arial,Helvetica,sans-serif;">Reason</p>
+                  <p style="margin:0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;">{reason}</p>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+              Please log in to your HousingHub dashboard for more details.
+            </p>
+            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            """;
+
+        string html = WrapInLayout("Your Property Has Been Unpublished", body);
+        string text = $"Hi {ownerName}, your listing \"{propertyTitle}\" has been unpublished by a HousingHub administrator. Reason: {reason}.";
+
+        return await SendAsync(ownerEmail, $"Your Property \"{propertyTitle}\" Has Been Unpublished", text, html);
+    }
+
+    public async Task<bool> SendPropertyDeletedAsync(string ownerEmail, string ownerName, string propertyTitle, string reason)
+    {
+        string body = $"""
+            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Your Property Has Been Removed</h1>
+            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {ownerName},</p>
+            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
+              Your listing <strong>{propertyTitle}</strong> has been removed from HousingHub by an administrator.
+            </p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
+              <tr>
+                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;">
+                  <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#07358B;text-transform:uppercase;letter-spacing:0.8px;font-family:Arial,Helvetica,sans-serif;">Reason</p>
+                  <p style="margin:0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;">{reason}</p>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0;font-size:14px;color:#888888;line-height:1.6;font-family:Arial,Helvetica,sans-serif;">
+              If you believe this was a mistake, please contact our support team.
+            </p>
+            <hr style="border:none;border-top:1px solid #eeeeee;margin:32px 0 0 0;">
+            """;
+
+        string html = WrapInLayout("Your Property Has Been Removed", body);
+        string text = $"Hi {ownerName}, your listing \"{propertyTitle}\" has been removed from HousingHub by an administrator. Reason: {reason}.";
+
+        return await SendAsync(ownerEmail, $"Your Property \"{propertyTitle}\" Has Been Removed", text, html);
+    }
+
     /// <summary>
     /// Wraps a body-content HTML fragment in the shared HousingHub email shell
     /// (brand header, white content card, footer) so every email method only

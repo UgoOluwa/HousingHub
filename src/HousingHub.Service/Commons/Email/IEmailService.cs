@@ -16,4 +16,13 @@ public interface IEmailService
     Task<bool> SendInspectionReminderAsync(string recipientEmail, string recipientName, string otherPartyName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime);
     /// <summary>One-time login code for the admin dashboard's OTP-only sign-in.</summary>
     Task<bool> SendAdminOtpAsync(string toEmail, string firstName, string otpCode);
+    Task<bool> SendKycApprovedAsync(string toEmail, string firstName);
+    Task<bool> SendKycRejectedAsync(string toEmail, string firstName, string reason);
+    Task<bool> SendAccountReactivatedAsync(string toEmail, string firstName);
+    /// <summary>Sent to the property owner when an admin marks their listing verified.</summary>
+    Task<bool> SendPropertyVerifiedAsync(string ownerEmail, string ownerName, string propertyTitle);
+    /// <summary>Sent to the property owner when an admin unpublishes their listing.</summary>
+    Task<bool> SendPropertyUnpublishedAsync(string ownerEmail, string ownerName, string propertyTitle, string reason);
+    /// <summary>Sent to the property owner when an admin deletes their listing.</summary>
+    Task<bool> SendPropertyDeletedAsync(string ownerEmail, string ownerName, string propertyTitle, string reason);
 }

@@ -3,6 +3,7 @@ using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Service.Commons.Authentication;
+using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.FileStorage;
 using HousingHub.Service.CustomerService.Interfaces;
 using HousingHub.Service.Dtos.Customer;
@@ -20,8 +21,9 @@ public class CustomerCommandService : ICustomerCommandService
     private readonly IPasswordHasher _passwordHasher;
     private readonly ITokenProvider _tokenProvider;
     private readonly IFileStorageService _fileStorageService;
+    private readonly IEmailService _emailService;
 
-    public CustomerCommandService(ILogger<CustomerCommandService> logger, IUnitOfWOrk unitOfWOrk, IMapper mapper, IPasswordHasher passwordHasher, ITokenProvider tokenProvider, IFileStorageService fileStorageService)
+    public CustomerCommandService(ILogger<CustomerCommandService> logger, IUnitOfWOrk unitOfWOrk, IMapper mapper, IPasswordHasher passwordHasher, ITokenProvider tokenProvider, IFileStorageService fileStorageService, IEmailService emailService)
     {
         _logger = logger;
         _unitOfWOrk = unitOfWOrk;
@@ -29,6 +31,7 @@ public class CustomerCommandService : ICustomerCommandService
         _passwordHasher = passwordHasher;
         _tokenProvider = tokenProvider;
         _fileStorageService = fileStorageService;
+        _emailService = emailService;
     }
 
     public async Task<BaseResponse<CustomerDto>> CreateCustomer(CreateCustomerDto request)
@@ -256,6 +259,12 @@ public class CustomerCommandService : ICustomerCommandService
             await _unitOfWOrk.CustomerCommands.UpdateAsync(customer);
             await _unitOfWOrk.SaveAsync();
 
+            // Best-effort — a failed notification shouldn't undo the KYC decision itself.
+            if (isApproved)
+                await _emailService.SendKycApprovedAsync(customer.Email, customer.FirstName);
+            else
+                await _emailService.SendKycRejectedAsync(customer.Email, customer.FirstName, rejectionReason ?? "No reason provided.");
+
             var message = isApproved ? "KYC verified successfully." : "KYC rejected.";
             return new BaseResponse<bool>(true, true, string.Empty, message);
         }
@@ -321,6 +330,8 @@ public class CustomerCommandService : ICustomerCommandService
             customer.DateModified = DateTime.UtcNow;
             await _unitOfWOrk.CustomerCommands.UpdateAsync(customer);
             await _unitOfWOrk.SaveAsync();
+
+            await _emailService.SendAccountReactivatedAsync(customer.Email, customer.FirstName);
 
             return new BaseResponse<bool>(true, true, string.Empty, "Customer reactivated successfully.");
         }
