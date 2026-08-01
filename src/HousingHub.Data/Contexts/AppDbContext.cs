@@ -61,6 +61,16 @@ public class DynamoDbTableInitializer
         {
             CreateGsi("ConversationId-index", "ConversationId"),
         }),
+        ["RefreshTokens"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            CreateGsi("TokenHash-index", "TokenHash"),
+            CreateGsi("CustomerId-index", "CustomerId"),
+        }),
+        ["AdminRefreshTokens"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            CreateGsi("TokenHash-index", "TokenHash"),
+            CreateGsi("AdminId-index", "AdminId"),
+        }),
     };
 
     public DynamoDbTableInitializer(IAmazonDynamoDB client, ILogger<DynamoDbTableInitializer> logger)

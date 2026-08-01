@@ -19,6 +19,7 @@ public static class ResponseMessages
     public const string PasswordChangeSuccess = "Password changed successfully.";
     public const string CurrentPasswordIncorrect = "Current password is incorrect.";
     public const string GoogleSignInFailed = "Google sign-in failed. Invalid token.";
+    public const string InvalidRefreshToken = "Invalid or expired refresh token. Please log in again.";
     public const string AccountUsesGoogleAuth = "This account uses Google sign-in. Please use Google to log in.";
     public const string AccountUsesLocalAuth = "This account uses email/password sign-in. Please log in with your password.";
 

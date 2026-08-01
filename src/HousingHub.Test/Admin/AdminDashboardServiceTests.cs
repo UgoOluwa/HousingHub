@@ -23,9 +23,11 @@ public class AdminDashboardServiceTests
         _sut = new AdminDashboardService(_customersMock.Object, _propertiesMock.Object, _inspectionsMock.Object);
     }
 
-    private static CustomerDto MakeCustomer(CustomerType type, DateTime? dateModified = null) =>
+    private static CustomerDto MakeCustomer(CustomerType type, DateTime? dateModified = null,
+        DateTime? kycSubmittedAt = null, bool isKycVerified = false) =>
         new(Guid.NewGuid(), DateTime.UtcNow, dateModified ?? default, "First", "Last",
-            $"{Guid.NewGuid():N}@test.com", "08000000000", (int)type, null);
+            $"{Guid.NewGuid():N}@test.com", "08000000000", (int)type, null,
+            kycSubmittedAt, isKycVerified);
 
     private static PropertyDto MakeProperty(bool isPublished = false,
         PropertyAvailability availability = PropertyAvailability.Available) =>
@@ -41,13 +43,8 @@ public class AdminDashboardServiceTests
             "Customer", scheduledDate ?? DateTime.UtcNow.AddDays(3), TimeSpan.FromHours(10),
             DateTime.UtcNow, status, null, null);
 
-    private static AdminCustomerListDto MakeKycCustomer(bool kycPending) =>
-        new(Guid.NewGuid(), "First", "Last", $"{Guid.NewGuid():N}@test.com", "08000000000",
-            DateTime.UtcNow, true, !kycPending, kycPending, (int)CustomerType.Customer, 0);
-
     private void Setup(
         IEnumerable<CustomerDto>? customers = null,
-        IEnumerable<AdminCustomerListDto>? kycCustomers = null,
         IEnumerable<PropertyDto>? properties = null,
         IEnumerable<AdminInspectionListDto>? inspections = null)
     {
@@ -55,13 +52,6 @@ public class AdminDashboardServiceTests
             .Setup(s => s.GetAllCustomersAsync())
             .ReturnsAsync(new BaseResponse<List<CustomerDto>>(
                 (customers ?? []).ToList(), true, string.Empty, "OK"));
-
-        var kycItems = (kycCustomers ?? []).ToList();
-        _customersMock
-            .Setup(s => s.GetCustomersFilteredAsync(It.IsAny<AdminCustomerFilterDto>(), null))
-            .ReturnsAsync(new BaseResponse<PaginatedResult<AdminCustomerListDto>>(
-                new PaginatedResult<AdminCustomerListDto>(kycItems, kycItems.Count, 1, int.MaxValue),
-                true, string.Empty, "OK"));
 
         _propertiesMock
             .Setup(s => s.GetAllPropertiesAsync())
@@ -132,11 +122,12 @@ public class AdminDashboardServiceTests
     [Fact]
     public async Task GetStats_PendingKyc_CountsOnlyCustomersWithSubmittedUnverifiedKyc()
     {
-        Setup(kycCustomers: new[]
+        Setup(customers: new[]
         {
-            MakeKycCustomer(kycPending: true),
-            MakeKycCustomer(kycPending: true),
-            MakeKycCustomer(kycPending: false), // already verified, or never submitted
+            MakeCustomer(CustomerType.Customer, kycSubmittedAt: DateTime.UtcNow, isKycVerified: false),
+            MakeCustomer(CustomerType.Customer, kycSubmittedAt: DateTime.UtcNow, isKycVerified: false),
+            MakeCustomer(CustomerType.Customer, kycSubmittedAt: DateTime.UtcNow, isKycVerified: true), // already verified
+            MakeCustomer(CustomerType.Customer), // never submitted
         });
 
         var stats = await _sut.GetStatsAsync();

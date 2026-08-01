@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.DynamoDBv2.DocumentModel;
@@ -19,6 +20,7 @@ public class AdminAuthService(
     IConfiguration configuration) : IAdminAuthService
 {
     private static readonly TimeSpan OtpValidity = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan RefreshTokenValidity = TimeSpan.FromDays(30);
 
     public async Task RequestOtpAsync(string email)
     {
@@ -62,7 +64,89 @@ public class AdminAuthService(
         await dynamoDb.SaveAsync(admin);
 
         var token = CreateToken(admin);
-        return new AdminLoginResultDto(token, admin.FirstName, admin.LastName, admin.Email);
+        var refreshToken = await IssueRefreshTokenAsync(admin.Id);
+        return new AdminLoginResultDto(token, admin.FirstName, admin.LastName, admin.Email, refreshToken);
+    }
+
+    /// <summary>
+    /// Exchanges a refresh token for a new access token, rotating the refresh token
+    /// in the process. Mirrors the Customer-side AuthService.RefreshToken logic:
+    /// the presented token is revoked and a fresh one issued, and a token that's
+    /// already been revoked (i.e. presented a second time — a replay) revokes every
+    /// other active token for the same admin, since that can only mean it was stolen.
+    /// </summary>
+    public async Task<AdminLoginResultDto?> RefreshTokenAsync(string refreshToken)
+    {
+        string tokenHash = HashToken(refreshToken);
+
+        var matches = await dynamoDb.QueryAsync<AdminRefreshToken>(
+            tokenHash,
+            new DynamoDBOperationConfig { IndexName = "TokenHash-index" })
+            .GetRemainingAsync();
+
+        var existing = matches.FirstOrDefault();
+        if (existing == null) return null;
+
+        if (existing.IsRevoked)
+        {
+            await RevokeAllRefreshTokensAsync(existing.AdminId);
+            return null;
+        }
+
+        if (existing.ExpiresAt < DateTime.UtcNow) return null;
+
+        var admin = await dynamoDb.LoadAsync<Admin>(existing.AdminId);
+        if (admin == null || !admin.IsActive) return null;
+
+        existing.IsRevoked = true;
+        existing.DateModified = DateTime.UtcNow;
+        await dynamoDb.SaveAsync(existing);
+
+        var newAccessToken = CreateToken(admin);
+        var newRefreshToken = await IssueRefreshTokenAsync(admin.Id);
+
+        return new AdminLoginResultDto(newAccessToken, admin.FirstName, admin.LastName, admin.Email, newRefreshToken);
+    }
+
+    private async Task<string> IssueRefreshTokenAsync(Guid adminId)
+    {
+        string rawToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+
+        var refreshToken = new AdminRefreshToken
+        {
+            Id = Guid.NewGuid(),
+            AdminId = adminId,
+            TokenHash = HashToken(rawToken),
+            ExpiresAt = DateTime.UtcNow.Add(RefreshTokenValidity),
+            IsRevoked = false,
+            IsActive = true,
+            DateCreated = DateTime.UtcNow,
+            DateModified = DateTime.UtcNow
+        };
+
+        await dynamoDb.SaveAsync(refreshToken);
+        return rawToken;
+    }
+
+    private async Task RevokeAllRefreshTokensAsync(Guid adminId)
+    {
+        var tokens = await dynamoDb.QueryAsync<AdminRefreshToken>(
+            adminId,
+            new DynamoDBOperationConfig { IndexName = "AdminId-index" })
+            .GetRemainingAsync();
+
+        foreach (var refreshToken in tokens.Where(t => !t.IsRevoked))
+        {
+            refreshToken.IsRevoked = true;
+            refreshToken.DateModified = DateTime.UtcNow;
+            await dynamoDb.SaveAsync(refreshToken);
+        }
+    }
+
+    private static string HashToken(string rawToken)
+    {
+        byte[] hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(rawToken));
+        return Convert.ToHexString(hashBytes);
     }
 
     public async Task CreateStaffAsync(string email, string firstName, string lastName)
