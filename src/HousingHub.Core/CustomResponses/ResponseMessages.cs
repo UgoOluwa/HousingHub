@@ -20,6 +20,9 @@ public static class ResponseMessages
     public const string CurrentPasswordIncorrect = "Current password is incorrect.";
     public const string GoogleSignInFailed = "Google sign-in failed. Invalid token.";
     public const string InvalidRefreshToken = "Invalid or expired refresh token. Please log in again.";
+    public const string OtpSent = "If that email is registered, a login code has been sent.";
+    public const string OtpInvalidOrExpired = "Invalid or expired code. Please check the code or request a new one.";
+    public const string OtpTooManyAttempts = "Too many incorrect attempts. Please request a new code.";
     public const string AccountUsesGoogleAuth = "This account uses Google sign-in. Please use Google to log in.";
     public const string AccountUsesLocalAuth = "This account uses email/password sign-in. Please log in with your password.";
 

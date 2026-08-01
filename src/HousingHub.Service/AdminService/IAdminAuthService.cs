@@ -1,13 +1,18 @@
+using HousingHub.Core.CustomResponses;
 using HousingHub.Service.Dtos.Admin;
 
 namespace HousingHub.Service.AdminService;
 
 public interface IAdminAuthService
 {
-    /// <summary>Generates and emails a one-time login code, if the email belongs to an active admin. Always succeeds outwardly to avoid revealing whether the email exists.</summary>
-    Task RequestOtpAsync(string email);
-    /// <summary>Verifies a one-time login code and, if valid and unexpired, issues a JWT and invalidates the code.</summary>
-    Task<AdminLoginResultDto?> VerifyOtpAsync(string email, string code);
+    /// <summary>
+    /// Generates and emails a one-time login code, if the email belongs to an active
+    /// admin who isn't already within the resend cooldown. Always succeeds outwardly
+    /// (same response either way) to avoid revealing whether the email exists.
+    /// </summary>
+    Task<BaseResponse<bool>> RequestOtpAsync(string email);
+    /// <summary>Verifies a one-time login code and, if valid and unexpired, issues a JWT and invalidates the code. Locks out the code after too many wrong attempts.</summary>
+    Task<BaseResponse<AdminLoginResultDto>> VerifyOtpAsync(string email, string code);
     /// <summary>Exchanges a valid, unexpired refresh token for a new access token and a rotated refresh token.</summary>
     Task<AdminLoginResultDto?> RefreshTokenAsync(string refreshToken);
     Task CreateAdminAsync(string email, string password, string firstName, string lastName);
