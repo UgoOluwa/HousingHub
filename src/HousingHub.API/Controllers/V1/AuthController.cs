@@ -4,6 +4,7 @@ using HousingHub.Application.Auth.Commands.ChangePassword;
 using HousingHub.Application.Auth.Commands.ForgotPassword;
 using HousingHub.Application.Auth.Commands.GoogleSignIn;
 using HousingHub.Application.Auth.Commands.Login;
+using HousingHub.Application.Auth.Commands.RefreshToken;
 using HousingHub.Application.Auth.Commands.Register;
 using HousingHub.Application.Auth.Commands.ResendOtp;
 using HousingHub.Application.Auth.Commands.ResetPassword;
@@ -49,6 +50,15 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     [ProducesResponseType(typeof(BaseResponse<LoginCustomerResponseDto?>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Login(LoginCommand command)
+    {
+        var response = await _mediator.Send(command);
+        return Ok(response);
+    }
+
+    /// <summary>Exchanges a refresh token for a new access token and a rotated refresh token.</summary>
+    [HttpPost("refresh-token")]
+    [ProducesResponseType(typeof(BaseResponse<LoginCustomerResponseDto?>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RefreshToken(RefreshTokenCommand command)
     {
         var response = await _mediator.Send(command);
         return Ok(response);

@@ -17,4 +17,6 @@ public interface IAuthService
     Task<BaseResponse<LoginCustomerResponseDto>> GoogleSignIn(GoogleSignInRequestDto request);
     Task<BaseResponse<LoginCustomerResponseDto>> GoogleSignInFromClaims(GoogleClaimsDto claims);
     Task<BaseResponse<LoginCustomerResponseDto>> SetAccountType(Guid customerId, CustomerType customerType);
+    /// <summary>Exchanges a valid, unexpired refresh token for a new access token and a rotated refresh token.</summary>
+    Task<BaseResponse<LoginCustomerResponseDto>> RefreshToken(string refreshToken);
 }

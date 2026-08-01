@@ -7,6 +7,7 @@ using HousingHub.Service.Dtos.Admin;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using AdminEntity = HousingHub.Model.Entities.Admin;
+using AdminRefreshTokenEntity = HousingHub.Model.Entities.AdminRefreshToken;
 
 namespace HousingHub.Test.Admin;
 
@@ -32,6 +33,9 @@ public class AdminAuthServiceTests
 
         _emailServiceMock.Setup(e => e.SendAdminOtpAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync(true);
         _dynamoDbMock.Setup(d => d.SaveAsync(It.IsAny<AdminEntity>(), It.IsAny<System.Threading.CancellationToken>())).Returns(Task.CompletedTask);
+        _dynamoDbMock.Setup(d => d.SaveAsync(It.IsAny<AdminRefreshTokenEntity>(), It.IsAny<System.Threading.CancellationToken>())).Returns(Task.CompletedTask);
+        SetupQueryRefreshToken("TokenHash-index", Array.Empty<AdminRefreshTokenEntity>());
+        SetupQueryRefreshToken("AdminId-index", Array.Empty<AdminRefreshTokenEntity>());
 
         _sut = new AdminAuthService(_dynamoDbMock.Object, _hasherMock.Object, _emailServiceMock.Object, _configMock.Object);
     }
@@ -63,6 +67,17 @@ public class AdminAuthServiceTests
         _dynamoDbMock
             .Setup(d => d.LoadAsync<AdminEntity>(It.IsAny<object>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(result);
+
+    private void SetupQueryRefreshToken(string indexName, IEnumerable<AdminRefreshTokenEntity> results)
+    {
+        var mockSearch = new Mock<AsyncSearch<AdminRefreshTokenEntity>>();
+        mockSearch
+            .Setup(s => s.GetRemainingAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(results.ToList());
+        _dynamoDbMock
+            .Setup(d => d.QueryAsync<AdminRefreshTokenEntity>(It.IsAny<object>(), It.Is<DynamoDBOperationConfig>(c => c.IndexName == indexName)))
+            .Returns(mockSearch.Object);
+    }
 
     private void SetupScan(IEnumerable<AdminEntity> results)
     {
@@ -129,6 +144,7 @@ public class AdminAuthServiceTests
         Assert.Equal(admin.FirstName, result!.FirstName);
         Assert.Equal(admin.Email, result.Email);
         Assert.False(string.IsNullOrEmpty(result.Token));
+        Assert.False(string.IsNullOrEmpty(result.RefreshToken));
         Assert.Null(admin.OtpCode);
         Assert.Null(admin.OtpExpiresAt);
     }
@@ -190,6 +206,110 @@ public class AdminAuthServiceTests
         SetupQuery(Array.Empty<AdminEntity>());
 
         var result = await _sut.VerifyOtpAsync("unknown@test.com", "123456");
+
+        Assert.Null(result);
+    }
+
+    // ── RefreshTokenAsync ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task RefreshToken_ValidToken_RotatesAndReturnsNewTokens()
+    {
+        var admin = MakeAdmin();
+        SetupLoad(admin);
+        var existing = new AdminRefreshTokenEntity
+        {
+            Id = Guid.NewGuid(),
+            AdminId = admin.Id,
+            TokenHash = "irrelevant-in-this-test",
+            ExpiresAt = DateTime.UtcNow.AddDays(10),
+            IsRevoked = false
+        };
+        SetupQueryRefreshToken("TokenHash-index", new[] { existing });
+
+        var result = await _sut.RefreshTokenAsync("some-raw-refresh-token");
+
+        Assert.NotNull(result);
+        Assert.False(string.IsNullOrEmpty(result!.Token));
+        Assert.False(string.IsNullOrEmpty(result.RefreshToken));
+        Assert.True(existing.IsRevoked);
+        _dynamoDbMock.Verify(d => d.SaveAsync(existing, It.IsAny<CancellationToken>()), Times.Once);
+        _dynamoDbMock.Verify(d => d.SaveAsync(It.IsAny<AdminRefreshTokenEntity>(), It.IsAny<CancellationToken>()), Times.Exactly(2)); // revoke existing + insert new
+    }
+
+    [Fact]
+    public async Task RefreshToken_UnknownToken_ReturnsNull()
+    {
+        var result = await _sut.RefreshTokenAsync("unknown-token");
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task RefreshToken_ExpiredToken_ReturnsNull()
+    {
+        var admin = MakeAdmin();
+        var existing = new AdminRefreshTokenEntity
+        {
+            Id = Guid.NewGuid(),
+            AdminId = admin.Id,
+            TokenHash = "hash",
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-1),
+            IsRevoked = false
+        };
+        SetupQueryRefreshToken("TokenHash-index", new[] { existing });
+
+        var result = await _sut.RefreshTokenAsync("expired-token");
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task RefreshToken_AlreadyRevokedToken_RevokesAllSessionsAndReturnsNull()
+    {
+        var admin = MakeAdmin();
+        var reusedToken = new AdminRefreshTokenEntity
+        {
+            Id = Guid.NewGuid(),
+            AdminId = admin.Id,
+            TokenHash = "hash",
+            ExpiresAt = DateTime.UtcNow.AddDays(10),
+            IsRevoked = true // already used once — this presentation is a replay
+        };
+        var otherActiveToken = new AdminRefreshTokenEntity
+        {
+            Id = Guid.NewGuid(),
+            AdminId = admin.Id,
+            TokenHash = "other-hash",
+            ExpiresAt = DateTime.UtcNow.AddDays(10),
+            IsRevoked = false
+        };
+        SetupQueryRefreshToken("TokenHash-index", new[] { reusedToken });
+        SetupQueryRefreshToken("AdminId-index", new[] { otherActiveToken });
+
+        var result = await _sut.RefreshTokenAsync("stolen-token");
+
+        Assert.Null(result);
+        Assert.True(otherActiveToken.IsRevoked);
+        _dynamoDbMock.Verify(d => d.SaveAsync(otherActiveToken, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RefreshToken_InactiveAdmin_ReturnsNull()
+    {
+        var inactiveAdmin = MakeAdmin(isActive: false);
+        SetupLoad(inactiveAdmin);
+        var existing = new AdminRefreshTokenEntity
+        {
+            Id = Guid.NewGuid(),
+            AdminId = inactiveAdmin.Id,
+            TokenHash = "hash",
+            ExpiresAt = DateTime.UtcNow.AddDays(10),
+            IsRevoked = false
+        };
+        SetupQueryRefreshToken("TokenHash-index", new[] { existing });
+
+        var result = await _sut.RefreshTokenAsync("token-for-deactivated-admin");
 
         Assert.Null(result);
     }

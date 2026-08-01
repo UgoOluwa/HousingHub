@@ -27,6 +27,16 @@ public class AdminAuthController(IAdminAuthService adminAuthService) : Controlle
         return Ok(result);
     }
 
+    /// <summary>Exchanges a refresh token for a new access token and a rotated refresh token.</summary>
+    [AllowAnonymous]
+    [HttpPost("refresh-token")]
+    public async Task<IActionResult> RefreshToken([FromBody] AdminRefreshTokenRequest request)
+    {
+        var result = await adminAuthService.RefreshTokenAsync(request.RefreshToken);
+        if (result == null) return Unauthorized(new { message = "Invalid or expired refresh token" });
+        return Ok(result);
+    }
+
     // Seeding endpoint — restrict in production via env var or remove after first use
     [AllowAnonymous]
     [HttpPost("create")]
@@ -43,4 +53,5 @@ public class AdminAuthController(IAdminAuthService adminAuthService) : Controlle
 
 public record AdminOtpRequest(string Email);
 public record AdminOtpVerifyRequest(string Email, string Code);
+public record AdminRefreshTokenRequest(string RefreshToken);
 public record CreateAdminRequest(string SeedKey, string Email, string Password, string FirstName, string LastName);

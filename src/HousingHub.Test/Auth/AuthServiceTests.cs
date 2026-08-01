@@ -51,6 +51,8 @@ public class AuthServiceTests
         _unitOfWorkMock.Setup(u => u.CustomerCommands.InsertAsync(It.IsAny<Customer>())).ReturnsAsync(true);
         _unitOfWorkMock.Setup(u => u.CustomerCommands.UpdateAsync(It.IsAny<Customer>())).Returns(Task.CompletedTask);
         _unitOfWorkMock.Setup(u => u.SaveAsync()).Returns(Task.CompletedTask);
+        _unitOfWorkMock.Setup(u => u.RefreshTokenCommands.InsertAsync(It.IsAny<RefreshToken>())).ReturnsAsync(true);
+        _unitOfWorkMock.Setup(u => u.RefreshTokenCommands.UpdateAsync(It.IsAny<RefreshToken>())).Returns(Task.CompletedTask);
 
         _passwordHasherMock.Setup(p => p.Hash(It.IsAny<string>())).Returns(TestPasswordHash);
         _passwordHasherMock.Setup(p => p.Verify(It.IsAny<string>(), TestPasswordHash)).Returns(true);
@@ -157,6 +159,7 @@ public class AuthServiceTests
         Assert.True(result.IsSuccessful);
         Assert.NotNull(result.Data);
         Assert.Equal(TestToken, result.Data.token);
+        Assert.False(string.IsNullOrEmpty(result.Data.refreshToken));
         Assert.Equal(ResponseMessages.LoginSuccess, result.Message);
     }
 
@@ -212,6 +215,118 @@ public class AuthServiceTests
 
         Assert.False(result.IsSuccessful);
         Assert.Equal(ResponseMessages.EmailNotVerified, result.Message);
+    }
+
+    // ── RefreshToken ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task RefreshToken_ValidToken_RotatesAndReturnsNewTokens()
+    {
+        var customer = CreateCustomer();
+        SetupCustomerLookup(customer);
+
+        var existing = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            CustomerId = customer.Id,
+            TokenHash = "irrelevant-in-this-test",
+            ExpiresAt = DateTime.UtcNow.AddDays(10),
+            IsRevoked = false
+        };
+        _unitOfWorkMock.Setup(u => u.RefreshTokenQueries.GetByTokenHashAsync(It.IsAny<string>())).ReturnsAsync(existing);
+
+        var result = await _sut.RefreshToken("some-raw-refresh-token");
+
+        Assert.True(result.IsSuccessful);
+        Assert.NotNull(result.Data);
+        Assert.Equal(TestToken, result.Data.token);
+        Assert.False(string.IsNullOrEmpty(result.Data.refreshToken));
+        Assert.True(existing.IsRevoked);
+        _unitOfWorkMock.Verify(u => u.RefreshTokenCommands.UpdateAsync(existing), Times.Once);
+        _unitOfWorkMock.Verify(u => u.RefreshTokenCommands.InsertAsync(It.IsAny<RefreshToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RefreshToken_UnknownToken_ReturnsFailure()
+    {
+        _unitOfWorkMock.Setup(u => u.RefreshTokenQueries.GetByTokenHashAsync(It.IsAny<string>())).ReturnsAsync((RefreshToken?)null);
+
+        var result = await _sut.RefreshToken("unknown-token");
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.InvalidRefreshToken, result.Message);
+    }
+
+    [Fact]
+    public async Task RefreshToken_ExpiredToken_ReturnsFailure()
+    {
+        var customer = CreateCustomer();
+        var existing = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            CustomerId = customer.Id,
+            TokenHash = "hash",
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-1),
+            IsRevoked = false
+        };
+        _unitOfWorkMock.Setup(u => u.RefreshTokenQueries.GetByTokenHashAsync(It.IsAny<string>())).ReturnsAsync(existing);
+
+        var result = await _sut.RefreshToken("expired-token");
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.InvalidRefreshToken, result.Message);
+    }
+
+    [Fact]
+    public async Task RefreshToken_AlreadyRevokedToken_RevokesAllSessionsAndReturnsFailure()
+    {
+        var customer = CreateCustomer();
+        var reusedToken = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            CustomerId = customer.Id,
+            TokenHash = "hash",
+            ExpiresAt = DateTime.UtcNow.AddDays(10),
+            IsRevoked = true // already used once — this presentation is a replay
+        };
+        var otherActiveToken = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            CustomerId = customer.Id,
+            TokenHash = "other-hash",
+            ExpiresAt = DateTime.UtcNow.AddDays(10),
+            IsRevoked = false
+        };
+        _unitOfWorkMock.Setup(u => u.RefreshTokenQueries.GetByTokenHashAsync(It.IsAny<string>())).ReturnsAsync(reusedToken);
+        _unitOfWorkMock.Setup(u => u.RefreshTokenQueries.GetActiveByCustomerIdAsync(customer.Id))
+            .ReturnsAsync(new List<RefreshToken> { otherActiveToken });
+
+        var result = await _sut.RefreshToken("stolen-token");
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.InvalidRefreshToken, result.Message);
+        Assert.True(otherActiveToken.IsRevoked);
+        _unitOfWorkMock.Verify(u => u.RefreshTokenCommands.UpdateAsync(otherActiveToken), Times.Once);
+    }
+
+    [Fact]
+    public async Task RefreshToken_CustomerNotFound_ReturnsFailure()
+    {
+        var existing = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            CustomerId = Guid.NewGuid(),
+            TokenHash = "hash",
+            ExpiresAt = DateTime.UtcNow.AddDays(10),
+            IsRevoked = false
+        };
+        _unitOfWorkMock.Setup(u => u.RefreshTokenQueries.GetByTokenHashAsync(It.IsAny<string>())).ReturnsAsync(existing);
+        SetupCustomerLookup(null);
+
+        var result = await _sut.RefreshToken("orphaned-token");
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.InvalidRefreshToken, result.Message);
     }
 
     // ── VerifyEmail ──────────────────────────────────────────────

@@ -26,6 +26,8 @@ public class UnitOfWork : IUnitOfWOrk
     public IConversationQueryRepository ConversationQueries { get; }
     public IChatMessageCommandRepository ChatMessageCommands { get; }
     public IChatMessageQueryRepository ChatMessageQueries { get; }
+    public IRefreshTokenCommandRepository RefreshTokenCommands { get; }
+    public IRefreshTokenQueryRepository RefreshTokenQueries { get; }
 
     public UnitOfWork(
         ICustomerAddressCommandRepository customerAddressCommands,
@@ -47,7 +49,9 @@ public class UnitOfWork : IUnitOfWOrk
         IConversationCommandRepository conversationCommands,
         IConversationQueryRepository conversationQueries,
         IChatMessageCommandRepository chatMessageCommands,
-        IChatMessageQueryRepository chatMessageQueries)
+        IChatMessageQueryRepository chatMessageQueries,
+        IRefreshTokenCommandRepository refreshTokenCommands,
+        IRefreshTokenQueryRepository refreshTokenQueries)
     {
         CustomerAddressCommands = customerAddressCommands;
         CustomerAddressQueries = customerAddressQueries;
@@ -69,6 +73,8 @@ public class UnitOfWork : IUnitOfWOrk
         ConversationQueries = conversationQueries;
         ChatMessageCommands = chatMessageCommands;
         ChatMessageQueries = chatMessageQueries;
+        RefreshTokenCommands = refreshTokenCommands;
+        RefreshTokenQueries = refreshTokenQueries;
     }
 
     public Task SaveAsync()

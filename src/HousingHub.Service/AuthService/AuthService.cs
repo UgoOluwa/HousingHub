@@ -28,6 +28,9 @@ public class AuthService : IAuthService
     /// <summary>How long a user must wait between verification-email resends.</summary>
     private static readonly TimeSpan ResendVerificationCooldown = TimeSpan.FromMinutes(5);
 
+    /// <summary>How long a refresh token stays valid before the user must log in again.</summary>
+    private static readonly TimeSpan RefreshTokenValidity = TimeSpan.FromDays(30);
+
     public AuthService(
         IUnitOfWOrk unitOfWork,
         IPasswordHasher passwordHasher,
@@ -112,8 +115,9 @@ public class AuthService : IAuthService
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.EmailNotVerified);
 
             string token = _tokenProvider.Create(customer);
+            string refreshToken = await IssueRefreshTokenAsync(customer.Id);
             var response = _mapper.Map<LoginCustomerResponseDto>(customer);
-            response = response with { token = token };
+            response = response with { token = token, refreshToken = refreshToken };
 
             return new BaseResponse<LoginCustomerResponseDto>(response, true, string.Empty, ResponseMessages.LoginSuccess);
         }
@@ -305,8 +309,9 @@ public class AuthService : IAuthService
             }
 
             string token = _tokenProvider.Create(customer);
+            string refreshToken = await IssueRefreshTokenAsync(customer.Id);
             var response = _mapper.Map<LoginCustomerResponseDto>(customer);
-            response = response with { token = token };
+            response = response with { token = token, refreshToken = refreshToken };
 
             return new BaseResponse<LoginCustomerResponseDto>(response, true, string.Empty, ResponseMessages.LoginSuccess);
         }
@@ -389,8 +394,9 @@ public class AuthService : IAuthService
             }
 
             string token = _tokenProvider.Create(customer);
+            string refreshToken = await IssueRefreshTokenAsync(customer.Id);
             var response = _mapper.Map<LoginCustomerResponseDto>(customer);
-            response = response with { token = token };
+            response = response with { token = token, refreshToken = refreshToken };
 
             return new BaseResponse<LoginCustomerResponseDto>(response, true, string.Empty, ResponseMessages.LoginSuccess);
         }
@@ -431,8 +437,9 @@ public class AuthService : IAuthService
             await _unitOfWork.SaveAsync();
 
             string token = _tokenProvider.Create(customer);
+            string refreshToken = await IssueRefreshTokenAsync(customer.Id);
             var response = _mapper.Map<LoginCustomerResponseDto>(customer);
-            response = response with { token = token };
+            response = response with { token = token, refreshToken = refreshToken };
 
             return new BaseResponse<LoginCustomerResponseDto>(response, true, string.Empty, ResponseMessages.Successful);
         }
@@ -441,6 +448,93 @@ public class AuthService : IAuthService
             _logger.LogError(ex, "Error in SetAccountType: {Message}", ex.Message);
             return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Exchanges a refresh token for a new access token, rotating the refresh token
+    /// in the process: the presented token is revoked and a fresh one is issued.
+    ///
+    /// SECURITY: if a token that's already been revoked (i.e. already used once, or
+    /// explicitly revoked) is presented again, every refresh token for that customer
+    /// is revoked. A legitimate client always uses the newest token it was issued, so
+    /// a revoked token showing up again means it was stolen and the thief and the
+    /// legitimate owner are now racing each other — the only safe response is to end
+    /// every session and force a fresh login.
+    /// </summary>
+    public async Task<BaseResponse<LoginCustomerResponseDto>> RefreshToken(string refreshToken)
+    {
+        try
+        {
+            string tokenHash = HashToken(refreshToken);
+            var existing = await _unitOfWork.RefreshTokenQueries.GetByTokenHashAsync(tokenHash);
+
+            if (existing == null)
+                return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidRefreshToken);
+
+            if (existing.IsRevoked)
+            {
+                await RevokeAllRefreshTokensAsync(existing.CustomerId);
+                return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidRefreshToken);
+            }
+
+            if (existing.ExpiresAt < DateTime.UtcNow)
+                return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidRefreshToken);
+
+            var customer = await _unitOfWork.CustomerQueries.GetByIdAsync(existing.CustomerId);
+            if (customer == null)
+                return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidRefreshToken);
+
+            existing.IsRevoked = true;
+            await _unitOfWork.RefreshTokenCommands.UpdateAsync(existing);
+
+            string newAccessToken = _tokenProvider.Create(customer);
+            string newRefreshToken = await IssueRefreshTokenAsync(customer.Id);
+
+            var response = _mapper.Map<LoginCustomerResponseDto>(customer);
+            response = response with { token = newAccessToken, refreshToken = newRefreshToken };
+
+            return new BaseResponse<LoginCustomerResponseDto>(response, true, string.Empty, ResponseMessages.Successful);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in RefreshToken: {Message}", ex.Message);
+            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+        }
+    }
+
+    /// <summary>Generates a new refresh token, persists its hash, and returns the raw value to hand to the client.</summary>
+    private async Task<string> IssueRefreshTokenAsync(Guid customerId)
+    {
+        string rawToken = GenerateSecureToken();
+
+        var refreshToken = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            CustomerId = customerId,
+            TokenHash = HashToken(rawToken),
+            ExpiresAt = DateTime.UtcNow.Add(RefreshTokenValidity),
+            IsRevoked = false,
+            IsActive = true
+        };
+
+        await _unitOfWork.RefreshTokenCommands.InsertAsync(refreshToken);
+        return rawToken;
+    }
+
+    private async Task RevokeAllRefreshTokensAsync(Guid customerId)
+    {
+        var activeTokens = await _unitOfWork.RefreshTokenQueries.GetActiveByCustomerIdAsync(customerId);
+        foreach (var activeToken in activeTokens)
+        {
+            activeToken.IsRevoked = true;
+            await _unitOfWork.RefreshTokenCommands.UpdateAsync(activeToken);
+        }
+    }
+
+    private static string HashToken(string rawToken)
+    {
+        byte[] hashBytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(rawToken));
+        return Convert.ToHexString(hashBytes);
     }
 
     /// <summary>
