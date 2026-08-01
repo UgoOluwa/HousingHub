@@ -5,6 +5,7 @@ using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.Runtime;
 using HousingHub.Application;
+using HousingHub.Core.CustomResponses;
 using HousingHub.Data.Contexts;
 using HousingHub.Repository;
 using HousingHub.Service;
@@ -12,6 +13,7 @@ using HousingHub.Service.AdminService;
 using HousingHub.Service.Commons.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using Serilog;
@@ -137,6 +139,23 @@ public static class Program
         {
             app.UsePathBase("/admin");
         }
+
+        // Turns an unhandled exception into a normal JSON error response instead of a
+        // bare Lambda 500 with no body — any exception that escapes a controller's own
+        // try/catch previously reached the caller with no diagnostic information at all.
+        app.UseExceptionHandler(errorApp =>
+        {
+            errorApp.Run(async context =>
+            {
+                var exceptionFeature = context.Features.Get<IExceptionHandlerFeature>();
+                Log.Error(exceptionFeature?.Error, "Unhandled exception in Admin API");
+
+                context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsJsonAsync(new BaseResponse<object?>(
+                    null, false, "500", "An unexpected error occurred. Please try again."));
+            });
+        });
 
         app.UseSwagger(c => c.RouteTemplate = "openapi/{documentName}.json");
         app.UseSwaggerUI(c =>

@@ -185,25 +185,35 @@ public class InspectionQueryService : IInspectionQueryService
 
             var paged = ordered.Skip((filter.PageNumber - 1) * filter.PageSize).Take(filter.PageSize).ToList();
 
-            // Enrich with property and customer info
+            // Enrich with property and customer info. Deliberately uses per-ID
+            // GetByIdAsync (a fast DynamoDB GetItem on the primary key) instead of
+            // GetAllAsync(predicate) — the generic repository's GetAllAsync always
+            // scans the *entire* table then filters in memory regardless of the
+            // predicate, so for a bounded page of ~20 inspections that was three full
+            // table scans (Properties/Customers/PropertyAddresses) on every request.
             var propertyIds = paged.Select(i => i.PropertyId).Distinct().ToList();
             var customerIds = paged.Select(i => i.CustomerId).Distinct().ToList();
 
-            var propertiesTask = _unitOfWOrk.PropertyQueries.GetAllAsync(p => propertyIds.Contains(p.Id));
-            var customersTask = _unitOfWOrk.CustomerQueries.GetAllAsync(c => customerIds.Contains(c.Id));
-            var addressesTask = _unitOfWOrk.PropertyAddressQueries.GetAllAsync(a => propertyIds.Contains(a.PropertyId));
+            var propertyTasks = propertyIds.Select(id => _unitOfWOrk.PropertyQueries.GetByIdAsync(id)).ToList();
+            var customerTasks = customerIds.Select(id => _unitOfWOrk.CustomerQueries.GetByIdAsync(id)).ToList();
 
-            await Task.WhenAll(propertiesTask, customersTask, addressesTask);
+            await Task.WhenAll(propertyTasks.Cast<Task>().Concat(customerTasks));
 
-            var propertyMap = propertiesTask.Result.ToDictionary(p => p.Id);
-            var customerMap = customersTask.Result.ToDictionary(c => c.Id);
-            var addressMap = addressesTask.Result.ToDictionary(a => a.PropertyId);
+            var propertyMap = propertyTasks.Select(t => t.Result).Where(p => p != null).ToDictionary(p => p!.Id);
+            var customerMap = customerTasks.Select(t => t.Result).Where(c => c != null).ToDictionary(c => c!.Id);
+
+            // Addresses are looked up by each property's own AddressId (also a fast
+            // primary-key read) rather than scanning PropertyAddresses for matches.
+            var addressIds = propertyMap.Values.Select(p => p.AddressId).Distinct().ToList();
+            var addressTasks = addressIds.Select(id => _unitOfWOrk.PropertyAddressQueries.GetByIdAsync(id)).ToList();
+            await Task.WhenAll(addressTasks);
+            var addressById = addressTasks.Select(t => t.Result).Where(a => a != null).ToDictionary(a => a!.Id);
 
             var items = paged.Select(i =>
             {
                 propertyMap.TryGetValue(i.PropertyId, out var prop);
                 customerMap.TryGetValue(i.CustomerId, out var cust);
-                addressMap.TryGetValue(i.PropertyId, out var addr);
+                var addr = prop != null && addressById.TryGetValue(prop.AddressId, out var a) ? a : null;
 
                 var address = addr != null ? $"{addr.Place}, {addr.City}, {addr.State}" : "N/A";
                 var customerName = cust != null ? $"{cust.FirstName} {cust.LastName}" : "N/A";

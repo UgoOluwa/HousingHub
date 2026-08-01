@@ -47,6 +47,7 @@ public class AdminInspectionQueryServiceTests
         _unitOfWorkMock
             .Setup(u => u.PropertyInspectionQueries.GetAllAsync(It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
             .ReturnsAsync(inspections);
+        // GetTodaysInspectionsPaginatedAsync still enriches via GetAllAsync(predicate).
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<Expression<Func<Property, bool>>>()))
             .ReturnsAsync(new List<Property>());
@@ -56,6 +57,16 @@ public class AdminInspectionQueryServiceTests
         _unitOfWorkMock
             .Setup(u => u.PropertyAddressQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyAddress, bool>>>()))
             .ReturnsAsync(new List<HousingHub.Model.Entities.PropertyAddress>());
+        // GetAllInspectionsPaginatedAsync enriches via per-ID GetByIdAsync instead.
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByIdAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((Property?)null);
+        _unitOfWorkMock
+            .Setup(u => u.CustomerQueries.GetByIdAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((Customer?)null);
+        _unitOfWorkMock
+            .Setup(u => u.PropertyAddressQueries.GetByIdAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((HousingHub.Model.Entities.PropertyAddress?)null);
     }
 
     // ── GetAllInspectionsPaginatedAsync ───────────────────────────────────────
