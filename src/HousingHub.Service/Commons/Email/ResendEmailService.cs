@@ -24,30 +24,18 @@ internal sealed class ResendEmailService : IEmailService
         string verifyLink = $"{baseUrl}/verify-email?email={Uri.EscapeDataString(toEmail)}&token={verificationToken}";
 
         string body = $"""
-            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Welcome to HousingHub, {firstName}!</h1>
-            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              We are thrilled to have you on board. To complete your registration and start exploring properties, please verify your email address.
+            {P($"Hi {firstName},")}
+            {P("Welcome to Housing Hub. To finish setting up your account and start browsing verified listings, confirm your email address below.")}
+            {Button("Verify My Email", verifyLink)}
+            <p style="margin:20px 0 0 0;font-size:13px;color:#9AA3AE;line-height:1.6;font-family:{Font};">
+              This link expires in <strong style="color:{Muted};">24 hours</strong>. If you did not create a Housing Hub account, you can safely ignore this email.
             </p>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              Click the button below to confirm your account:
-            </p>
-            <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:32px;">
-              <tr>
-                <td style="border-radius:8px;background-color:#07358B;">
-                  <a href="{verifyLink}" style="display:inline-block;padding:14px 36px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.4px;">Verify My Email</a>
-                </td>
-              </tr>
-            </table>
-            <p style="margin:0;font-size:14px;color:#888888;line-height:1.6;font-family:Arial,Helvetica,sans-serif;">
-              This link expires in <strong>24 hours</strong>. If you did not create a HousingHub account, you can safely ignore this email.
-            </p>
-            <hr style="border:none;border-top:1px solid #eeeeee;margin:32px 0 0 0;">
             """;
 
-        string html = WrapInLayout("Verify your HousingHub email", body);
-        string text = $"Welcome to HousingHub, {firstName}! Verify your email by visiting: {verifyLink}. This link expires in 24 hours.";
+        string html = WrapInLayout("Verify your Housing Hub email", body, Hero("&#9993;", "Confirm your email"));
+        string text = $"Welcome to Housing Hub, {firstName}! Verify your email by visiting: {verifyLink}. This link expires in 24 hours.";
 
-        return await SendAsync(toEmail, "Verify your HousingHub email", text, html);
+        return await SendAsync(toEmail, "Verify your Housing Hub email", text, html);
     }
 
     public async Task<bool> SendPasswordResetAsync(string toEmail, string firstName, string resetToken)
@@ -56,28 +44,18 @@ internal sealed class ResendEmailService : IEmailService
         string resetLink = $"{baseUrl}/create-new-password?email={Uri.EscapeDataString(toEmail)}&token={resetToken}";
 
         string body = $"""
-            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Password Reset Request</h1>
-            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {firstName},</p>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              We received a request to reset the password for your HousingHub account. Click the button below to choose a new password. This link is valid for <strong>1 hour</strong>.
+            {P($"Hi {firstName},")}
+            {P("We received a request to reset the password on your Housing Hub account. Choose a new one using the button below.")}
+            {Button("Reset My Password", resetLink)}
+            <p style="margin:20px 0 0 0;font-size:13px;color:#9AA3AE;line-height:1.6;font-family:{Font};">
+              This link is valid for <strong style="color:{Muted};">1 hour</strong>. If you did not request a reset, no action is needed &mdash; your account remains secure.
             </p>
-            <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:32px;">
-              <tr>
-                <td style="border-radius:8px;background-color:#07358B;">
-                  <a href="{resetLink}" style="display:inline-block;padding:14px 36px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.4px;">Reset My Password</a>
-                </td>
-              </tr>
-            </table>
-            <p style="margin:0;font-size:14px;color:#888888;line-height:1.6;font-family:Arial,Helvetica,sans-serif;">
-              If you did not request a password reset, no action is needed. Your account remains secure.
-            </p>
-            <hr style="border:none;border-top:1px solid #eeeeee;margin:32px 0 0 0;">
             """;
 
-        string html = WrapInLayout("Reset your HousingHub password", body);
-        string text = $"Hi {firstName}, reset your HousingHub password by visiting: {resetLink}. This link expires in 1 hour.";
+        string html = WrapInLayout("Reset your Housing Hub password", body, Hero("&#128273;", "Reset your password"));
+        string text = $"Hi {firstName}, reset your Housing Hub password by visiting: {resetLink}. This link expires in 1 hour.";
 
-        return await SendAsync(toEmail, "Reset your HousingHub password", text, html);
+        return await SendAsync(toEmail, "Reset your Housing Hub password", text, html);
     }
 
     public async Task<bool> SendPasswordChangedAsync(string toEmail, string firstName)
@@ -85,71 +63,34 @@ internal sealed class ResendEmailService : IEmailService
         string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
 
         string body = $"""
-            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Your Password Was Changed</h1>
-            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {firstName},</p>
-            <p style="margin:0 0 24px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              This is a confirmation that the password for your HousingHub account was successfully changed. If this was you, no further action is needed.
-            </p>
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
-              <tr>
-                <td style="background-color:#fff8e1;border-left:4px solid #FFCC00;border-radius:0 6px 6px 0;padding:16px 20px;">
-                  <p style="margin:0 0 6px 0;font-size:15px;font-weight:700;color:#5a4000;font-family:Arial,Helvetica,sans-serif;">Did not make this change?</p>
-                  <p style="margin:0;font-size:14px;color:#7a5c00;line-height:1.6;font-family:Arial,Helvetica,sans-serif;">
-                    If you did not change your password, your account may be at risk. Please secure your account immediately.
-                  </p>
-                </td>
-              </tr>
-            </table>
-            <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
-              <tr>
-                <td style="border-radius:8px;background-color:#07358B;">
-                  <a href="{baseUrl}/reset-password" style="display:inline-block;padding:14px 36px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.4px;">Secure My Account</a>
-                </td>
-              </tr>
-            </table>
-            <p style="margin:0;font-size:14px;color:#888888;line-height:1.6;font-family:Arial,Helvetica,sans-serif;">
-              If you need further assistance, please contact our support team.
-            </p>
-            <hr style="border:none;border-top:1px solid #eeeeee;margin:32px 0 0 0;">
+            {P($"Hi {firstName},")}
+            {P("The password on your Housing Hub account was just changed successfully. If this was you, no further action is needed.")}
+            {Callout("Didn't make this change?", "Your account may be at risk. Secure it immediately using the button below, then contact us at info@housinghub.ng.")}
+            {Button("Secure My Account", $"{baseUrl}/reset-password")}
             """;
 
-        string html = WrapInLayout("Your HousingHub password was changed", body);
-        string text = $"Hi {firstName}, your HousingHub password was just changed. If this wasn't you, reset your password immediately at {baseUrl}/reset-password.";
+        string html = WrapInLayout("Your Housing Hub password was changed", body, Hero("&#128274;", "Password changed"));
+        string text = $"Hi {firstName}, your Housing Hub password was just changed. If this wasn't you, reset your password immediately at {baseUrl}/reset-password.";
 
-        return await SendAsync(toEmail, "Your HousingHub password was changed", text, html);
+        return await SendAsync(toEmail, "Your Housing Hub password was changed", text, html);
     }
 
     public async Task<bool> SendInspectionScheduledAsync(string ownerEmail, string ownerName, string customerName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime, string? note)
     {
-        string noteSection = string.IsNullOrWhiteSpace(note) ? "" : $"<p><strong>Note:</strong> {note}</p>";
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string noteSection = string.IsNullOrWhiteSpace(note) ? "" : DetailRow("Note from customer", note);
 
         string body = $"""
-            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">New Inspection Request</h1>
-            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {ownerName},</p>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              Great news! <strong>{customerName}</strong> has requested an inspection for your property and is eager to take a look.
-            </p>
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
-              <tr>
-                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;">
-                  <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#07358B;text-transform:uppercase;letter-spacing:0.8px;font-family:Arial,Helvetica,sans-serif;">Inspection Details</p>
-                  <p style="margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Property:</strong> {propertyTitle}</p>
-                  <p style="margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Requested by:</strong> {customerName}</p>
-                  <p style="margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Date:</strong> {scheduledDate:yyyy-MM-dd}</p>
-                  <p style="margin:0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Time:</strong> {scheduledTime:hh\:mm}</p>
-                </td>
-              </tr>
-            </table>
-            <div style="font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;line-height:1.7;">
-              {noteSection}
-            </div>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              Please log in to your HousingHub dashboard to accept or decline this inspection request.
-            </p>
-            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            {P($"Hi {ownerName},")}
+            {P($"<strong style=\"color:{Ink};\">{customerName}</strong> has requested an inspection for your property.")}
+            {DetailRow("Property", propertyTitle)}
+            {DetailRow("Requested by", customerName)}
+            {DetailRow("Date &amp; time", $"{scheduledDate:dddd, d MMMM yyyy} &middot; {scheduledTime:hh\\:mm}")}
+            {noteSection}
+            {Button("Accept or Decline", $"{baseUrl}/inspections")}
             """;
 
-        string html = WrapInLayout("New Inspection Request", body);
+        string html = WrapInLayout("New inspection request", body, Hero("&#127968;", "New inspection request"));
         string text = $"Hi {ownerName}, {customerName} has scheduled an inspection for {propertyTitle} on {scheduledDate:yyyy-MM-dd} at {scheduledTime:hh\\:mm}. Log in to respond.";
 
         return await SendAsync(ownerEmail, $"New Inspection Request for {propertyTitle}", text, html);
@@ -157,34 +98,20 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendInspectionBookingConfirmationAsync(string customerEmail, string customerName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime, string? note)
     {
-        string noteSection = string.IsNullOrWhiteSpace(note) ? "" : $"<p><strong>Your Note:</strong> {note}</p>";
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string noteSection = string.IsNullOrWhiteSpace(note) ? "" : DetailRow("Your note", note);
 
         string body = $"""
-            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Inspection Request Submitted</h1>
-            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {customerName},</p>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              Your inspection request for <strong>{propertyTitle}</strong> has been submitted. The property owner will review it and respond shortly.
-            </p>
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
-              <tr>
-                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;">
-                  <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#07358B;text-transform:uppercase;letter-spacing:0.8px;font-family:Arial,Helvetica,sans-serif;">Inspection Details</p>
-                  <p style="margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Property:</strong> {propertyTitle}</p>
-                  <p style="margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Date:</strong> {scheduledDate:yyyy-MM-dd}</p>
-                  <p style="margin:0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Time:</strong> {scheduledTime:hh\:mm}</p>
-                </td>
-              </tr>
-            </table>
-            <div style="font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;line-height:1.7;">
-              {noteSection}
-            </div>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              We'll notify you as soon as the owner responds. You can also track its status from your HousingHub dashboard.
-            </p>
-            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            {P($"Hi {customerName},")}
+            {P("Your inspection request has been submitted. The property owner will review it and respond shortly &mdash; we'll email you the moment they do.")}
+            {DetailRow("Property", propertyTitle)}
+            {DetailRow("Date &amp; time", $"{scheduledDate:dddd, d MMMM yyyy} &middot; {scheduledTime:hh\\:mm}")}
+            {DetailRow("Status", "Awaiting owner response")}
+            {noteSection}
+            {Button("Track This Inspection", $"{baseUrl}/inspections")}
             """;
 
-        string html = WrapInLayout("Inspection Request Submitted", body);
+        string html = WrapInLayout("Inspection request submitted", body, Hero("&#128340;", "Request submitted"));
         string text = $"Hi {customerName}, your inspection request for {propertyTitle} on {scheduledDate:yyyy-MM-dd} at {scheduledTime:hh\\:mm} has been submitted. We'll notify you when the owner responds.";
 
         return await SendAsync(customerEmail, $"Inspection Request Submitted for {propertyTitle}", text, html);
@@ -192,37 +119,31 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendInspectionResponseAsync(string customerEmail, string customerName, string ownerName, string propertyTitle, string action, string? note, DateTime? rescheduledDate, TimeSpan? rescheduledTime)
     {
-        string noteSection = string.IsNullOrWhiteSpace(note) ? "" : $"<p><strong>Note from owner:</strong> {note}</p>";
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string noteSection = string.IsNullOrWhiteSpace(note) ? "" : DetailRow("Note from owner", note);
         string rescheduleSection = rescheduledDate.HasValue
-            ? $"<p style=\"margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;\"><strong>New Date:</strong> {rescheduledDate.Value:yyyy-MM-dd}</p><p style=\"margin:0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;\"><strong>New Time:</strong> {rescheduledTime!.Value:hh\\:mm}</p>"
+            ? DetailRow("New date &amp; time", $"{rescheduledDate.Value:dddd, d MMMM yyyy} &middot; {rescheduledTime!.Value:hh\\:mm}")
             : "";
 
+        // Glyph tracks the outcome so the mail reads correctly at a glance.
+        string glyph = action.ToLowerInvariant() switch
+        {
+            "confirmed" or "accepted" or "approved" => "&#10003;",
+            "declined" or "rejected" or "cancelled" => "&#10005;",
+            _ => "&#128197;",
+        };
+
         string body = $"""
-            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Inspection {action}</h1>
-            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {customerName},</p>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              The property owner <strong>{ownerName}</strong> has <strong>{action.ToLower()}</strong> your inspection request for <strong>{propertyTitle}</strong>.
-            </p>
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
-              <tr>
-                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;">
-                  <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#07358B;text-transform:uppercase;letter-spacing:0.8px;font-family:Arial,Helvetica,sans-serif;">Inspection Details</p>
-                  <p style="margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Property:</strong> {propertyTitle}</p>
-                  <p style="margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Status:</strong> {action}</p>
-                  {rescheduleSection}
-                </td>
-              </tr>
-            </table>
-            <div style="font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;line-height:1.7;margin-bottom:28px;">
-              {noteSection}
-            </div>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              Please log in to your HousingHub dashboard for full details and to manage your inspections.
-            </p>
-            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            {P($"Hi {customerName},")}
+            {P($"<strong style=\"color:{Ink};\">{ownerName}</strong> has {action.ToLower()} your inspection request.")}
+            {DetailRow("Property", propertyTitle)}
+            {DetailRow("Status", action)}
+            {rescheduleSection}
+            {noteSection}
+            {Button("View Inspection", $"{baseUrl}/inspections")}
             """;
 
-        string html = WrapInLayout($"Inspection {action}", body);
+        string html = WrapInLayout($"Inspection {action.ToLower()}", body, Hero(glyph, $"Inspection {action.ToLower()}"));
         string text = $"Hi {customerName}, {ownerName} has {action.ToLower()} your inspection for {propertyTitle}. Log in for details.";
 
         return await SendAsync(customerEmail, $"Inspection {action} for {propertyTitle}", text, html);
@@ -230,56 +151,42 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendNewMessageAsync(string recipientEmail, string recipientName, string senderName, string messagePreview)
     {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
         string body = $"""
-            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">You have a new message</h1>
-            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {recipientName},</p>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              <strong>{senderName}</strong> sent you a message on HousingHub:
-            </p>
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
+            {P($"Hi {recipientName},")}
+            {P($"<strong style=\"color:{Ink};\">{senderName}</strong> sent you a message on Housing Hub.")}
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:4px 0 8px;">
               <tr>
-                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;">
-                  <p style="margin:0;font-size:15px;color:#333333;font-style:italic;font-family:Arial,Helvetica,sans-serif;">&ldquo;{messagePreview}&rdquo;</p>
+                <td style="background-color:#F7F8FA;border-left:3px solid {Gold};padding:16px 18px;">
+                  <p style="margin:0;font-size:15px;color:{Ink};font-style:italic;line-height:1.6;font-family:{Font};">&ldquo;{messagePreview}&rdquo;</p>
                 </td>
               </tr>
             </table>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              Log in to your HousingHub dashboard to reply.
-            </p>
-            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            {Button("Reply in Housing Hub", $"{baseUrl}/messages")}
             """;
 
-        string html = WrapInLayout($"New message from {senderName}", body);
-        string text = $"Hi {recipientName}, {senderName} sent you a message on HousingHub: \"{messagePreview}\". Log in to reply.";
+        string html = WrapInLayout($"New message from {senderName}", body, Hero("&#128172;", "You have a new message"));
+        string text = $"Hi {recipientName}, {senderName} sent you a message on Housing Hub: \"{messagePreview}\". Log in to reply.";
 
         return await SendAsync(recipientEmail, $"New message from {senderName}", text, html);
     }
 
     public async Task<bool> SendInspectionReminderAsync(string recipientEmail, string recipientName, string otherPartyName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime)
     {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
         string body = $"""
-            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Inspection Reminder</h1>
-            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {recipientName},</p>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              This is a reminder that your inspection with <strong>{otherPartyName}</strong> for <strong>{propertyTitle}</strong> is coming up in about 24 hours.
-            </p>
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
-              <tr>
-                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;">
-                  <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#07358B;text-transform:uppercase;letter-spacing:0.8px;font-family:Arial,Helvetica,sans-serif;">Inspection Details</p>
-                  <p style="margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Property:</strong> {propertyTitle}</p>
-                  <p style="margin:0 0 8px 0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Date:</strong> {scheduledDate:yyyy-MM-dd}</p>
-                  <p style="margin:0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;"><strong>Time:</strong> {scheduledTime:hh\:mm}</p>
-                </td>
-              </tr>
-            </table>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              Please arrive on time and bring a valid ID. Log in to your HousingHub dashboard or message the other party via chat if you have any questions.
-            </p>
-            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            {P($"Hi {recipientName},")}
+            {P($"Your inspection with <strong style=\"color:{Ink};\">{otherPartyName}</strong> is coming up in about 24 hours.")}
+            {DetailRow("Property", propertyTitle)}
+            {DetailRow("Date &amp; time", $"{scheduledDate:dddd, d MMMM yyyy} &middot; {scheduledTime:hh\\:mm}")}
+            {DetailRow("Meeting with", otherPartyName)}
+            {Callout("Before you go", "Please arrive on time and bring a valid means of identification. You can message the other party from your dashboard if anything changes.")}
+            {Button("View Inspection", $"{baseUrl}/inspections")}
             """;
 
-        string html = WrapInLayout("Inspection Reminder", body);
+        string html = WrapInLayout("Inspection reminder", body, Hero("&#9200;", "Inspection in 24 hours"));
         string text = $"Hi {recipientName}, reminder: your inspection with {otherPartyName} for {propertyTitle} is in about 24 hours, on {scheduledDate:yyyy-MM-dd} at {scheduledTime:hh\\:mm}.";
 
         return await SendAsync(recipientEmail, $"Reminder: Inspection for {propertyTitle} in 24 hours", text, html);
@@ -288,133 +195,108 @@ internal sealed class ResendEmailService : IEmailService
     public async Task<bool> SendAdminOtpAsync(string toEmail, string firstName, string otpCode)
     {
         string body = $"""
-            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Your Admin Login Code</h1>
-            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {firstName},</p>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              Use the code below to sign in to the HousingHub Admin dashboard. This code expires in <strong>10 minutes</strong>.
-            </p>
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
+            {P($"Hi {firstName},")}
+            {P("Use the code below to sign in to the Housing Hub admin dashboard.")}
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:8px 0 6px;">
               <tr>
-                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;text-align:center;">
-                  <p style="margin:0;font-size:32px;font-weight:800;letter-spacing:8px;color:#07358B;font-family:Arial,Helvetica,sans-serif;">{otpCode}</p>
+                <td style="background-color:{HeroTint};border-radius:8px;padding:22px;text-align:center;">
+                  <p style="margin:0;font-size:34px;font-weight:800;letter-spacing:10px;color:{Navy};font-family:{Font};">{otpCode}</p>
                 </td>
               </tr>
             </table>
-            <p style="margin:0;font-size:14px;color:#888888;line-height:1.6;font-family:Arial,Helvetica,sans-serif;">
-              If you did not request this code, you can safely ignore this email.
+            <p style="margin:16px 0 0 0;font-size:13px;color:#9AA3AE;line-height:1.6;font-family:{Font};">
+              This code expires in <strong style="color:{Muted};">10 minutes</strong>. If you did not request it, you can safely ignore this email.
             </p>
-            <hr style="border:none;border-top:1px solid #eeeeee;margin:32px 0 0 0;">
             """;
 
-        string html = WrapInLayout("Your HousingHub Admin login code", body);
-        string text = $"Hi {firstName}, your HousingHub Admin login code is {otpCode}. It expires in 10 minutes.";
+        string html = WrapInLayout("Your Housing Hub admin login code", body, Hero("&#128272;", "Your login code"));
+        string text = $"Hi {firstName}, your Housing Hub Admin login code is {otpCode}. It expires in 10 minutes.";
 
-        return await SendAsync(toEmail, "Your HousingHub Admin login code", text, html);
+        return await SendAsync(toEmail, "Your Housing Hub Admin login code", text, html);
     }
 
     public async Task<bool> SendKycApprovedAsync(string toEmail, string firstName)
     {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
         string body = $"""
-            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Your KYC Has Been Approved</h1>
-            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {firstName},</p>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              Great news! Your identity verification (KYC) has been reviewed and <strong>approved</strong>. You now have full access to your HousingHub account.
-            </p>
-            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            {P($"Hi {firstName},")}
+            {P("Your identity verification has been reviewed and approved. Your account is now fully unlocked &mdash; you can book inspections and transact on Housing Hub.")}
+            {DetailRow("Verification status", "Approved")}
+            {Button("Go to Dashboard", $"{baseUrl}/dashboard")}
             """;
 
-        string html = WrapInLayout("Your KYC Has Been Approved", body);
-        string text = $"Hi {firstName}, your HousingHub KYC verification has been approved. You now have full access to your account.";
+        string html = WrapInLayout("Your KYC has been approved", body, Hero("&#10003;", "Verification approved"));
+        string text = $"Hi {firstName}, your Housing Hub KYC verification has been approved. You now have full access to your account.";
 
-        return await SendAsync(toEmail, "Your HousingHub KYC Has Been Approved", text, html);
+        return await SendAsync(toEmail, "Your Housing Hub KYC Has Been Approved", text, html);
     }
 
     public async Task<bool> SendKycRejectedAsync(string toEmail, string firstName, string reason)
     {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
         string body = $"""
-            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Your KYC Was Not Approved</h1>
-            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {firstName},</p>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              We reviewed your identity verification (KYC) submission and were unable to approve it at this time.
-            </p>
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
-              <tr>
-                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;">
-                  <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#07358B;text-transform:uppercase;letter-spacing:0.8px;font-family:Arial,Helvetica,sans-serif;">Reason</p>
-                  <p style="margin:0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;">{reason}</p>
-                </td>
-              </tr>
-            </table>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              Please log in to your HousingHub account to review and resubmit your documents.
-            </p>
-            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            {P($"Hi {firstName},")}
+            {P("We reviewed your identity verification and were unable to approve it this time. You can correct the issue below and resubmit &mdash; there's no limit on attempts.")}
+            {DetailRow("Reason", reason)}
+            {Button("Resubmit Documents", $"{baseUrl}/kyc/personal-info")}
             """;
 
-        string html = WrapInLayout("Your KYC Was Not Approved", body);
-        string text = $"Hi {firstName}, your HousingHub KYC verification was not approved. Reason: {reason}. Please log in to review and resubmit your documents.";
+        string html = WrapInLayout("Your KYC was not approved", body, Hero("&#33;", "Verification not approved"));
+        string text = $"Hi {firstName}, your Housing Hub KYC verification was not approved. Reason: {reason}. Please log in to review and resubmit your documents.";
 
-        return await SendAsync(toEmail, "Your HousingHub KYC Was Not Approved", text, html);
+        return await SendAsync(toEmail, "Your Housing Hub KYC Was Not Approved", text, html);
     }
 
     public async Task<bool> SendAccountReactivatedAsync(string toEmail, string firstName)
     {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
         string body = $"""
-            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Your Account Has Been Reactivated</h1>
-            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {firstName},</p>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              Your HousingHub account has been reactivated and you can now log in and use the platform as usual.
-            </p>
-            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            {P($"Hi {firstName},")}
+            {P("Your Housing Hub account has been reactivated. You can log in and pick up right where you left off.")}
+            {Button("Log In", $"{baseUrl}/login")}
             """;
 
-        string html = WrapInLayout("Your Account Has Been Reactivated", body);
-        string text = $"Hi {firstName}, your HousingHub account has been reactivated. You can now log in and use the platform as usual.";
+        string html = WrapInLayout("Your account has been reactivated", body, Hero("&#10003;", "Account reactivated"));
+        string text = $"Hi {firstName}, your Housing Hub account has been reactivated. You can now log in and use the platform as usual.";
 
-        return await SendAsync(toEmail, "Your HousingHub Account Has Been Reactivated", text, html);
+        return await SendAsync(toEmail, "Your Housing Hub Account Has Been Reactivated", text, html);
     }
 
     public async Task<bool> SendPropertyVerifiedAsync(string ownerEmail, string ownerName, string propertyTitle)
     {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
         string body = $"""
-            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Your Property Has Been Verified</h1>
-            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {ownerName},</p>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              Good news! Your listing <strong>{propertyTitle}</strong> has been reviewed and marked as <strong>verified</strong> on HousingHub, giving it a trust badge visible to prospective tenants/buyers.
-            </p>
-            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            {P($"Hi {ownerName},")}
+            {P("Your listing has been reviewed and marked as verified. It now carries a trust badge that prospective tenants can see &mdash; verified listings receive noticeably more inspection requests.")}
+            {DetailRow("Property", propertyTitle)}
+            {DetailRow("Status", "Verified")}
+            {Button("View Listing", $"{baseUrl}/properties")}
             """;
 
-        string html = WrapInLayout("Your Property Has Been Verified", body);
-        string text = $"Hi {ownerName}, your listing \"{propertyTitle}\" has been verified on HousingHub.";
+        string html = WrapInLayout("Your property has been verified", body, Hero("&#10003;", "Listing verified"));
+        string text = $"Hi {ownerName}, your listing \"{propertyTitle}\" has been verified on Housing Hub.";
 
         return await SendAsync(ownerEmail, $"Your Property \"{propertyTitle}\" Has Been Verified", text, html);
     }
 
     public async Task<bool> SendPropertyUnpublishedAsync(string ownerEmail, string ownerName, string propertyTitle, string reason)
     {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
         string body = $"""
-            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Your Property Has Been Unpublished</h1>
-            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {ownerName},</p>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              Your listing <strong>{propertyTitle}</strong> has been unpublished by a HousingHub administrator and is no longer visible to the public.
-            </p>
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
-              <tr>
-                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;">
-                  <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#07358B;text-transform:uppercase;letter-spacing:0.8px;font-family:Arial,Helvetica,sans-serif;">Reason</p>
-                  <p style="margin:0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;">{reason}</p>
-                </td>
-              </tr>
-            </table>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              Please log in to your HousingHub dashboard for more details.
-            </p>
-            <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 0 0;">
+            {P($"Hi {ownerName},")}
+            {P("Your listing has been unpublished by an administrator and is no longer visible to the public. Resolve the issue below and you can republish it from your dashboard.")}
+            {DetailRow("Property", propertyTitle)}
+            {DetailRow("Reason", reason)}
+            {Button("Manage Listing", $"{baseUrl}/properties")}
             """;
 
-        string html = WrapInLayout("Your Property Has Been Unpublished", body);
-        string text = $"Hi {ownerName}, your listing \"{propertyTitle}\" has been unpublished by a HousingHub administrator. Reason: {reason}.";
+        string html = WrapInLayout("Your property has been unpublished", body, Hero("&#128065;", "Listing unpublished"));
+        string text = $"Hi {ownerName}, your listing \"{propertyTitle}\" has been unpublished by a Housing Hub administrator. Reason: {reason}.";
 
         return await SendAsync(ownerEmail, $"Your Property \"{propertyTitle}\" Has Been Unpublished", text, html);
     }
@@ -422,66 +304,164 @@ internal sealed class ResendEmailService : IEmailService
     public async Task<bool> SendPropertyDeletedAsync(string ownerEmail, string ownerName, string propertyTitle, string reason)
     {
         string body = $"""
-            <h1 style="margin:0 0 12px 0;font-size:24px;font-weight:700;color:#07358B;font-family:Arial,Helvetica,sans-serif;">Your Property Has Been Removed</h1>
-            <p style="margin:0 0 8px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">Hi {ownerName},</p>
-            <p style="margin:0 0 28px 0;font-size:16px;color:#444444;line-height:1.7;font-family:Arial,Helvetica,sans-serif;">
-              Your listing <strong>{propertyTitle}</strong> has been removed from HousingHub by an administrator.
-            </p>
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
-              <tr>
-                <td style="background-color:#f7f9fc;border-radius:8px;padding:24px 28px;">
-                  <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#07358B;text-transform:uppercase;letter-spacing:0.8px;font-family:Arial,Helvetica,sans-serif;">Reason</p>
-                  <p style="margin:0;font-size:15px;color:#333333;font-family:Arial,Helvetica,sans-serif;">{reason}</p>
-                </td>
-              </tr>
-            </table>
-            <p style="margin:0;font-size:14px;color:#888888;line-height:1.6;font-family:Arial,Helvetica,sans-serif;">
-              If you believe this was a mistake, please contact our support team.
-            </p>
-            <hr style="border:none;border-top:1px solid #eeeeee;margin:32px 0 0 0;">
+            {P($"Hi {ownerName},")}
+            {P("Your listing has been removed from Housing Hub by an administrator.")}
+            {DetailRow("Property", propertyTitle)}
+            {DetailRow("Reason", reason)}
+            {Callout("Think this is a mistake?", "Reply is not monitored on this address &mdash; please contact our team at info@housinghub.ng and we'll review it.")}
             """;
 
-        string html = WrapInLayout("Your Property Has Been Removed", body);
-        string text = $"Hi {ownerName}, your listing \"{propertyTitle}\" has been removed from HousingHub by an administrator. Reason: {reason}.";
+        string html = WrapInLayout("Your property has been removed", body, Hero("&#10005;", "Listing removed"));
+        string text = $"Hi {ownerName}, your listing \"{propertyTitle}\" has been removed from Housing Hub by an administrator. Reason: {reason}.";
 
         return await SendAsync(ownerEmail, $"Your Property \"{propertyTitle}\" Has Been Removed", text, html);
     }
 
+    // ── Brand tokens ─────────────────────────────────────────────────────────
+    // Navy carries the structure; gold is an accent only (~10-15% of any view).
+    private const string Navy = "#0B2545";
+    private const string NavyDeep = "#071A33";
+    private const string Gold = "#C9A227";
+    private const string HeroTint = "#E9F0F9";
+    private const string Ink = "#1F2937";
+    private const string Muted = "#5A6B7F";
+    private const string Canvas = "#F4F6F9";
+    private const string Font = "'Helvetica Neue',Helvetica,Arial,sans-serif";
+
     /// <summary>
-    /// Wraps a body-content HTML fragment in the shared HousingHub email shell
-    /// (brand header, white content card, footer) so every email method only
-    /// needs to supply its own heading/paragraphs/buttons, not the full document.
+    /// The hero band that sits directly under the brand header — a circular glyph
+    /// over a tinted panel, stating in one line what the email is about.
     /// </summary>
-    private string WrapInLayout(string title, string bodyHtml)
+    private static string Hero(string glyph, string heading)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        return $"""
+            <tr>
+              <td style="background-color:{HeroTint};padding:32px 40px 28px;text-align:center;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto 14px;">
+                  <tr>
+                    <td width="52" height="52" align="center" valign="middle" style="width:52px;height:52px;background-color:{Navy};border-radius:26px;font-size:24px;line-height:52px;color:{Gold};font-family:{Font};">{glyph}</td>
+                  </tr>
+                </table>
+                <h1 style="margin:0;font-size:21px;font-weight:800;color:{Navy};font-family:{Font};letter-spacing:-0.2px;">{heading}</h1>
+              </td>
+            </tr>
+            """;
+    }
+
+    /// <summary>
+    /// A scannable key/value row with a gold rule down the left edge. Used for the
+    /// data-heavy mails (inspections, listings) where the detail is the payload.
+    /// </summary>
+    private static string DetailRow(string label, string value)
+    {
+        return $"""
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:10px;">
+              <tr>
+                <td style="background-color:#F7F8FA;border-left:3px solid {Gold};padding:12px 16px;">
+                  <p style="margin:0 0 3px 0;font-size:11px;font-weight:700;color:#9AA3AE;text-transform:uppercase;letter-spacing:0.7px;font-family:{Font};">{label}</p>
+                  <p style="margin:0;font-size:15px;font-weight:700;color:{Navy};font-family:{Font};">{value}</p>
+                </td>
+              </tr>
+            </table>
+            """;
+    }
+
+    /// <summary>Primary call to action. Gold on navy text — highest contrast pairing in the palette.</summary>
+    private static string Button(string label, string href)
+    {
+        return $"""
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0 4px;">
+              <tr>
+                <td style="border-radius:6px;background-color:{Gold};">
+                  <a href="{href}" style="display:inline-block;padding:14px 34px;font-size:15px;font-weight:800;color:{Navy};text-decoration:none;border-radius:6px;font-family:{Font};letter-spacing:0.2px;">{label}</a>
+                </td>
+              </tr>
+            </table>
+            """;
+    }
+
+    /// <summary>Secondary/cautionary callout — used for security notices.</summary>
+    private static string Callout(string heading, string text)
+    {
+        return $"""
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0;">
+              <tr>
+                <td style="background-color:#FFF9E8;border-left:3px solid {Gold};padding:14px 18px;">
+                  <p style="margin:0 0 4px 0;font-size:14px;font-weight:800;color:#6B5309;font-family:{Font};">{heading}</p>
+                  <p style="margin:0;font-size:13px;color:#8A6D10;line-height:1.6;font-family:{Font};">{text}</p>
+                </td>
+              </tr>
+            </table>
+            """;
+    }
+
+    /// <summary>Standard body paragraph.</summary>
+    private static string P(string text) =>
+        $"""<p style="margin:0 0 14px 0;font-size:15px;color:{Muted};line-height:1.65;font-family:{Font};">{text}</p>""";
+
+    /// <summary>
+    /// Wraps a body-content HTML fragment in the shared Housing Hub email shell.
+    /// Structured Card layout: navy brand header, optional tinted hero band,
+    /// white content well, navy footer. Table-based and inline-styled throughout
+    /// so it survives Outlook and Gmail's CSS stripping.
+    /// </summary>
+    /// <param name="title">Document title / preheader.</param>
+    /// <param name="bodyHtml">The content well markup.</param>
+    /// <param name="heroHtml">Optional hero band, produced by <see cref="Hero"/>.</param>
+    private string WrapInLayout(string title, string bodyHtml, string heroHtml = "")
+    {
         int year = DateTime.UtcNow.Year;
 
         return $"""
             <!DOCTYPE html>
             <html lang="en">
-            <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>{title}</title></head>
-            <body style="margin:0;padding:0;background-color:#f0f4f9;font-family:Arial,Helvetica,sans-serif;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f0f4f9;">
-                <tr><td align="center" style="padding:48px 16px;">
-                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;box-shadow:0 4px 24px rgba(7,53,139,0.12);border-radius:12px;">
+            <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width,initial-scale=1.0">
+              <meta name="color-scheme" content="light">
+              <title>{title}</title>
+            </head>
+            <body style="margin:0;padding:0;background-color:{Canvas};font-family:{Font};-webkit-font-smoothing:antialiased;">
+              <div style="display:none;max-height:0;overflow:hidden;opacity:0;">{title}</div>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:{Canvas};">
+                <tr><td align="center" style="padding:40px 16px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:560px;border-radius:12px;overflow:hidden;box-shadow:0 2px 18px rgba(11,37,69,0.10);">
+
+                    <!-- Brand header: architectural H mark + wordmark -->
                     <tr>
-                      <td style="background-color:#07358B;border-radius:12px 12px 0 0;padding:36px 40px;text-align:center;">
-                        <img src="{baseUrl}/images/footerlogo.png" width="48" height="52" alt="HousingHub" style="display:inline-block;vertical-align:middle;margin-right:12px;">
-                        <span style="font-size:26px;font-weight:800;color:#ffffff;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.5px;vertical-align:middle;">HousingHub</span>
+                      <td style="background-color:{Navy};padding:20px 32px;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                          <tr>
+                            <td valign="middle" style="padding-right:11px;">
+                              <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                                <tr>
+                                  <td width="26" height="26" align="center" valign="middle" style="width:26px;height:26px;background-color:{Gold};border-radius:6px;font-size:15px;font-weight:800;line-height:26px;color:{Navy};font-family:{Font};">H</td>
+                                </tr>
+                              </table>
+                            </td>
+                            <td valign="middle">
+                              <span style="font-size:17px;font-weight:800;color:#ffffff;font-family:{Font};letter-spacing:-0.2px;">Housing</span><span style="font-size:17px;font-weight:400;color:{Gold};font-family:{Font};letter-spacing:1.4px;"> HUB</span>
+                            </td>
+                          </tr>
+                        </table>
                       </td>
                     </tr>
+            {heroHtml}
+                    <!-- Content well -->
                     <tr>
-                      <td style="background-color:#ffffff;padding:44px 48px;border-radius:0 0 12px 12px;">
+                      <td style="background-color:#ffffff;padding:32px 40px 36px;">
                         {bodyHtml}
                       </td>
                     </tr>
+
+                    <!-- Footer -->
                     <tr>
-                      <td style="padding:24px 40px;text-align:center;">
-                        <p style="margin:0 0 6px 0;font-size:12px;color:#999999;font-family:Arial,Helvetica,sans-serif;">&copy; {year} HousingHub. All rights reserved.</p>
-                        <p style="margin:0;font-size:12px;color:#bbbbbb;font-family:Arial,Helvetica,sans-serif;">This is an automated message, please do not reply.</p>
+                      <td style="background-color:{NavyDeep};padding:22px 40px;text-align:center;">
+                        <p style="margin:0 0 5px 0;font-size:12px;color:rgba(255,255,255,0.66);font-family:{Font};">&copy; {year} Housing Hub &middot; Lagos, Nigeria</p>
+                        <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.38);font-family:{Font};">Automated message &mdash; please do not reply to this email.</p>
                       </td>
                     </tr>
+
                   </table>
                 </td></tr>
               </table>
@@ -495,7 +475,7 @@ internal sealed class ResendEmailService : IEmailService
         try
         {
             string fromEmail = _configuration["Email:SenderEmail"]!;
-            string fromName = _configuration["Email:SenderName"] ?? "HousingHub";
+            string fromName = _configuration["Email:SenderName"] ?? "Housing Hub";
             string apiKey = _configuration["Email:ResendApiKey"]!;
 
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
