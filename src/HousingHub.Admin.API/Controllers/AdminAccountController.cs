@@ -1,6 +1,7 @@
 using HousingHub.Core.CustomResponses;
 using HousingHub.Service.AdminService;
 using HousingHub.Service.Dtos.Admin;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.JsonWebTokens;
 
@@ -74,19 +75,21 @@ public class AdminAccountController(IAdminAuthService adminAuthService) : Contro
     /// Login is OTP-only, so no password is collected; the new staff member
     /// logs in with their email the same way any other admin does.
     /// </remarks>
-    /// <param name="dto">New staff member's email and name.</param>
+    /// <param name="dto">New staff member's email, name, and role (Admin or SuperAdmin).</param>
     /// <response code="200">Staff member created.</response>
     [HttpPost("staff")]
+    [Authorize(Policy = "SuperAdminOnly")]
     [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
     public async Task<IActionResult> CreateStaff([FromBody] CreateStaffDto dto)
     {
-        await adminAuthService.CreateStaffAsync(dto.Email, dto.FirstName, dto.LastName);
+        await adminAuthService.CreateStaffAsync(dto.Email, dto.FirstName, dto.LastName, dto.Role);
         return Ok(new BaseResponse<bool>(true, true, string.Empty, "Staff member created."));
     }
 
     /// <summary>Returns a list of all admin staff members.</summary>
     /// <response code="200">List of staff.</response>
     [HttpGet("staff")]
+    [Authorize(Policy = "SuperAdminOnly")]
     [ProducesResponseType(typeof(List<AdminStaffDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetStaff()
     {
@@ -100,6 +103,7 @@ public class AdminAccountController(IAdminAuthService adminAuthService) : Contro
     /// <response code="200">Staff account deactivated.</response>
     /// <response code="404">Staff member not found.</response>
     [HttpPut("staff/{id:guid}/deactivate")]
+    [Authorize(Policy = "SuperAdminOnly")]
     [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeactivateStaff(Guid id)
@@ -118,6 +122,7 @@ public class AdminAccountController(IAdminAuthService adminAuthService) : Contro
     /// <response code="200">Staff account reactivated.</response>
     /// <response code="404">Staff member not found.</response>
     [HttpPut("staff/{id:guid}/reactivate")]
+    [Authorize(Policy = "SuperAdminOnly")]
     [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ReactivateStaff(Guid id)

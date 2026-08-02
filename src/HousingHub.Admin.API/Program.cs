@@ -92,6 +92,12 @@ public static class Program
                 .RequireAuthenticatedUser()
                 .RequireClaim("role", "Admin")
                 .Build();
+
+            // Staff management (add/deactivate/reactivate/view all) is restricted to
+            // SuperAdmins — see AdminAccountController's staff endpoints.
+            options.AddPolicy("SuperAdminOnly", policy => policy
+                .RequireAuthenticatedUser()
+                .RequireClaim("adminRole", "SuperAdmin"));
         });
 
         // DynamoDB

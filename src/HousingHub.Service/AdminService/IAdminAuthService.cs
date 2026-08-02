@@ -16,8 +16,8 @@ public interface IAdminAuthService
     /// <summary>Exchanges a valid, unexpired refresh token for a new access token and a rotated refresh token.</summary>
     Task<AdminLoginResultDto?> RefreshTokenAsync(string refreshToken);
     Task CreateAdminAsync(string email, string password, string firstName, string lastName);
-    /// <summary>Creates a new staff admin account with a system-generated password, since login is OTP-only — no seed key required, callable by any already-authenticated admin.</summary>
-    Task CreateStaffAsync(string email, string firstName, string lastName);
+    /// <summary>Creates a new staff admin account with a system-generated password, since login is OTP-only. Restricted to SuperAdmins.</summary>
+    Task CreateStaffAsync(string email, string firstName, string lastName, string role);
 
     Task<AdminProfileDto?> GetAdminProfileAsync(Guid adminId);
     Task<bool> UpdateAdminProfileAsync(Guid adminId, UpdateAdminProfileDto dto);
@@ -25,4 +25,6 @@ public interface IAdminAuthService
     Task<List<AdminStaffDto>> GetAllStaffAsync();
     Task<bool> DeactivateAdminAsync(Guid adminId);
     Task<bool> ReactivateAdminAsync(Guid adminId);
+    /// <summary>Promotes an existing admin (by email) to SuperAdmin. Secret-gated bootstrap operation — see InternalController.</summary>
+    Task<bool> PromoteToSuperAdminAsync(string email);
 }

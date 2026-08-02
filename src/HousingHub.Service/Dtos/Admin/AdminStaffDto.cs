@@ -6,4 +6,5 @@ public record AdminStaffDto(
     string LastName,
     string Email,
     DateTime DateJoined,
-    bool IsActive);
+    bool IsActive,
+    string Role);

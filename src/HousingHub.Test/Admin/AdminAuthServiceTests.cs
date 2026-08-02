@@ -5,6 +5,7 @@ using HousingHub.Service.AdminService;
 using HousingHub.Service.Commons.Authentication;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Dtos.Admin;
+using HousingHub.Model.Entities;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using AdminEntity = HousingHub.Model.Entities.Admin;
@@ -417,14 +418,46 @@ public class AdminAuthServiceTests
             .Callback<AdminEntity, CancellationToken>((a, _) => saved = a)
             .Returns(Task.CompletedTask);
 
-        await _sut.CreateStaffAsync("staff@test.com", "Staff", "Member");
+        await _sut.CreateStaffAsync("staff@test.com", "Staff", "Member", AdminRoles.Admin);
 
         Assert.NotNull(saved);
         Assert.Equal("staff@test.com", saved!.Email);
         Assert.Equal("Staff", saved.FirstName);
         Assert.Equal("Member", saved.LastName);
         Assert.True(saved.IsActive);
+        Assert.Equal(AdminRoles.Admin, saved.Role);
         Assert.False(string.IsNullOrEmpty(saved.PasswordHash));
+    }
+
+    // ── PromoteToSuperAdminAsync ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task PromoteToSuperAdmin_ExistingAdmin_SetsSuperAdminRole()
+    {
+        var admin = MakeAdmin();
+        admin.Role = AdminRoles.Admin;
+        SetupQuery(new[] { admin });
+
+        AdminEntity? saved = null;
+        _dynamoDbMock
+            .Setup(d => d.SaveAsync(It.IsAny<AdminEntity>(), It.IsAny<CancellationToken>()))
+            .Callback<AdminEntity, CancellationToken>((a, _) => saved = a)
+            .Returns(Task.CompletedTask);
+
+        var success = await _sut.PromoteToSuperAdminAsync(admin.Email);
+
+        Assert.True(success);
+        Assert.Equal(AdminRoles.SuperAdmin, saved!.Role);
+    }
+
+    [Fact]
+    public async Task PromoteToSuperAdmin_NotFound_ReturnsFalse()
+    {
+        SetupQuery(Array.Empty<AdminEntity>());
+
+        var success = await _sut.PromoteToSuperAdminAsync("nobody@test.com");
+
+        Assert.False(success);
     }
 
     // ── GetAdminProfileAsync ──────────────────────────────────────────────────

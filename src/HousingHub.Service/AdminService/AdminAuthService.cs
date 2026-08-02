@@ -103,7 +103,7 @@ public class AdminAuthService(
 
         var token = CreateToken(admin);
         var refreshToken = await IssueRefreshTokenAsync(admin.Id);
-        var dto = new AdminLoginResultDto(token, admin.FirstName, admin.LastName, admin.Email, refreshToken);
+        var dto = new AdminLoginResultDto(token, admin.FirstName, admin.LastName, admin.Email, refreshToken, admin.Role);
         return new BaseResponse<AdminLoginResultDto>(dto, true, string.Empty, ResponseMessages.LoginSuccess);
     }
 
@@ -144,7 +144,7 @@ public class AdminAuthService(
         var newAccessToken = CreateToken(admin);
         var newRefreshToken = await IssueRefreshTokenAsync(admin.Id);
 
-        return new AdminLoginResultDto(newAccessToken, admin.FirstName, admin.LastName, admin.Email, newRefreshToken);
+        return new AdminLoginResultDto(newAccessToken, admin.FirstName, admin.LastName, admin.Email, newRefreshToken, admin.Role);
     }
 
     private async Task<string> IssueRefreshTokenAsync(Guid adminId)
@@ -188,16 +188,19 @@ public class AdminAuthService(
         return Convert.ToHexString(hashBytes);
     }
 
-    public async Task CreateStaffAsync(string email, string firstName, string lastName)
+    public async Task CreateStaffAsync(string email, string firstName, string lastName, string role)
     {
         // Login is OTP-only, so this password is never used to authenticate —
         // generate a throwaway value purely to satisfy Admin.PasswordHash's
         // non-null constraint.
         string throwawayPassword = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
-        await CreateAdminAsync(email, throwawayPassword, firstName, lastName);
+        await CreateAdminAsync(email, throwawayPassword, firstName, lastName, role);
     }
 
-    public async Task CreateAdminAsync(string email, string password, string firstName, string lastName)
+    public Task CreateAdminAsync(string email, string password, string firstName, string lastName) =>
+        CreateAdminAsync(email, password, firstName, lastName, AdminRoles.Admin);
+
+    private async Task CreateAdminAsync(string email, string password, string firstName, string lastName, string role)
     {
         var admin = new Admin
         {
@@ -206,6 +209,7 @@ public class AdminAuthService(
             PasswordHash = passwordHasher.Hash(password),
             FirstName = firstName,
             LastName = lastName,
+            Role = role,
             IsActive = true,
             DateCreated = DateTime.UtcNow,
             DateModified = DateTime.UtcNow
@@ -219,7 +223,23 @@ public class AdminAuthService(
         var admin = await dynamoDb.LoadAsync<Admin>(adminId);
         if (admin == null) return null;
 
-        return new AdminProfileDto(admin.Id, admin.FirstName, admin.LastName, admin.Email, admin.DateCreated, admin.IsActive);
+        return new AdminProfileDto(admin.Id, admin.FirstName, admin.LastName, admin.Email, admin.DateCreated, admin.IsActive, admin.Role);
+    }
+
+    public async Task<bool> PromoteToSuperAdminAsync(string email)
+    {
+        var results = await dynamoDb.QueryAsync<Admin>(
+            email,
+            new DynamoDBOperationConfig { IndexName = "Email-index" })
+            .GetRemainingAsync();
+
+        var admin = results.FirstOrDefault();
+        if (admin == null) return false;
+
+        admin.Role = AdminRoles.SuperAdmin;
+        admin.DateModified = DateTime.UtcNow;
+        await dynamoDb.SaveAsync(admin);
+        return true;
     }
 
     public async Task<bool> UpdateAdminProfileAsync(Guid adminId, UpdateAdminProfileDto dto)
@@ -256,7 +276,7 @@ public class AdminAuthService(
 
         return admins
             .OrderByDescending(a => a.DateCreated)
-            .Select(a => new AdminStaffDto(a.Id, a.FirstName, a.LastName, a.Email, a.DateCreated, a.IsActive))
+            .Select(a => new AdminStaffDto(a.Id, a.FirstName, a.LastName, a.Email, a.DateCreated, a.IsActive, a.Role))
             .ToList();
     }
 
@@ -298,7 +318,8 @@ public class AdminAuthService(
                 new Claim(JwtRegisteredClaimNames.Email, admin.Email),
                 new Claim(JwtRegisteredClaimNames.GivenName, admin.FirstName),
                 new Claim(JwtRegisteredClaimNames.FamilyName, admin.LastName),
-                new Claim("role", "Admin")
+                new Claim("role", "Admin"),
+                new Claim("adminRole", admin.Role)
             ]),
             Expires = DateTime.UtcNow.AddMinutes(expirationInMinutes),
             SigningCredentials = credentials,
