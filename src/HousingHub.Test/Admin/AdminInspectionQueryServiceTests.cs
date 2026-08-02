@@ -235,6 +235,32 @@ public class AdminInspectionQueryServiceTests
     }
 
     [Fact]
+    public async Task GetRecentActivity_DaysParameter_ControlsSinceCutoff()
+    {
+        Expression<Func<Customer, bool>>? capturedPredicate = null;
+
+        _unitOfWorkMock
+            .Setup(u => u.CustomerQueries.GetAllAsync(It.IsAny<Expression<Func<Customer, bool>>>()))
+            .Callback<Expression<Func<Customer, bool>>>(p => capturedPredicate = p)
+            .ReturnsAsync(new List<Customer>());
+        _unitOfWorkMock
+            .Setup(u => u.PropertyInspectionQueries.GetAllAsync(It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync(new List<PropertyInspection>());
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<Expression<Func<Property, bool>>>()))
+            .ReturnsAsync(new List<Property>());
+
+        await _sut.GetRecentActivityAsync(count: 20, days: 30);
+
+        Assert.NotNull(capturedPredicate);
+        var tenDaysAgo = new Customer("A", "B", "a@test.com", "080", CustomerType.Customer, "hash") { DateCreated = DateTime.UtcNow.AddDays(-10) };
+        var fortyDaysAgo = new Customer("A", "B", "a@test.com", "080", CustomerType.Customer, "hash") { DateCreated = DateTime.UtcNow.AddDays(-40) };
+
+        Assert.True(capturedPredicate!.Compile()(tenDaysAgo));
+        Assert.False(capturedPredicate.Compile()(fortyDaysAgo));
+    }
+
+    [Fact]
     public async Task GetRecentActivity_RespectedCountLimit()
     {
         _unitOfWorkMock

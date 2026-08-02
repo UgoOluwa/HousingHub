@@ -323,11 +323,11 @@ public class InspectionQueryService : IInspectionQueryService
             .ToDictionary(g => g.Key, g => (string?)g.OrderBy(f => f.DateUploaded).First().FileUrl);
     }
 
-    public async Task<BaseResponse<List<AdminRecentActivityDto>>> GetRecentActivityAsync(int count = 20)
+    public async Task<BaseResponse<List<AdminRecentActivityDto>>> GetRecentActivityAsync(int count = 20, int days = 7)
     {
         try
         {
-            var since = DateTime.UtcNow.AddDays(-7);
+            var since = DateTime.UtcNow.AddDays(-days);
 
             var customersTask = _unitOfWOrk.CustomerQueries.GetAllAsync(c => c.DateCreated >= since);
             var inspectionsTask = _unitOfWOrk.PropertyInspectionQueries.GetAllAsync(i => i.DateCreated >= since);
