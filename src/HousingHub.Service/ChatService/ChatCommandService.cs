@@ -1,3 +1,4 @@
+using Amazon.DynamoDBv2.DataModel;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
@@ -18,19 +19,22 @@ public class ChatCommandService : IChatCommandService
     private readonly IChatRealtimeNotifier _realtimeNotifier;
     private readonly IRealtimeNotifier _bellRealtimeNotifier;
     private readonly IEmailService _emailService;
+    private readonly IDynamoDBContext _dynamoDb;
 
     public ChatCommandService(
         IUnitOfWOrk unitOfWOrk,
         ILogger<ChatCommandService> logger,
         IChatRealtimeNotifier realtimeNotifier,
         IRealtimeNotifier bellRealtimeNotifier,
-        IEmailService emailService)
+        IEmailService emailService,
+        IDynamoDBContext dynamoDb)
     {
         _unitOfWOrk = unitOfWOrk;
         _logger = logger;
         _realtimeNotifier = realtimeNotifier;
         _bellRealtimeNotifier = bellRealtimeNotifier;
         _emailService = emailService;
+        _dynamoDb = dynamoDb;
     }
 
     public async Task<BaseResponse<ChatMessageDto>> SendMessageAsync(SendMessageDto request, Guid senderId)
@@ -40,8 +44,11 @@ public class ChatCommandService : IChatCommandService
             if (senderId == request.RecipientId)
                 return new BaseResponse<ChatMessageDto>(null, false, string.Empty, "You cannot send a message to yourself.");
 
-            var sender = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == senderId);
-            if (sender == null)
+            // Sender is usually a Customer, but an admin messaging a customer/owner
+            // from the Admin dashboard is also a valid sender — falls back to the
+            // Admins table when not found among customers.
+            var senderName = await ResolveSenderNameAsync(senderId);
+            if (senderName == null)
                 return new BaseResponse<ChatMessageDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("sender"));
 
             var recipient = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == request.RecipientId);
@@ -66,8 +73,6 @@ public class ChatCommandService : IChatCommandService
                 : request.Content;
             conversation.LastMessageAt = message.DateCreated;
             await _unitOfWOrk.ConversationCommands.UpdateAsync(conversation);
-
-            string senderName = $"{sender.FirstName} {sender.LastName}";
 
             var notification = new Notification(
                 request.RecipientId,
@@ -155,6 +160,15 @@ public class ChatCommandService : IChatCommandService
             _logger.LogError(ex, "An error occurred in MarkConversationAsReadAsync: {Message}", ex.Message);
             return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
         }
+    }
+
+    private async Task<string?> ResolveSenderNameAsync(Guid senderId)
+    {
+        var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == senderId);
+        if (customer != null) return $"{customer.FirstName} {customer.LastName}";
+
+        var admin = await _dynamoDb.LoadAsync<Admin>(senderId);
+        return admin != null ? $"{admin.FirstName} {admin.LastName}" : null;
     }
 
     private async Task<Conversation?> FindConversationAsync(Guid userOneId, Guid userTwoId)
