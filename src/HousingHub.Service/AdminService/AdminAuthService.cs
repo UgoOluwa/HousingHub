@@ -103,7 +103,7 @@ public class AdminAuthService(
 
         var token = CreateToken(admin);
         var refreshToken = await IssueRefreshTokenAsync(admin.Id);
-        var dto = new AdminLoginResultDto(token, admin.FirstName, admin.LastName, admin.Email, refreshToken, admin.Role);
+        var dto = new AdminLoginResultDto(admin.Id, token, admin.FirstName, admin.LastName, admin.Email, refreshToken, admin.Role);
         return new BaseResponse<AdminLoginResultDto>(dto, true, string.Empty, ResponseMessages.LoginSuccess);
     }
 
@@ -144,7 +144,7 @@ public class AdminAuthService(
         var newAccessToken = CreateToken(admin);
         var newRefreshToken = await IssueRefreshTokenAsync(admin.Id);
 
-        return new AdminLoginResultDto(newAccessToken, admin.FirstName, admin.LastName, admin.Email, newRefreshToken, admin.Role);
+        return new AdminLoginResultDto(admin.Id, newAccessToken, admin.FirstName, admin.LastName, admin.Email, newRefreshToken, admin.Role);
     }
 
     private async Task<string> IssueRefreshTokenAsync(Guid adminId)
