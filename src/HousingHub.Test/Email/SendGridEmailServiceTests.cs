@@ -106,7 +106,7 @@ public class ResendEmailServiceTests
 
         string body = await captured.Content!.ReadAsStringAsync();
         Assert.Contains("noreply@housinghub.com", body);
-        Assert.Contains("Verify your HousingHub email", body);
+        Assert.Contains("Verify your Housing Hub email", body);
         Assert.Contains("verify-token-123", body);
         Assert.Contains("John", body);
         Assert.Contains("https://housinghub.com/verify-email", body);
@@ -171,7 +171,7 @@ public class ResendEmailServiceTests
         await sut.SendPasswordResetAsync("user@test.com", "John", "reset-token-789");
 
         string body = await captured!.Content!.ReadAsStringAsync();
-        Assert.Contains("Reset your HousingHub password", body);
+        Assert.Contains("Reset your Housing Hub password", body);
         Assert.Contains("reset-token-789", body);
         Assert.Contains("https://housinghub.com/create-new-password", body);
     }
@@ -233,6 +233,6 @@ public class ResendEmailServiceTests
         await sut.SendEmailVerificationAsync("user@test.com", "Jane", "token");
 
         string body = await captured!.Content!.ReadAsStringAsync();
-        Assert.Contains("HousingHub", body);
+        Assert.Contains("Housing Hub", body);
     }
 }
