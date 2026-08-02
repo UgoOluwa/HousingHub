@@ -1,7 +1,9 @@
+using Amazon.DynamoDBv2.DataModel;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
+using AdminEntity = HousingHub.Model.Entities.Admin;
 using HousingHub.Service.ChatService;
 using HousingHub.Service.ChatService.Interfaces;
 using HousingHub.Service.Commons.Email;
@@ -20,6 +22,7 @@ public class ChatCommandServiceTests
     private readonly Mock<IChatRealtimeNotifier> _realtimeNotifierMock;
     private readonly Mock<IRealtimeNotifier> _bellNotifierMock;
     private readonly Mock<IEmailService> _emailServiceMock;
+    private readonly Mock<IDynamoDBContext> _dynamoDbMock;
     private readonly ChatCommandService _sut;
 
     private static readonly Guid SenderId = Guid.NewGuid();
@@ -42,7 +45,12 @@ public class ChatCommandServiceTests
         _unitOfWorkMock.Setup(u => u.NotificationCommands.InsertAsync(It.IsAny<Notification>())).ReturnsAsync(true);
         _unitOfWorkMock.Setup(u => u.SaveAsync()).Returns(Task.CompletedTask);
 
-        _sut = new ChatCommandService(_unitOfWorkMock.Object, logger, _realtimeNotifierMock.Object, _bellNotifierMock.Object, _emailServiceMock.Object);
+        _dynamoDbMock = new Mock<IDynamoDBContext>();
+        _dynamoDbMock
+            .Setup(d => d.LoadAsync<AdminEntity>(It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AdminEntity?)null);
+
+        _sut = new ChatCommandService(_unitOfWorkMock.Object, logger, _realtimeNotifierMock.Object, _bellNotifierMock.Object, _emailServiceMock.Object, _dynamoDbMock.Object);
     }
 
     private static Customer CreateCustomer(Guid id, string firstName = "Test", string lastName = "User") =>
@@ -94,6 +102,29 @@ public class ChatCommandServiceTests
 
         Assert.False(result.IsSuccessful);
         Assert.Contains("Not Found", result.Message);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_SenderIsAdmin_ResolvesNameFromAdminsTableAndSucceeds()
+    {
+        // Sender isn't a Customer at all (e.g. an admin messaging from the dashboard) —
+        // falls back to the Admins table instead of failing as "sender not found".
+        SetupCustomerLookup(null);
+        _unitOfWorkMock
+            .SetupSequence(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>()))
+            .ReturnsAsync((Customer?)null) // sender lookup misses
+            .ReturnsAsync(CreateCustomer(RecipientId, "Jane", "Smith")); // recipient lookup hits
+        _dynamoDbMock
+            .Setup(d => d.LoadAsync<AdminEntity>(It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminEntity { Id = SenderId, FirstName = "Ada", LastName = "Min", Email = "ada@test.com" });
+        SetupConversationLookup(CreateConversation());
+        SetupSaveAsync();
+
+        var dto = new SendMessageDto(RecipientId, "Hello from support!");
+        var result = await _sut.SendMessageAsync(dto, SenderId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal("Ada Min", result.Data!.SenderName);
     }
 
     [Fact]

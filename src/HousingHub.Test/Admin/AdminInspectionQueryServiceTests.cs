@@ -47,6 +47,7 @@ public class AdminInspectionQueryServiceTests
         _unitOfWorkMock
             .Setup(u => u.PropertyInspectionQueries.GetAllAsync(It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
             .ReturnsAsync(inspections);
+        // GetTodaysInspectionsPaginatedAsync still enriches via GetAllAsync(predicate).
         _unitOfWorkMock
             .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<Expression<Func<Property, bool>>>()))
             .ReturnsAsync(new List<Property>());
@@ -56,6 +57,16 @@ public class AdminInspectionQueryServiceTests
         _unitOfWorkMock
             .Setup(u => u.PropertyAddressQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyAddress, bool>>>()))
             .ReturnsAsync(new List<HousingHub.Model.Entities.PropertyAddress>());
+        // GetAllInspectionsPaginatedAsync enriches via per-ID GetByIdAsync instead.
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByIdAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((Property?)null);
+        _unitOfWorkMock
+            .Setup(u => u.CustomerQueries.GetByIdAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((Customer?)null);
+        _unitOfWorkMock
+            .Setup(u => u.PropertyAddressQueries.GetByIdAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((HousingHub.Model.Entities.PropertyAddress?)null);
     }
 
     // ── GetAllInspectionsPaginatedAsync ───────────────────────────────────────
@@ -221,6 +232,32 @@ public class AdminInspectionQueryServiceTests
         Assert.Contains("CustomerJoined", types);
         Assert.Contains("KycSubmitted", types);
         Assert.Contains("InspectionScheduled", types);
+    }
+
+    [Fact]
+    public async Task GetRecentActivity_DaysParameter_ControlsSinceCutoff()
+    {
+        Expression<Func<Customer, bool>>? capturedPredicate = null;
+
+        _unitOfWorkMock
+            .Setup(u => u.CustomerQueries.GetAllAsync(It.IsAny<Expression<Func<Customer, bool>>>()))
+            .Callback<Expression<Func<Customer, bool>>>(p => capturedPredicate = p)
+            .ReturnsAsync(new List<Customer>());
+        _unitOfWorkMock
+            .Setup(u => u.PropertyInspectionQueries.GetAllAsync(It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync(new List<PropertyInspection>());
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<Expression<Func<Property, bool>>>()))
+            .ReturnsAsync(new List<Property>());
+
+        await _sut.GetRecentActivityAsync(count: 20, days: 30);
+
+        Assert.NotNull(capturedPredicate);
+        var tenDaysAgo = new Customer("A", "B", "a@test.com", "080", CustomerType.Customer, "hash") { DateCreated = DateTime.UtcNow.AddDays(-10) };
+        var fortyDaysAgo = new Customer("A", "B", "a@test.com", "080", CustomerType.Customer, "hash") { DateCreated = DateTime.UtcNow.AddDays(-40) };
+
+        Assert.True(capturedPredicate!.Compile()(tenDaysAgo));
+        Assert.False(capturedPredicate.Compile()(fortyDaysAgo));
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using HousingHub.Service.CustomerService.Interfaces;
 using HousingHub.Service.Dtos.Admin;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.InspectionService.Interfaces;
+using HousingHub.Service.PropertyAddressService.Interfaces;
 using HousingHub.Service.PropertyService.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,7 +18,8 @@ public class AdminPropertyController(
     IPropertyQueryService propertyQueryService,
     IPropertyCommandService propertyCommandService,
     IInspectionQueryService inspectionQueryService,
-    ICustomerQueryService customerQueryService) : ControllerBase
+    ICustomerQueryService customerQueryService,
+    IPropertyAddressQueryService propertyAddressQueryService) : ControllerBase
 {
     /// <summary>Returns a filtered, paginated list of all properties.</summary>
     /// <remarks>
@@ -54,15 +56,18 @@ public class AdminPropertyController(
             .Take(filter.PageSize)
             .ToList();
 
-        // Enrich with owner names and addresses in parallel
+        // Enrich with owner names, addresses and inspection counts in parallel
         var ownerIds = paged.Select(p => p.OwnerId).Distinct().ToList();
         var propertyIds = paged.Select(p => p.Id).Distinct().ToList();
 
         var ownersTask = customerQueryService.GetAllCustomersAsync();
         var inspCountTask = inspectionQueryService.GetAllInspectionsPaginatedAsync(
             new AdminInspectionFilterDto(1, int.MaxValue));
+        var addressTasks = propertyIds.ToDictionary(
+            id => id,
+            id => propertyAddressQueryService.GetPropertyAddressByPropertyIdAsync(id));
 
-        await Task.WhenAll(ownersTask, inspCountTask);
+        await Task.WhenAll(addressTasks.Values.Cast<Task>().Append(ownersTask).Append(inspCountTask));
 
         var ownerMap = (ownersTask.Result.Data ?? []).ToDictionary(c => c.Id);
         var inspCountByProperty = (inspCountTask.Result.Data?.Items ?? [])
@@ -73,23 +78,37 @@ public class AdminPropertyController(
         {
             ownerMap.TryGetValue(p.OwnerId, out var owner);
             var ownerName = owner != null ? $"{owner.FirstName} {owner.LastName}" : "N/A";
+
+            var address = addressTasks[p.Id].Result.Data;
+            var formattedAddress = address != null
+                ? $"{address.Place}, {address.City}, {address.State}"
+                : "N/A";
+
+            var thumbnailUrl = p.Files?.OrderBy(f => f.DateUploaded).FirstOrDefault()?.FileUrl;
+
             return new AdminPropertyListDto(
                 p.Id,
                 p.PropertyId,
                 p.Title,
                 ownerName,
-                $"Address ID: {p.AddressId}",
+                formattedAddress,
                 p.DateCreated,
                 p.IsPublished,
                 p.PublishedAt,
                 p.Availability,
                 p.Price,
-                inspCountByProperty.GetValueOrDefault(p.Id, 0));
+                inspCountByProperty.GetValueOrDefault(p.Id, 0),
+                thumbnailUrl);
         }).ToList();
+
+        // Reflect the real outcome instead of always claiming success — a failure in
+        // any of the underlying scans (properties/owners/inspections) previously
+        // surfaced as an empty-but-"successful" list with no visible error.
+        bool isSuccessful = allResult.IsSuccessful && ownersTask.Result.IsSuccessful && inspCountTask.Result.IsSuccessful;
 
         return Ok(new BaseResponse<PaginatedResult<AdminPropertyListDto>>(
             new PaginatedResult<AdminPropertyListDto>(items, totalCount, filter.PageNumber, filter.PageSize),
-            true, string.Empty, "Successful"));
+            isSuccessful, string.Empty, isSuccessful ? "Successful" : "One or more property lookups failed."));
     }
 
     /// <summary>Returns full details of a single property.</summary>
@@ -122,14 +141,15 @@ public class AdminPropertyController(
 
     /// <summary>Unpublishes a property, hiding it from the public.</summary>
     /// <param name="id">Property's database ID.</param>
+    /// <param name="reason">Reason shown to the owner for why the listing was unpublished.</param>
     /// <response code="200">Property unpublished.</response>
     /// <response code="404">Property not found.</response>
     [HttpPut("{id:guid}/unpublish")]
     [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Unpublish(Guid id)
+    public async Task<IActionResult> Unpublish(Guid id, [FromQuery] string reason)
     {
-        var result = await propertyCommandService.SetPropertyPublishedAsync(id, false);
+        var result = await propertyCommandService.SetPropertyPublishedAsync(id, false, reason);
         if (!result.IsSuccessful) return NotFound(result);
         return Ok(result);
     }
@@ -164,14 +184,15 @@ public class AdminPropertyController(
 
     /// <summary>Permanently deletes a property (admin bypass — no ownership check).</summary>
     /// <param name="id">Property's database ID.</param>
+    /// <param name="reason">Reason shown to the owner for why the listing was deleted.</param>
     /// <response code="204">Property deleted.</response>
     /// <response code="404">Property not found.</response>
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id, [FromQuery] string reason)
     {
-        var result = await propertyCommandService.AdminDeletePropertyAsync(id);
+        var result = await propertyCommandService.AdminDeletePropertyAsync(id, reason);
         if (!result.IsSuccessful) return NotFound(result);
         return NoContent();
     }

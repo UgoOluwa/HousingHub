@@ -4,6 +4,7 @@ using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
 using HousingHub.Service.Dtos.Property;
+using HousingHub.Service.Dtos.PropertyAddress;
 using HousingHub.Service.PropertyService.Interfaces;
 using Microsoft.Extensions.Logging;
 
@@ -44,7 +45,17 @@ public class PropertyQueryService : IPropertyQueryService
 
             await AttachFilesAsync(property);
 
-            return new BaseResponse<PropertyDto?>(_mapper.Map<PropertyDto>(property), true, string.Empty, ResponseMessages.Successful);
+            var addressTask = _unitOfWOrk.PropertyAddressQueries.GetByAsync(a => a.PropertyId == property.Id);
+            var ownerTask = _unitOfWOrk.CustomerQueries.GetByIdAsync(property.OwnerId);
+            await Task.WhenAll(addressTask, ownerTask);
+
+            var dto = _mapper.Map<PropertyDto>(property) with
+            {
+                PropertyAddress = addressTask.Result is { } address ? _mapper.Map<PropertyAddressDto>(address) : null,
+                OwnerName = ownerTask.Result is { } owner ? $"{owner.FirstName} {owner.LastName}" : null
+            };
+
+            return new BaseResponse<PropertyDto?>(dto, true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
         {

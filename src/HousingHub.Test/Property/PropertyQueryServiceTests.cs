@@ -76,6 +76,59 @@ public class PropertyQueryServiceTests
     }
 
     [Fact]
+    public async Task GetPropertyAsync_EnrichesWithAddressAndOwnerName()
+    {
+        var property = CreateSampleProperty();
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid))
+            .ReturnsAsync(property);
+
+        var address = new HousingHub.Model.Entities.PropertyAddress("Plot 4", "Lekki", "Lagos", "Nigeria", "100001")
+        {
+            PropertyId = property.Id
+        };
+        _unitOfWorkMock
+            .Setup(u => u.PropertyAddressQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyAddress, bool>>>()))
+            .ReturnsAsync(address);
+
+        var owner = new HousingHub.Model.Entities.Customer("Jane", "Doe", "jane@test.com", "08000000000", CustomerType.HouseOwner, "hash")
+        {
+            Id = OwnerId
+        };
+        _unitOfWorkMock
+            .Setup(u => u.CustomerQueries.GetByIdAsync(OwnerId))
+            .ReturnsAsync(owner);
+
+        var result = await _sut.GetPropertyAsync(PropertyGuid);
+
+        Assert.True(result.IsSuccessful);
+        Assert.NotNull(result.Data!.PropertyAddress);
+        Assert.Equal("Lekki", result.Data.PropertyAddress!.City);
+        Assert.Equal("Jane Doe", result.Data.OwnerName);
+    }
+
+    [Fact]
+    public async Task GetPropertyAsync_NoAddressOrOwnerFound_LeavesThemNull()
+    {
+        var property = CreateSampleProperty();
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid))
+            .ReturnsAsync(property);
+        _unitOfWorkMock
+            .Setup(u => u.PropertyAddressQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyAddress, bool>>>()))
+            .ReturnsAsync((HousingHub.Model.Entities.PropertyAddress?)null);
+        _unitOfWorkMock
+            .Setup(u => u.CustomerQueries.GetByIdAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((HousingHub.Model.Entities.Customer?)null);
+
+        var result = await _sut.GetPropertyAsync(PropertyGuid);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Null(result.Data!.PropertyAddress);
+        Assert.Null(result.Data.OwnerName);
+    }
+
+    [Fact]
     public async Task GetPropertyAsync_WhenNotFound_ReturnsFailure()
     {
         _unitOfWorkMock

@@ -1,4 +1,5 @@
 using HousingHub.Model.Enums;
+using HousingHub.Service.Dtos.PropertyAddress;
 using HousingHub.Service.Dtos.PropertyFile;
 
 namespace HousingHub.Service.Dtos.Property;
@@ -29,4 +30,7 @@ public record PropertyDto(
     DateTime? VerifiedAt,
     List<PropertyFileDto>? Files = null,
     // Count of open (Pending or Rescheduled) inspection requests for this property.
-    int InspectionCount = 0);
+    int InspectionCount = 0,
+    PropertyAddressDto? PropertyAddress = null,
+    string? OwnerName = null,
+    string? UnpublishReason = null);

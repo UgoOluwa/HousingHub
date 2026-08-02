@@ -1,7 +1,9 @@
+using Amazon.DynamoDBv2.DataModel;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
+using AdminEntity = HousingHub.Model.Entities.Admin;
 using HousingHub.Service.ChatService;
 using HousingHub.Service.Dtos.Chat;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,6 +15,7 @@ namespace HousingHub.Test.Chat;
 public class ChatQueryServiceTests
 {
     private readonly Mock<IUnitOfWOrk> _unitOfWorkMock;
+    private readonly Mock<IDynamoDBContext> _dynamoDbMock;
     private readonly ChatQueryService _sut;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -23,7 +26,11 @@ public class ChatQueryServiceTests
     {
         _unitOfWorkMock = new Mock<IUnitOfWOrk>();
         var logger = NullLogger<ChatQueryService>.Instance;
-        _sut = new ChatQueryService(_unitOfWorkMock.Object, logger);
+        _dynamoDbMock = new Mock<IDynamoDBContext>();
+        _dynamoDbMock
+            .Setup(d => d.LoadAsync<AdminEntity>(It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AdminEntity?)null);
+        _sut = new ChatQueryService(_unitOfWorkMock.Object, logger, _dynamoDbMock.Object);
     }
 
     private static Customer CreateCustomer(Guid id, string firstName = "Test", string lastName = "User") =>
@@ -271,6 +278,27 @@ public class ChatQueryServiceTests
 
         Assert.True(result.IsSuccessful);
         Assert.Equal("John Doe", result.Data!.Items[0].SenderName);
+    }
+
+    [Fact]
+    public async Task GetMessagesAsync_SenderIsAdmin_ResolvesNameFromAdminsTable()
+    {
+        var adminId = Guid.NewGuid();
+        var conversation = CreateConversation(participantOneId: UserId, participantTwoId: adminId);
+        SetupConversationByIdLookup(conversation);
+
+        var messages = new List<ChatMessage> { CreateMessage(ConversationId, adminId, "How can we help?") };
+        SetupConversationMessages(messages);
+        SetupMessageSenders(new List<Customer>()); // sender isn't a customer
+
+        _dynamoDbMock
+            .Setup(d => d.LoadAsync<AdminEntity>(adminId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminEntity { Id = adminId, FirstName = "Ada", LastName = "Min", Email = "ada@test.com" });
+
+        var result = await _sut.GetMessagesAsync(ConversationId, UserId, 1, 10);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal("Ada Min", result.Data!.Items[0].SenderName);
     }
 
     [Fact]

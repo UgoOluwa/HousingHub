@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.DynamoDBv2.DocumentModel;
+using HousingHub.Core.CustomResponses;
 using HousingHub.Model.Entities;
 using HousingHub.Service.Commons.Authentication;
 using HousingHub.Service.Commons.Email;
@@ -20,9 +21,11 @@ public class AdminAuthService(
     IConfiguration configuration) : IAdminAuthService
 {
     private static readonly TimeSpan OtpValidity = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan OtpResendCooldown = TimeSpan.FromSeconds(60);
+    private const int MaxOtpAttempts = 5;
     private static readonly TimeSpan RefreshTokenValidity = TimeSpan.FromDays(30);
 
-    public async Task RequestOtpAsync(string email)
+    public async Task<BaseResponse<bool>> RequestOtpAsync(string email)
     {
         var results = await dynamoDb.QueryAsync<Admin>(
             email,
@@ -30,18 +33,30 @@ public class AdminAuthService(
             .GetRemainingAsync();
 
         var admin = results.FirstOrDefault(a => a.IsActive);
-        if (admin == null) return; // don't reveal whether the email exists
+
+        // Every branch below returns the exact same response — whether the email
+        // doesn't exist, was throttled, or really got a fresh code — so a caller can
+        // never distinguish "not registered" from "already has a code outstanding."
+        if (admin == null)
+            return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.OtpSent);
+
+        if (admin.OtpRequestedAt.HasValue && DateTime.UtcNow - admin.OtpRequestedAt.Value < OtpResendCooldown)
+            return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.OtpSent);
 
         string code = Random.Shared.Next(0, 1_000_000).ToString("D6");
         admin.OtpCode = code;
         admin.OtpExpiresAt = DateTime.UtcNow.Add(OtpValidity);
+        admin.OtpRequestedAt = DateTime.UtcNow;
+        admin.OtpAttempts = 0;
         admin.DateModified = DateTime.UtcNow;
         await dynamoDb.SaveAsync(admin);
 
         await emailService.SendAdminOtpAsync(admin.Email, admin.FirstName, code);
+
+        return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.OtpSent);
     }
 
-    public async Task<AdminLoginResultDto?> VerifyOtpAsync(string email, string code)
+    public async Task<BaseResponse<AdminLoginResultDto>> VerifyOtpAsync(string email, string code)
     {
         var results = await dynamoDb.QueryAsync<Admin>(
             email,
@@ -49,23 +64,47 @@ public class AdminAuthService(
             .GetRemainingAsync();
 
         var admin = results.FirstOrDefault(a => a.IsActive);
-        if (admin == null) return null;
+        if (admin == null)
+            return new BaseResponse<AdminLoginResultDto>(null, false, string.Empty, ResponseMessages.OtpInvalidOrExpired);
 
         if (string.IsNullOrEmpty(admin.OtpCode)
             || admin.OtpExpiresAt == null
-            || admin.OtpExpiresAt < DateTime.UtcNow
-            || admin.OtpCode != code)
-            return null;
+            || admin.OtpExpiresAt < DateTime.UtcNow)
+            return new BaseResponse<AdminLoginResultDto>(null, false, string.Empty, ResponseMessages.OtpInvalidOrExpired);
+
+        if (admin.OtpCode != code)
+        {
+            admin.OtpAttempts++;
+
+            // Too many wrong guesses against this code — burn it so the attempt limit
+            // can't be reset by just requesting a fresh code before it's exhausted.
+            if (admin.OtpAttempts >= MaxOtpAttempts)
+            {
+                admin.OtpCode = null;
+                admin.OtpExpiresAt = null;
+                admin.OtpAttempts = 0;
+                admin.DateModified = DateTime.UtcNow;
+                await dynamoDb.SaveAsync(admin);
+                return new BaseResponse<AdminLoginResultDto>(null, false, string.Empty, ResponseMessages.OtpTooManyAttempts);
+            }
+
+            admin.DateModified = DateTime.UtcNow;
+            await dynamoDb.SaveAsync(admin);
+            return new BaseResponse<AdminLoginResultDto>(null, false, string.Empty, ResponseMessages.OtpInvalidOrExpired);
+        }
 
         // One-time use — invalidate immediately so it can't be replayed.
         admin.OtpCode = null;
         admin.OtpExpiresAt = null;
+        admin.OtpRequestedAt = null;
+        admin.OtpAttempts = 0;
         admin.DateModified = DateTime.UtcNow;
         await dynamoDb.SaveAsync(admin);
 
         var token = CreateToken(admin);
         var refreshToken = await IssueRefreshTokenAsync(admin.Id);
-        return new AdminLoginResultDto(token, admin.FirstName, admin.LastName, admin.Email, refreshToken);
+        var dto = new AdminLoginResultDto(admin.Id, token, admin.FirstName, admin.LastName, admin.Email, refreshToken, admin.Role);
+        return new BaseResponse<AdminLoginResultDto>(dto, true, string.Empty, ResponseMessages.LoginSuccess);
     }
 
     /// <summary>
@@ -105,7 +144,7 @@ public class AdminAuthService(
         var newAccessToken = CreateToken(admin);
         var newRefreshToken = await IssueRefreshTokenAsync(admin.Id);
 
-        return new AdminLoginResultDto(newAccessToken, admin.FirstName, admin.LastName, admin.Email, newRefreshToken);
+        return new AdminLoginResultDto(admin.Id, newAccessToken, admin.FirstName, admin.LastName, admin.Email, newRefreshToken, admin.Role);
     }
 
     private async Task<string> IssueRefreshTokenAsync(Guid adminId)
@@ -149,16 +188,19 @@ public class AdminAuthService(
         return Convert.ToHexString(hashBytes);
     }
 
-    public async Task CreateStaffAsync(string email, string firstName, string lastName)
+    public async Task CreateStaffAsync(string email, string firstName, string lastName, string role)
     {
         // Login is OTP-only, so this password is never used to authenticate —
         // generate a throwaway value purely to satisfy Admin.PasswordHash's
         // non-null constraint.
         string throwawayPassword = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
-        await CreateAdminAsync(email, throwawayPassword, firstName, lastName);
+        await CreateAdminAsync(email, throwawayPassword, firstName, lastName, role);
     }
 
-    public async Task CreateAdminAsync(string email, string password, string firstName, string lastName)
+    public Task CreateAdminAsync(string email, string password, string firstName, string lastName) =>
+        CreateAdminAsync(email, password, firstName, lastName, AdminRoles.Admin);
+
+    private async Task CreateAdminAsync(string email, string password, string firstName, string lastName, string role)
     {
         var admin = new Admin
         {
@@ -167,6 +209,7 @@ public class AdminAuthService(
             PasswordHash = passwordHasher.Hash(password),
             FirstName = firstName,
             LastName = lastName,
+            Role = role,
             IsActive = true,
             DateCreated = DateTime.UtcNow,
             DateModified = DateTime.UtcNow
@@ -180,7 +223,23 @@ public class AdminAuthService(
         var admin = await dynamoDb.LoadAsync<Admin>(adminId);
         if (admin == null) return null;
 
-        return new AdminProfileDto(admin.Id, admin.FirstName, admin.LastName, admin.Email, admin.DateCreated, admin.IsActive);
+        return new AdminProfileDto(admin.Id, admin.FirstName, admin.LastName, admin.Email, admin.DateCreated, admin.IsActive, admin.Role);
+    }
+
+    public async Task<bool> PromoteToSuperAdminAsync(string email)
+    {
+        var results = await dynamoDb.QueryAsync<Admin>(
+            email,
+            new DynamoDBOperationConfig { IndexName = "Email-index" })
+            .GetRemainingAsync();
+
+        var admin = results.FirstOrDefault();
+        if (admin == null) return false;
+
+        admin.Role = AdminRoles.SuperAdmin;
+        admin.DateModified = DateTime.UtcNow;
+        await dynamoDb.SaveAsync(admin);
+        return true;
     }
 
     public async Task<bool> UpdateAdminProfileAsync(Guid adminId, UpdateAdminProfileDto dto)
@@ -217,7 +276,7 @@ public class AdminAuthService(
 
         return admins
             .OrderByDescending(a => a.DateCreated)
-            .Select(a => new AdminStaffDto(a.Id, a.FirstName, a.LastName, a.Email, a.DateCreated, a.IsActive))
+            .Select(a => new AdminStaffDto(a.Id, a.FirstName, a.LastName, a.Email, a.DateCreated, a.IsActive, a.Role))
             .ToList();
     }
 
@@ -259,7 +318,8 @@ public class AdminAuthService(
                 new Claim(JwtRegisteredClaimNames.Email, admin.Email),
                 new Claim(JwtRegisteredClaimNames.GivenName, admin.FirstName),
                 new Claim(JwtRegisteredClaimNames.FamilyName, admin.LastName),
-                new Claim("role", "Admin")
+                new Claim("role", "Admin"),
+                new Claim("adminRole", admin.Role)
             ]),
             Expires = DateTime.UtcNow.AddMinutes(expirationInMinutes),
             SigningCredentials = credentials,

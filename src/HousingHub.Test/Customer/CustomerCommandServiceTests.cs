@@ -6,6 +6,7 @@ using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.Authentication;
+using HousingHub.Service.Commons.Email;
 using HousingHub.Service.CustomerService;
 using HousingHub.Service.Dtos.Customer;
 using Microsoft.Extensions.Logging;
@@ -20,6 +21,7 @@ public class CustomerCommandServiceTests
     private readonly Mock<IUnitOfWOrk> _unitOfWorkMock;
     private readonly Mock<IPasswordHasher> _passwordHasherMock;
     private readonly Mock<ITokenProvider> _tokenProviderMock;
+    private readonly Mock<IEmailService> _emailServiceMock;
     private readonly IMapper _mapper;
     private readonly CustomerCommandService _sut;
 
@@ -45,7 +47,9 @@ public class CustomerCommandServiceTests
         _passwordHasherMock.Setup(p => p.Verify(It.IsAny<string>(), TestPasswordHash)).Returns(true);
         _tokenProviderMock.Setup(t => t.Create(It.IsAny<HousingHub.Model.Entities.Customer>())).Returns("jwt_token");
 
-        _sut = new CustomerCommandService(logger, _unitOfWorkMock.Object, _mapper, _passwordHasherMock.Object, _tokenProviderMock.Object, new Mock<IFileStorageService>().Object);
+        _emailServiceMock = new Mock<IEmailService>();
+
+        _sut = new CustomerCommandService(logger, _unitOfWorkMock.Object, _mapper, _passwordHasherMock.Object, _tokenProviderMock.Object, new Mock<IFileStorageService>().Object, _emailServiceMock.Object);
     }
 
     // ── CreateCustomer ───────────────────────────────────────────
@@ -301,5 +305,28 @@ public class CustomerCommandServiceTests
         var result = await _sut.VerifyKyc(Guid.NewGuid(), true);
 
         Assert.False(result.IsSuccessful);
+    }
+
+    [Fact]
+    public async Task VerifyKyc_Approve_SendsApprovalEmail()
+    {
+        var customer = new HousingHub.Model.Entities.Customer("John", "Doe", "john@test.com", "08012345678", CustomerType.Customer, TestPasswordHash) { Id = Guid.NewGuid() };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
+
+        await _sut.VerifyKyc(customer.Id, true);
+
+        _emailServiceMock.Verify(e => e.SendKycApprovedAsync("john@test.com", "John"), Times.Once);
+        _emailServiceMock.Verify(e => e.SendKycRejectedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task VerifyKyc_Reject_SendsRejectionEmailWithReason()
+    {
+        var customer = new HousingHub.Model.Entities.Customer("John", "Doe", "john@test.com", "08012345678", CustomerType.Customer, TestPasswordHash) { Id = Guid.NewGuid() };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
+
+        await _sut.VerifyKyc(customer.Id, false, "Document image is blurry");
+
+        _emailServiceMock.Verify(e => e.SendKycRejectedAsync("john@test.com", "John", "Document image is blurry"), Times.Once);
     }
 }

@@ -1,9 +1,11 @@
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.DynamoDBv2.DocumentModel;
+using HousingHub.Core.CustomResponses;
 using HousingHub.Service.AdminService;
 using HousingHub.Service.Commons.Authentication;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Dtos.Admin;
+using HousingHub.Model.Entities;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using AdminEntity = HousingHub.Model.Entities.Admin;
@@ -98,11 +100,15 @@ public class AdminAuthServiceTests
         var admin = MakeAdmin();
         SetupQuery(new[] { admin });
 
-        await _sut.RequestOtpAsync(admin.Email);
+        var result = await _sut.RequestOtpAsync(admin.Email);
 
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.OtpSent, result.Message);
         Assert.False(string.IsNullOrEmpty(admin.OtpCode));
         Assert.Equal(6, admin.OtpCode!.Length);
         Assert.NotNull(admin.OtpExpiresAt);
+        Assert.NotNull(admin.OtpRequestedAt);
+        Assert.Equal(0, admin.OtpAttempts);
         _dynamoDbMock.Verify(d => d.SaveAsync(admin, It.IsAny<System.Threading.CancellationToken>()), Times.Once);
         _emailServiceMock.Verify(e => e.SendAdminOtpAsync(admin.Email, admin.FirstName, admin.OtpCode!), Times.Once);
     }
@@ -113,8 +119,10 @@ public class AdminAuthServiceTests
         var inactiveAdmin = MakeAdmin(isActive: false);
         SetupQuery(new[] { inactiveAdmin });
 
-        await _sut.RequestOtpAsync(inactiveAdmin.Email);
+        var result = await _sut.RequestOtpAsync(inactiveAdmin.Email);
 
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.OtpSent, result.Message);
         _emailServiceMock.Verify(e => e.SendAdminOtpAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
     }
 
@@ -123,9 +131,42 @@ public class AdminAuthServiceTests
     {
         SetupQuery(Array.Empty<AdminEntity>());
 
-        await _sut.RequestOtpAsync("unknown@test.com");
+        var result = await _sut.RequestOtpAsync("unknown@test.com");
 
+        // Identical outward response to every other branch — no account-existence signal.
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.OtpSent, result.Message);
         _emailServiceMock.Verify(e => e.SendAdminOtpAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RequestOtp_WithinCooldown_DoesNotResendOrRegenerateCode()
+    {
+        var admin = MakeAdmin();
+        admin.OtpCode = "111111";
+        admin.OtpRequestedAt = DateTime.UtcNow.AddSeconds(-10); // 10s ago — well inside the 60s cooldown
+        SetupQuery(new[] { admin });
+
+        var result = await _sut.RequestOtpAsync(admin.Email);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.OtpSent, result.Message);
+        Assert.Equal("111111", admin.OtpCode); // unchanged
+        _emailServiceMock.Verify(e => e.SendAdminOtpAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RequestOtp_AfterCooldownExpires_SendsNewCode()
+    {
+        var admin = MakeAdmin();
+        admin.OtpCode = "111111";
+        admin.OtpRequestedAt = DateTime.UtcNow.AddSeconds(-61); // just past the 60s cooldown
+        SetupQuery(new[] { admin });
+
+        var result = await _sut.RequestOtpAsync(admin.Email);
+
+        Assert.True(result.IsSuccessful);
+        _emailServiceMock.Verify(e => e.SendAdminOtpAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once);
     }
 
     // ── VerifyOtpAsync ────────────────────────────────────────────────────────
@@ -136,21 +177,26 @@ public class AdminAuthServiceTests
         var admin = MakeAdmin();
         admin.OtpCode = "123456";
         admin.OtpExpiresAt = DateTime.UtcNow.AddMinutes(5);
+        admin.OtpRequestedAt = DateTime.UtcNow;
         SetupQuery(new[] { admin });
 
         var result = await _sut.VerifyOtpAsync(admin.Email, "123456");
 
-        Assert.NotNull(result);
-        Assert.Equal(admin.FirstName, result!.FirstName);
-        Assert.Equal(admin.Email, result.Email);
-        Assert.False(string.IsNullOrEmpty(result.Token));
-        Assert.False(string.IsNullOrEmpty(result.RefreshToken));
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.LoginSuccess, result.Message);
+        Assert.NotNull(result.Data);
+        Assert.Equal(admin.FirstName, result.Data!.FirstName);
+        Assert.Equal(admin.Email, result.Data.Email);
+        Assert.False(string.IsNullOrEmpty(result.Data.Token));
+        Assert.False(string.IsNullOrEmpty(result.Data.RefreshToken));
         Assert.Null(admin.OtpCode);
         Assert.Null(admin.OtpExpiresAt);
+        Assert.Null(admin.OtpRequestedAt);
+        Assert.Equal(0, admin.OtpAttempts);
     }
 
     [Fact]
-    public async Task VerifyOtp_WrongCode_ReturnsNull()
+    public async Task VerifyOtp_WrongCode_ReturnsFailureAndIncrementsAttempts()
     {
         var admin = MakeAdmin();
         admin.OtpCode = "123456";
@@ -159,12 +205,33 @@ public class AdminAuthServiceTests
 
         var result = await _sut.VerifyOtpAsync(admin.Email, "000000");
 
-        Assert.Null(result);
+        Assert.False(result.IsSuccessful);
+        Assert.Null(result.Data);
+        Assert.Equal(ResponseMessages.OtpInvalidOrExpired, result.Message);
         Assert.Equal("123456", admin.OtpCode);
+        Assert.Equal(1, admin.OtpAttempts);
     }
 
     [Fact]
-    public async Task VerifyOtp_ExpiredCode_ReturnsNull()
+    public async Task VerifyOtp_TooManyWrongAttempts_LocksOutCodeWithDistinctMessage()
+    {
+        var admin = MakeAdmin();
+        admin.OtpCode = "123456";
+        admin.OtpExpiresAt = DateTime.UtcNow.AddMinutes(5);
+        admin.OtpAttempts = 4; // one more wrong guess hits the 5-attempt limit
+        SetupQuery(new[] { admin });
+
+        var result = await _sut.VerifyOtpAsync(admin.Email, "000000");
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.OtpTooManyAttempts, result.Message);
+        Assert.Null(admin.OtpCode);
+        Assert.Null(admin.OtpExpiresAt);
+        Assert.Equal(0, admin.OtpAttempts);
+    }
+
+    [Fact]
+    public async Task VerifyOtp_ExpiredCode_ReturnsFailure()
     {
         var admin = MakeAdmin();
         admin.OtpCode = "123456";
@@ -173,22 +240,24 @@ public class AdminAuthServiceTests
 
         var result = await _sut.VerifyOtpAsync(admin.Email, "123456");
 
-        Assert.Null(result);
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.OtpInvalidOrExpired, result.Message);
     }
 
     [Fact]
-    public async Task VerifyOtp_NoCodeRequested_ReturnsNull()
+    public async Task VerifyOtp_NoCodeRequested_ReturnsFailure()
     {
         var admin = MakeAdmin();
         SetupQuery(new[] { admin });
 
         var result = await _sut.VerifyOtpAsync(admin.Email, "123456");
 
-        Assert.Null(result);
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.OtpInvalidOrExpired, result.Message);
     }
 
     [Fact]
-    public async Task VerifyOtp_InactiveAdmin_ReturnsNull()
+    public async Task VerifyOtp_InactiveAdmin_ReturnsFailure()
     {
         var inactiveAdmin = MakeAdmin(isActive: false);
         inactiveAdmin.OtpCode = "123456";
@@ -197,17 +266,19 @@ public class AdminAuthServiceTests
 
         var result = await _sut.VerifyOtpAsync(inactiveAdmin.Email, "123456");
 
-        Assert.Null(result);
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.OtpInvalidOrExpired, result.Message);
     }
 
     [Fact]
-    public async Task VerifyOtp_EmailNotFound_ReturnsNull()
+    public async Task VerifyOtp_EmailNotFound_ReturnsFailure()
     {
         SetupQuery(Array.Empty<AdminEntity>());
 
         var result = await _sut.VerifyOtpAsync("unknown@test.com", "123456");
 
-        Assert.Null(result);
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.OtpInvalidOrExpired, result.Message);
     }
 
     // ── RefreshTokenAsync ─────────────────────────────────────────────────────
@@ -347,14 +418,46 @@ public class AdminAuthServiceTests
             .Callback<AdminEntity, CancellationToken>((a, _) => saved = a)
             .Returns(Task.CompletedTask);
 
-        await _sut.CreateStaffAsync("staff@test.com", "Staff", "Member");
+        await _sut.CreateStaffAsync("staff@test.com", "Staff", "Member", AdminRoles.Admin);
 
         Assert.NotNull(saved);
         Assert.Equal("staff@test.com", saved!.Email);
         Assert.Equal("Staff", saved.FirstName);
         Assert.Equal("Member", saved.LastName);
         Assert.True(saved.IsActive);
+        Assert.Equal(AdminRoles.Admin, saved.Role);
         Assert.False(string.IsNullOrEmpty(saved.PasswordHash));
+    }
+
+    // ── PromoteToSuperAdminAsync ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task PromoteToSuperAdmin_ExistingAdmin_SetsSuperAdminRole()
+    {
+        var admin = MakeAdmin();
+        admin.Role = AdminRoles.Admin;
+        SetupQuery(new[] { admin });
+
+        AdminEntity? saved = null;
+        _dynamoDbMock
+            .Setup(d => d.SaveAsync(It.IsAny<AdminEntity>(), It.IsAny<CancellationToken>()))
+            .Callback<AdminEntity, CancellationToken>((a, _) => saved = a)
+            .Returns(Task.CompletedTask);
+
+        var success = await _sut.PromoteToSuperAdminAsync(admin.Email);
+
+        Assert.True(success);
+        Assert.Equal(AdminRoles.SuperAdmin, saved!.Role);
+    }
+
+    [Fact]
+    public async Task PromoteToSuperAdmin_NotFound_ReturnsFalse()
+    {
+        SetupQuery(Array.Empty<AdminEntity>());
+
+        var success = await _sut.PromoteToSuperAdminAsync("nobody@test.com");
+
+        Assert.False(success);
     }
 
     // ── GetAdminProfileAsync ──────────────────────────────────────────────────

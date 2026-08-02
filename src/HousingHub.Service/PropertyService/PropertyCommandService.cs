@@ -3,6 +3,7 @@ using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
+using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.FileStorage;
 using HousingHub.Service.Commons.Geocoding;
 using HousingHub.Service.Dtos.Property;
@@ -19,6 +20,7 @@ public class PropertyCommandService : IPropertyCommandService
     private readonly IMapper _mapper;
     private readonly IFileStorageService _fileStorageService;
     private readonly IGeocodingService _geocodingService;
+    private readonly IEmailService _emailService;
     private const string ClassName = "property";
     private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
 
@@ -37,13 +39,15 @@ public class PropertyCommandService : IPropertyCommandService
         IUnitOfWOrk unitOfWOrk,
         IMapper mapper,
         IFileStorageService fileStorageService,
-        IGeocodingService geocodingService)
+        IGeocodingService geocodingService,
+        IEmailService emailService)
     {
         _logger = logger;
         _unitOfWOrk = unitOfWOrk;
         _mapper = mapper;
         _fileStorageService = fileStorageService;
         _geocodingService = geocodingService;
+        _emailService = emailService;
     }
 
     public async Task<BaseResponse<PropertyDto>> CreateProperty(CreatePropertyDto request, Guid authenticatedUserId)
@@ -281,8 +285,8 @@ public class PropertyCommandService : IPropertyCommandService
         }
     }
 
-    public Task<BaseResponse<bool>> SetPropertyPublishedAsync(Guid propertyId, bool isPublished) =>
-        SetPropertyPublishedInternalAsync(propertyId, isPublished, ownerCheck: null);
+    public Task<BaseResponse<bool>> SetPropertyPublishedAsync(Guid propertyId, bool isPublished, string? reason = null) =>
+        SetPropertyPublishedInternalAsync(propertyId, isPublished, ownerCheck: null, reason);
 
     public async Task<BaseResponse<bool>> SetPropertyPublishedAsync(Guid propertyId, bool isPublished, Guid authenticatedUserId)
     {
@@ -293,10 +297,10 @@ public class PropertyCommandService : IPropertyCommandService
         if (!owner.CustomerType.CanManageProperties())
             return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
 
-        return await SetPropertyPublishedInternalAsync(propertyId, isPublished, authenticatedUserId);
+        return await SetPropertyPublishedInternalAsync(propertyId, isPublished, authenticatedUserId, reason: null);
     }
 
-    private async Task<BaseResponse<bool>> SetPropertyPublishedInternalAsync(Guid propertyId, bool isPublished, Guid? ownerCheck)
+    private async Task<BaseResponse<bool>> SetPropertyPublishedInternalAsync(Guid propertyId, bool isPublished, Guid? ownerCheck, string? reason)
     {
         try
         {
@@ -309,10 +313,23 @@ public class PropertyCommandService : IPropertyCommandService
 
             property.IsPublished = isPublished;
             property.PublishedAt = isPublished ? DateTime.UtcNow : null;
+            property.UnpublishReason = isPublished ? null : reason;
             property.DateModified = DateTime.UtcNow;
 
             await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
             await _unitOfWOrk.SaveAsync();
+
+            // Only the admin-initiated path (ownerCheck is null) unpublishes on someone
+            // else's behalf, so only that path needs to notify the owner why.
+            if (!isPublished && !ownerCheck.HasValue)
+            {
+                var owner = await _unitOfWOrk.CustomerQueries.GetByIdAsync(property.OwnerId);
+                if (owner != null)
+                {
+                    await _emailService.SendPropertyUnpublishedAsync(
+                        owner.Email, $"{owner.FirstName} {owner.LastName}", property.Title, reason ?? "No reason provided.");
+                }
+            }
 
             var message = isPublished ? "Property published successfully." : "Property unpublished successfully.";
             return new BaseResponse<bool>(true, true, string.Empty, message);
@@ -324,7 +341,7 @@ public class PropertyCommandService : IPropertyCommandService
         }
     }
 
-    public async Task<BaseResponse<bool>> AdminDeletePropertyAsync(Guid propertyId)
+    public async Task<BaseResponse<bool>> AdminDeletePropertyAsync(Guid propertyId, string reason)
     {
         try
         {
@@ -332,8 +349,16 @@ public class PropertyCommandService : IPropertyCommandService
             if (property == null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
+            var owner = await _unitOfWOrk.CustomerQueries.GetByIdAsync(property.OwnerId);
+
             await _unitOfWOrk.PropertyCommands.DeleteAsync(property);
             await _unitOfWOrk.SaveAsync();
+
+            if (owner != null)
+            {
+                await _emailService.SendPropertyDeletedAsync(
+                    owner.Email, $"{owner.FirstName} {owner.LastName}", property.Title, reason);
+            }
 
             return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.SetDeletedSuccessMessage(ClassName));
         }
@@ -358,6 +383,16 @@ public class PropertyCommandService : IPropertyCommandService
 
             await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
             await _unitOfWOrk.SaveAsync();
+
+            if (isVerified)
+            {
+                var owner = await _unitOfWOrk.CustomerQueries.GetByIdAsync(property.OwnerId);
+                if (owner != null)
+                {
+                    await _emailService.SendPropertyVerifiedAsync(
+                        owner.Email, $"{owner.FirstName} {owner.LastName}", property.Title);
+                }
+            }
 
             var message = isVerified ? "Property verified successfully." : "Property unverified successfully.";
             return new BaseResponse<bool>(true, true, string.Empty, message);

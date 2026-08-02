@@ -5,6 +5,7 @@ using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Data.RepositoryInterfaces.Queries;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
+using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.FileStorage;
 using HousingHub.Service.Commons.Geocoding;
 using HousingHub.Service.Dtos.Property;
@@ -57,7 +58,7 @@ public class PropertyCommandServiceTests
             .Setup(g => g.GeocodeAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .ReturnsAsync(((double, double)?)null);
 
-        _sut = new PropertyCommandService(logger, _unitOfWorkMock.Object, _mapper, _fileStorageServiceMock.Object, _geocodingServiceMock.Object);
+        _sut = new PropertyCommandService(logger, _unitOfWorkMock.Object, _mapper, _fileStorageServiceMock.Object, _geocodingServiceMock.Object, new Mock<IEmailService>().Object);
     }
 
     private Customer CreateOwner(CustomerType type) => new("John", "Doe", "john@test.com", "08012345678", type, "hash")

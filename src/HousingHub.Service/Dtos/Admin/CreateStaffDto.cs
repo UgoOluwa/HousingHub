@@ -1,3 +1,3 @@
 namespace HousingHub.Service.Dtos.Admin;
 
-public record CreateStaffDto(string Email, string FirstName, string LastName);
+public record CreateStaffDto(string Email, string FirstName, string LastName, string Role = HousingHub.Model.Entities.AdminRoles.Admin);

@@ -6,4 +6,5 @@ public record AdminProfileDto(
     string LastName,
     string Email,
     DateTime DateCreated,
-    bool IsActive);
+    bool IsActive,
+    string Role);

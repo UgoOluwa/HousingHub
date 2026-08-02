@@ -28,6 +28,9 @@ public class AuthService : IAuthService
     /// <summary>How long a user must wait between verification-email resends.</summary>
     private static readonly TimeSpan ResendVerificationCooldown = TimeSpan.FromMinutes(5);
 
+    /// <summary>How long a user must wait between password-reset email resends.</summary>
+    private static readonly TimeSpan PasswordResetCooldown = TimeSpan.FromMinutes(5);
+
     /// <summary>How long a refresh token stays valid before the user must log in again.</summary>
     private static readonly TimeSpan RefreshTokenValidity = TimeSpan.FromDays(30);
 
@@ -167,13 +170,21 @@ public class AuthService : IAuthService
         {
             var customer = await _unitOfWork.CustomerQueries.GetByEmailAsync(request.Email);
 
+            // Every branch below returns the exact same response — whether the email
+            // doesn't exist or was throttled — so a caller can never distinguish
+            // "not registered" from "already got a link within the cooldown."
             if (customer == null)
+                return new BaseResponse<string>(null, true, string.Empty, ResponseMessages.PasswordResetTokenSent);
+
+            if (customer.LastPasswordResetRequestedAt is { } lastSent
+                && DateTime.UtcNow - lastSent < PasswordResetCooldown)
                 return new BaseResponse<string>(null, true, string.Empty, ResponseMessages.PasswordResetTokenSent);
 
             // Google-only accounts are allowed through: this is how a customer who
             // signed up with Google adds a password so either method works.
             customer.PasswordResetToken = GenerateSecureToken();
             customer.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
+            customer.LastPasswordResetRequestedAt = DateTime.UtcNow;
 
             await _unitOfWork.CustomerCommands.UpdateAsync(customer);
             await _unitOfWork.SaveAsync();

@@ -4,14 +4,19 @@ using Amazon;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.Runtime;
+using HousingHub.Admin.API.Realtime;
 using HousingHub.Application;
+using HousingHub.Core.CustomResponses;
 using HousingHub.Data.Contexts;
 using HousingHub.Repository;
 using HousingHub.Service;
 using HousingHub.Service.AdminService;
+using HousingHub.Service.ChatService.Interfaces;
 using HousingHub.Service.Commons.Authentication;
+using HousingHub.Service.NotificationService.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using Serilog;
@@ -90,6 +95,12 @@ public static class Program
                 .RequireAuthenticatedUser()
                 .RequireClaim("role", "Admin")
                 .Build();
+
+            // Staff management (add/deactivate/reactivate/view all) is restricted to
+            // SuperAdmins — see AdminAccountController's staff endpoints.
+            options.AddPolicy("SuperAdminOnly", policy => policy
+                .RequireAuthenticatedUser()
+                .RequireClaim("adminRole", "SuperAdmin"));
         });
 
         // DynamoDB
@@ -126,6 +137,12 @@ public static class Program
         builder.Services.AddScoped<IAdminAuthService, AdminAuthService>();
         builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 
+        // Chat (IChatCommandService/IChatQueryService, registered generically by
+        // AddInjectionService below) needs these — the Admin API has no SignalR hub
+        // of its own, so real-time push is a no-op here (see NoOpRealtimeNotifiers).
+        builder.Services.AddSingleton<IChatRealtimeNotifier, NoOpChatRealtimeNotifier>();
+        builder.Services.AddSingleton<IRealtimeNotifier, NoOpRealtimeNotifier>();
+
         // Shared application + repository layers
         builder.Services.AddInjectionRepository()
             .AddInjectionService()
@@ -137,6 +154,23 @@ public static class Program
         {
             app.UsePathBase("/admin");
         }
+
+        // Turns an unhandled exception into a normal JSON error response instead of a
+        // bare Lambda 500 with no body — any exception that escapes a controller's own
+        // try/catch previously reached the caller with no diagnostic information at all.
+        app.UseExceptionHandler(errorApp =>
+        {
+            errorApp.Run(async context =>
+            {
+                var exceptionFeature = context.Features.Get<IExceptionHandlerFeature>();
+                Log.Error(exceptionFeature?.Error, "Unhandled exception in Admin API");
+
+                context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsJsonAsync(new BaseResponse<object?>(
+                    null, false, "500", "An unexpected error occurred. Please try again."));
+            });
+        });
 
         app.UseSwagger(c => c.RouteTemplate = "openapi/{documentName}.json");
         app.UseSwaggerUI(c =>

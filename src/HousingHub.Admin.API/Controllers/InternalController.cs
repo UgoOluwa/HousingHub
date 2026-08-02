@@ -1,4 +1,5 @@
 using HousingHub.Core.CustomResponses;
+using HousingHub.Service.AdminService;
 using HousingHub.Service.InspectionService.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +18,7 @@ namespace HousingHub.Admin.API.Controllers;
 [AllowAnonymous]
 public class InternalController(
     IInspectionCommandService inspectionCommandService,
+    IAdminAuthService adminAuthService,
     IConfiguration configuration) : ControllerBase
 {
     /// <summary>
@@ -38,5 +40,27 @@ public class InternalController(
 
         var result = await inspectionCommandService.SendDueInspectionRemindersAsync();
         return Ok(result);
+    }
+
+    /// <summary>
+    /// One-time bootstrap: promotes an existing admin to SuperAdmin. Needed because
+    /// the very first SuperAdmin can't grant themselves the role through the normal
+    /// (SuperAdmin-only) staff management endpoints — someone has to be first.
+    /// </summary>
+    /// <param name="secret">Must match the configured Internal:WorkerSecret.</param>
+    /// <param name="email">Email of the admin to promote.</param>
+    [HttpPut("admins/promote")]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> PromoteToSuperAdmin([FromHeader(Name = "X-Worker-Secret")] string? secret, [FromQuery] string email)
+    {
+        var expectedSecret = configuration["Internal:WorkerSecret"];
+        if (string.IsNullOrEmpty(expectedSecret) || secret != expectedSecret)
+            return Unauthorized();
+
+        var success = await adminAuthService.PromoteToSuperAdminAsync(email);
+        if (!success) return NotFound(new BaseResponse<bool>(false, false, string.Empty, "Admin not found."));
+        return Ok(new BaseResponse<bool>(true, true, string.Empty, "Admin promoted to SuperAdmin."));
     }
 }

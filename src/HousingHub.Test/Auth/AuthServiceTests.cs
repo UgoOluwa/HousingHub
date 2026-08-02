@@ -424,6 +424,39 @@ public class AuthServiceTests
         Assert.NotNull(customer.PasswordResetToken);
     }
 
+    [Fact]
+    public async Task ForgotPassword_WithinCooldown_DoesNotResendOrRegenerateToken()
+    {
+        var customer = CreateCustomer();
+        customer.PasswordResetToken = "existing-token";
+        customer.LastPasswordResetRequestedAt = DateTime.UtcNow.AddMinutes(-1); // well inside the 5-minute cooldown
+        SetupCustomerLookup(customer);
+
+        var dto = new ForgotPasswordRequestDto("test@test.com");
+        var result = await _sut.ForgotPassword(dto);
+
+        // Identical outward response to every other branch — no account-existence
+        // or throttle-state signal leaks through.
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.PasswordResetTokenSent, result.Message);
+        Assert.Equal("existing-token", customer.PasswordResetToken);
+        _emailServiceMock.Verify(e => e.SendPasswordResetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ForgotPassword_AfterCooldownExpires_SendsNewResetEmail()
+    {
+        var customer = CreateCustomer();
+        customer.LastPasswordResetRequestedAt = DateTime.UtcNow.AddMinutes(-6); // just past the 5-minute cooldown
+        SetupCustomerLookup(customer);
+
+        var dto = new ForgotPasswordRequestDto("test@test.com");
+        var result = await _sut.ForgotPassword(dto);
+
+        Assert.True(result.IsSuccessful);
+        _emailServiceMock.Verify(e => e.SendPasswordResetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once);
+    }
+
     // ── ResetPassword ────────────────────────────────────────────
 
     [Fact]

@@ -41,14 +41,15 @@ public class AdminDashboardController(
         return Ok(result);
     }
 
-    /// <summary>Returns recent platform activity (last 7 days).</summary>
+    /// <summary>Returns recent platform activity.</summary>
     /// <param name="count">Maximum number of activity items to return (default 20).</param>
+    /// <param name="days">How many days back to look (default 7).</param>
     /// <response code="200">List of recent activity events.</response>
     [HttpGet("activity")]
     [ProducesResponseType(typeof(List<AdminRecentActivityDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetRecentActivity([FromQuery] int count = 20)
+    public async Task<IActionResult> GetRecentActivity([FromQuery] int count = 20, [FromQuery] int days = 7)
     {
-        var result = await inspectionQueryService.GetRecentActivityAsync(count);
+        var result = await inspectionQueryService.GetRecentActivityAsync(count, days);
         return Ok(result);
     }
 }

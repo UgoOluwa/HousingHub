@@ -23,5 +23,5 @@ public interface IInspectionQueryService
     Task<BaseResponse<PaginatedResult<AdminTodayInspectionDto>>> GetTodaysInspectionsPaginatedAsync(int pageNumber, int pageSize);
 
     /// <summary>Admin: recent platform activity feed (new users, KYC submissions, new properties, new inspections).</summary>
-    Task<BaseResponse<List<AdminRecentActivityDto>>> GetRecentActivityAsync(int count = 20);
+    Task<BaseResponse<List<AdminRecentActivityDto>>> GetRecentActivityAsync(int count = 20, int days = 7);
 }

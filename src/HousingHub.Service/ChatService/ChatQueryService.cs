@@ -1,6 +1,8 @@
+using Amazon.DynamoDBv2.DataModel;
 using HousingHub.Core;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
+using HousingHub.Model.Entities;
 using HousingHub.Service.ChatService.Interfaces;
 using HousingHub.Service.Dtos.Chat;
 using Microsoft.Extensions.Logging;
@@ -11,11 +13,13 @@ public class ChatQueryService : IChatQueryService
 {
     private readonly IUnitOfWOrk _unitOfWOrk;
     private readonly ILogger<ChatQueryService> _logger;
+    private readonly IDynamoDBContext _dynamoDb;
 
-    public ChatQueryService(IUnitOfWOrk unitOfWOrk, ILogger<ChatQueryService> logger)
+    public ChatQueryService(IUnitOfWOrk unitOfWOrk, ILogger<ChatQueryService> logger, IDynamoDBContext dynamoDb)
     {
         _unitOfWOrk = unitOfWOrk;
         _logger = logger;
+        _dynamoDb = dynamoDb;
     }
 
     public async Task<BaseResponse<List<ConversationDto>>> GetConversationsAsync(Guid userId)
@@ -99,6 +103,14 @@ public class ChatQueryService : IChatQueryService
             var senderIds = pagedMessages.Select(m => m.SenderId).Distinct().ToList();
             var senders = await _unitOfWOrk.CustomerQueries.GetAllAsync(c => senderIds.Contains(c.Id));
             var senderMap = senders.ToDictionary(c => c.Id, c => $"{c.FirstName} {c.LastName}");
+
+            // Any sender not found among customers may be an admin (e.g. a message
+            // sent from the Admin dashboard in an admin<->customer conversation).
+            foreach (var id in senderIds.Except(senderMap.Keys))
+            {
+                var admin = await _dynamoDb.LoadAsync<Admin>(id);
+                if (admin != null) senderMap[id] = $"{admin.FirstName} {admin.LastName}";
+            }
 
             var messageDtos = pagedMessages
                 .Select(m => new ChatMessageDto(
