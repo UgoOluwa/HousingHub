@@ -52,7 +52,7 @@ public class AdminChatController(
     /// <param name="dto">Recipient and message content.</param>
     /// <response code="200">Message sent.</response>
     /// <response code="401">Not authenticated.</response>
-    [HttpPost("messages")]
+    [HttpPost("send")]
     [ProducesResponseType(typeof(BaseResponse<ChatMessageDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SendMessage([FromBody] SendMessageDto dto)
