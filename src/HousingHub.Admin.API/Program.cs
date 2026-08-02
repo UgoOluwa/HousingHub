@@ -4,13 +4,16 @@ using Amazon;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.Runtime;
+using HousingHub.Admin.API.Realtime;
 using HousingHub.Application;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.Contexts;
 using HousingHub.Repository;
 using HousingHub.Service;
 using HousingHub.Service.AdminService;
+using HousingHub.Service.ChatService.Interfaces;
 using HousingHub.Service.Commons.Authentication;
+using HousingHub.Service.NotificationService.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics;
@@ -133,6 +136,12 @@ public static class Program
         builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
         builder.Services.AddScoped<IAdminAuthService, AdminAuthService>();
         builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
+
+        // Chat (IChatCommandService/IChatQueryService, registered generically by
+        // AddInjectionService below) needs these — the Admin API has no SignalR hub
+        // of its own, so real-time push is a no-op here (see NoOpRealtimeNotifiers).
+        builder.Services.AddSingleton<IChatRealtimeNotifier, NoOpChatRealtimeNotifier>();
+        builder.Services.AddSingleton<IRealtimeNotifier, NoOpRealtimeNotifier>();
 
         // Shared application + repository layers
         builder.Services.AddInjectionRepository()
