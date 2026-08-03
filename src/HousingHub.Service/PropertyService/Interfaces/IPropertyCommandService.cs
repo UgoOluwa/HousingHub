@@ -5,7 +5,16 @@ namespace HousingHub.Service.PropertyService.Interfaces;
 
 public interface IPropertyCommandService
 {
-    Task<BaseResponse<PropertyDto>> CreateProperty(CreatePropertyDto request, Guid authenticatedUserId);
+    /// <param name="onBehalfOfOwnerId">
+    /// Set by an admin creating a listing on behalf of a HousingHub-managed owner —
+    /// the target owner must exist, be a HouseOwner/Agent, and have
+    /// <see cref="Model.Entities.Customer.IsManagedByHousingHub"/> set. When null
+    /// (the normal self-service path), <paramref name="authenticatedUserId"/> is the owner.
+    /// </param>
+    Task<BaseResponse<CreatePropertyResultDto>> CreateProperty(CreatePropertyDto request, Guid authenticatedUserId, Guid? onBehalfOfOwnerId = null);
+
+    /// <summary>Admin: clears a property's possible-duplicate flag after review (the listing is legitimate, not a duplicate).</summary>
+    Task<BaseResponse<bool>> DismissDuplicateFlagAsync(Guid propertyId);
     Task<BaseResponse<PropertyDto>> UpdateProperty(UpdatePropertyDto request, Guid authenticatedUserId);
     Task<BaseResponse<bool>> DeleteProperty(Guid propertyId, Guid authenticatedUserId);
 

@@ -355,6 +355,25 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(staffEmail, $"You've Been Assigned an Inspection — {propertyTitle}", text, html);
     }
 
+    public async Task<bool> SendPropertyAlertMatchAsync(string customerEmail, string customerFirstName, string propertyTitle, string propertyAddress, decimal price)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        string body = $"""
+            {P($"Hi {customerFirstName},")}
+            {P("A new listing just went live that matches one of your saved searches.")}
+            {DetailRow("Property", propertyTitle)}
+            {DetailRow("Location", propertyAddress)}
+            {DetailRow("Price", $"&#8358;{price:N0}")}
+            {Button("View Listing", $"{baseUrl}/properties")}
+            """;
+
+        string html = WrapInLayout("A property matching your search just went live", body, Hero("&#128269;", "New match found"));
+        string text = $"Hi {customerFirstName}, a new listing matching your saved search just went live: {propertyTitle} at {propertyAddress}. Log in to Housing Hub to view it.";
+
+        return await SendAsync(customerEmail, $"New Match: {propertyTitle}", text, html);
+    }
+
     // ── Brand tokens ─────────────────────────────────────────────────────────
     // Navy carries the structure; gold is an accent only (~10-15% of any view).
     private const string Navy = "#0B2545";

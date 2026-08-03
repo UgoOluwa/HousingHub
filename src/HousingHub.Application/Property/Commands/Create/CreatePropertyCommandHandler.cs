@@ -6,7 +6,7 @@ using MediatR;
 
 namespace HousingHub.Application.Property.Commands.Create;
 
-public class CreatePropertyCommandHandler : IRequestHandler<CreatePropertyCommand, BaseResponse<PropertyDto?>>
+public class CreatePropertyCommandHandler : IRequestHandler<CreatePropertyCommand, BaseResponse<CreatePropertyResultDto?>>
 {
     private readonly IPropertyCommandService _propertyCommandService;
     private readonly IMapper _mapper;
@@ -17,10 +17,10 @@ public class CreatePropertyCommandHandler : IRequestHandler<CreatePropertyComman
         _mapper = mapper;
     }
 
-    public async Task<BaseResponse<PropertyDto?>> Handle(CreatePropertyCommand request, CancellationToken cancellationToken)
+    public async Task<BaseResponse<CreatePropertyResultDto?>> Handle(CreatePropertyCommand request, CancellationToken cancellationToken)
     {
         var dto = _mapper.Map<CreatePropertyDto>(request);
         var response = await _propertyCommandService.CreateProperty(dto, request.OwnerId);
-        return new BaseResponse<PropertyDto?>(response.IsSuccessful, response.Data, response.Message, null);
+        return new BaseResponse<CreatePropertyResultDto?>(response.IsSuccessful, response.Data, response.Message, null);
     }
 }

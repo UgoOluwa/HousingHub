@@ -14,4 +14,7 @@ public record AdminPropertyListDto(
     PropertyAvailability Availability,
     decimal Price,
     int InspectionCount,
-    string? ThumbnailUrl = null);
+    string? ThumbnailUrl = null,
+    bool IsFlaggedDuplicate = false,
+    Guid? PossibleDuplicateOfPropertyId = null,
+    string? PossibleDuplicateOfTitle = null);

@@ -2,6 +2,7 @@
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
+using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.Authentication;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.FileStorage;
@@ -338,6 +339,34 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in ReactivateCustomer: {Message}", ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+        }
+    }
+
+    public async Task<BaseResponse<bool>> SetManagedByHousingHubAsync(Guid customerId, bool isManaged)
+    {
+        try
+        {
+            var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == customerId);
+            if (customer == null)
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            if (!customer.CustomerType.CanManageProperties())
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
+
+            customer.IsManagedByHousingHub = isManaged;
+            customer.DateModified = DateTime.UtcNow;
+            await _unitOfWOrk.CustomerCommands.UpdateAsync(customer);
+            await _unitOfWOrk.SaveAsync();
+
+            string message = isManaged
+                ? "Owner is now managed by HousingHub."
+                : "Owner is no longer managed by HousingHub.";
+            return new BaseResponse<bool>(true, true, string.Empty, message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in SetManagedByHousingHubAsync: {Message}", ex.Message);
             return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
         }
     }

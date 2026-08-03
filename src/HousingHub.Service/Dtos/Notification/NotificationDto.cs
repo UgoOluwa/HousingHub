@@ -10,4 +10,5 @@ public record NotificationDto(
     NotificationType Type,
     string Title,
     string Message,
-    bool IsRead);
+    bool IsRead,
+    Guid? PropertyId = null);

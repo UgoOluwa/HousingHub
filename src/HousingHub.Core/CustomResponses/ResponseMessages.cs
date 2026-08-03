@@ -48,6 +48,7 @@ public static class ResponseMessages
     public const string PropertyNotOwnedByUser = "You do not have permission to modify this property.";
     public const string FileTooLarge = "File size exceeds the maximum allowed size of 10MB.";
     public const string InvalidFileType = "Only image and video files are allowed.";
+    public const string OwnerNotManagedByHousingHub = "This owner isn't managed by HousingHub, so an admin can't post a listing on their behalf.";
 
     // Inspection messages
     public const string InspectionNotPending = "Only pending inspections can be accepted or declined.";

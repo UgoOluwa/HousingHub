@@ -33,4 +33,6 @@ public record PropertyDto(
     int InspectionCount = 0,
     PropertyAddressDto? PropertyAddress = null,
     string? OwnerName = null,
-    string? UnpublishReason = null);
+    string? UnpublishReason = null,
+    bool IsFlaggedDuplicate = false,
+    Guid? PossibleDuplicateOfPropertyId = null);

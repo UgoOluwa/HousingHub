@@ -29,4 +29,6 @@ public interface IEmailService
     Task<bool> SendInspectionHandoffToAdminsAsync(string adminEmail, string adminFirstName, string ownerName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime);
     /// <summary>Sent to a staff member when a SuperAdmin assigns them a handed-off inspection.</summary>
     Task<bool> SendStaffAssignedToInspectionAsync(string staffEmail, string staffFirstName, string propertyTitle, string ownerName, DateTime scheduledDate, TimeSpan scheduledTime);
+    /// <summary>Sent to a customer when a newly published property matches one of their saved search preferences.</summary>
+    Task<bool> SendPropertyAlertMatchAsync(string customerEmail, string customerFirstName, string propertyTitle, string propertyAddress, decimal price);
 }

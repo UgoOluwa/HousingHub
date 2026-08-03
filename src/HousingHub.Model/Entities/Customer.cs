@@ -67,6 +67,13 @@ public class Customer : BaseEntity
     public string? CompanyName { get; set; } = null!;
     public string? Industry { get; set; } = null!;
 
+    /// <summary>
+    /// Set by a SuperAdmin for owners/agents HousingHub fully manages the listing
+    /// process for. Only these owners can have properties posted on their behalf
+    /// by an admin — see <see cref="PropertyService.PropertyCommandService.CreateProperty"/>.
+    /// </summary>
+    public bool IsManagedByHousingHub { get; set; } = false;
+
 
     // Relationships (foreign keys only, navigation properties ignored by DynamoDB)
     [DynamoDBIgnore]

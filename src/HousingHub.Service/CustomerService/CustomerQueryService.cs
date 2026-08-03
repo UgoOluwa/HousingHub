@@ -105,6 +105,9 @@ public class CustomerQueryService : ICustomerQueryService
             if (filter.IsActive.HasValue)
                 query = query.Where(c => c.IsActive == filter.IsActive.Value);
 
+            if (filter.IsManaged.HasValue)
+                query = query.Where(c => c.IsManagedByHousingHub == filter.IsManaged.Value);
+
             var list = query.OrderByDescending(c => c.DateCreated).ToList();
             var totalCount = list.Count;
 
@@ -129,7 +132,8 @@ public class CustomerQueryService : ICustomerQueryService
                     c.IsKycVerified,
                     c.KycSubmittedAt.HasValue && !c.IsKycVerified,
                     (int)c.CustomerType,
-                    pendingCountByCustomer.GetValueOrDefault(c.Id, 0)))
+                    pendingCountByCustomer.GetValueOrDefault(c.Id, 0),
+                    c.IsManagedByHousingHub))
                 .ToList();
 
             return new BaseResponse<PaginatedResult<AdminCustomerListDto>>(

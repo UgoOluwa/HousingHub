@@ -6,7 +6,10 @@ using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.FileStorage;
 using HousingHub.Service.Commons.Geocoding;
+using HousingHub.Service.Dtos.Notification;
 using HousingHub.Service.Dtos.Property;
+using HousingHub.Service.NotificationService.Interfaces;
+using HousingHub.Service.PropertyAlertService.Interfaces;
 using HousingHub.Service.PropertyService.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -21,6 +24,8 @@ public class PropertyCommandService : IPropertyCommandService
     private readonly IFileStorageService _fileStorageService;
     private readonly IGeocodingService _geocodingService;
     private readonly IEmailService _emailService;
+    private readonly IPropertyAlertPreferenceQueryService _propertyAlertPreferenceQueryService;
+    private readonly IRealtimeNotifier _realtimeNotifier;
     private const string ClassName = "property";
     private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
 
@@ -40,7 +45,9 @@ public class PropertyCommandService : IPropertyCommandService
         IMapper mapper,
         IFileStorageService fileStorageService,
         IGeocodingService geocodingService,
-        IEmailService emailService)
+        IEmailService emailService,
+        IPropertyAlertPreferenceQueryService propertyAlertPreferenceQueryService,
+        IRealtimeNotifier realtimeNotifier)
     {
         _logger = logger;
         _unitOfWOrk = unitOfWOrk;
@@ -48,20 +55,46 @@ public class PropertyCommandService : IPropertyCommandService
         _fileStorageService = fileStorageService;
         _geocodingService = geocodingService;
         _emailService = emailService;
+        _propertyAlertPreferenceQueryService = propertyAlertPreferenceQueryService;
+        _realtimeNotifier = realtimeNotifier;
     }
 
-    public async Task<BaseResponse<PropertyDto>> CreateProperty(CreatePropertyDto request, Guid authenticatedUserId)
+    public async Task<BaseResponse<CreatePropertyResultDto>> CreateProperty(CreatePropertyDto request, Guid authenticatedUserId, Guid? onBehalfOfOwnerId = null)
     {
         try
         {
-            var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId);
+            Guid ownerId;
 
-            if (owner == null)
-                return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
+            if (onBehalfOfOwnerId.HasValue)
+            {
+                // Admin posting on behalf of a managed owner — the acting admin isn't
+                // the owner, so the usual "does the caller manage properties" check
+                // doesn't apply to authenticatedUserId here; it applies to the target owner.
+                var managedOwner = await _unitOfWOrk.CustomerQueries.GetByIdAsync(onBehalfOfOwnerId.Value);
+                if (managedOwner == null)
+                    return new BaseResponse<CreatePropertyResultDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("owner"));
 
-            if (!owner.CustomerType.CanManageProperties())
-                return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
+                if (!managedOwner.CustomerType.CanManageProperties())
+                    return new BaseResponse<CreatePropertyResultDto>(null, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
+
+                if (!managedOwner.IsManagedByHousingHub)
+                    return new BaseResponse<CreatePropertyResultDto>(null, false, string.Empty, ResponseMessages.OwnerNotManagedByHousingHub);
+
+                ownerId = onBehalfOfOwnerId.Value;
+            }
+            else
+            {
+                var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(
+                    x => x.Id == authenticatedUserId);
+
+                if (owner == null)
+                    return new BaseResponse<CreatePropertyResultDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
+
+                if (!owner.CustomerType.CanManageProperties())
+                    return new BaseResponse<CreatePropertyResultDto>(null, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
+
+                ownerId = authenticatedUserId;
+            }
 
             var property = new Property(
                 request.Title,
@@ -71,7 +104,7 @@ public class PropertyCommandService : IPropertyCommandService
                 request.Availability,
                 request.PropertyLeaseType)
             {
-                OwnerId = authenticatedUserId,
+                OwnerId = ownerId,
                 Features = request.Features,
                 ContactPersonName = request.ContactPersonName,
                 ContactPersonEmail = request.ContactPersonEmail,
@@ -80,9 +113,10 @@ public class PropertyCommandService : IPropertyCommandService
                 Longitude = request.Longitude
             };
 
+            PropertyAddress? address = null;
             if (request.PropertyAddress != null)
             {
-                var address = new PropertyAddress(
+                address = new PropertyAddress(
                     request.PropertyAddress.Place,
                     request.PropertyAddress.City,
                     request.PropertyAddress.State,
@@ -92,12 +126,9 @@ public class PropertyCommandService : IPropertyCommandService
                     PropertyId = property.Id
                 };
 
-                bool addressSaved = await _unitOfWOrk.PropertyAddressCommands.InsertAsync(address);
-                if (!addressSaved)
-                    return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.SetCreationFailureMessage("property address"));
-
                 // The client never supplies coordinates directly — geocode the address so
-                // the property can actually be found via "properties near me". Best-effort:
+                // the property can actually be found via "properties near me", and so the
+                // duplicate check below has coordinates to compare against. Best-effort:
                 // a geocoding failure shouldn't block property creation.
                 if (!property.Latitude.HasValue || !property.Longitude.HasValue)
                 {
@@ -109,6 +140,31 @@ public class PropertyCommandService : IPropertyCommandService
                     }
                 }
 
+                var possibleDuplicate = await FindPossibleDuplicateAsync(
+                    property.Latitude, property.Longitude, address.Place, address.City, address.State);
+
+                if (possibleDuplicate != null)
+                {
+                    if (!request.ConfirmDuplicate)
+                    {
+                        var duplicateAddress = await _unitOfWOrk.PropertyAddressQueries.GetByIdAsync(possibleDuplicate.AddressId);
+                        var addressText = duplicateAddress != null
+                            ? $"{duplicateAddress.Place}, {duplicateAddress.City}, {duplicateAddress.State}"
+                            : "an existing listing";
+                        var warning = new PossibleDuplicateDto(possibleDuplicate.Id, possibleDuplicate.Title, addressText);
+                        return new BaseResponse<CreatePropertyResultDto>(
+                            new CreatePropertyResultDto(null, warning), true, string.Empty,
+                            "A similar listing already exists at this address.");
+                    }
+
+                    property.IsFlaggedDuplicate = true;
+                    property.PossibleDuplicateOfPropertyId = possibleDuplicate.Id;
+                }
+
+                bool addressSaved = await _unitOfWOrk.PropertyAddressCommands.InsertAsync(address);
+                if (!addressSaved)
+                    return new BaseResponse<CreatePropertyResultDto>(null, false, string.Empty, ResponseMessages.SetCreationFailureMessage("property address"));
+
                 property.Address = address;
                 property.AddressId = address.Id;
             }
@@ -119,7 +175,7 @@ public class PropertyCommandService : IPropertyCommandService
                 {
                     var validation = ValidateFile(file);
                     if (validation != null)
-                        return new BaseResponse<PropertyDto>(null, false, string.Empty, $"{file.FileName}: {validation}");
+                        return new BaseResponse<CreatePropertyResultDto>(null, false, string.Empty, $"{file.FileName}: {validation}");
 
                     var fileType = ResolveFileType(file);
                     var fileUrl = await _fileStorageService.UploadFileAsync(file, $"properties/{property.Id}");
@@ -134,20 +190,97 @@ public class PropertyCommandService : IPropertyCommandService
 
             bool isSuccessful = await _unitOfWOrk.PropertyCommands.InsertAsync(property);
             if (!isSuccessful)
-                return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.SetCreationFailureMessage(ClassName));
+                return new BaseResponse<CreatePropertyResultDto>(null, false, string.Empty, ResponseMessages.SetCreationFailureMessage(ClassName));
 
             if (property.Files.Count > 0)
                 await _unitOfWOrk.PropertyFileCommands.InsertRangeAsync(property.Files);
 
             await _unitOfWOrk.SaveAsync();
 
-            PropertyDto response = _mapper.Map<PropertyDto>(property);
-            return new BaseResponse<PropertyDto>(response, true, string.Empty, ResponseMessages.SetCreationSuccessMessage(ClassName));
+            PropertyDto propertyDto = _mapper.Map<PropertyDto>(property);
+            return new BaseResponse<CreatePropertyResultDto>(
+                new CreatePropertyResultDto(propertyDto, null), true, string.Empty, ResponseMessages.SetCreationSuccessMessage(ClassName));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in CreateProperty: {Message}", ex.Message);
-            return new BaseResponse<PropertyDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CreatePropertyResultDto>(null, false, string.Empty, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Scans existing properties for one at (about) the same address as the given
+    /// candidate — either within ~75m by coordinates (roughly a building lot), or,
+    /// when coordinates aren't available (geocoding failed), an exact match on the
+    /// normalized street/city/state. Returns the matched property, or null.
+    /// </summary>
+    private async Task<Property?> FindPossibleDuplicateAsync(double? lat, double? lng, string place, string city, string state)
+    {
+        const double DuplicateRadiusMeters = 75;
+        var candidates = await _unitOfWOrk.PropertyQueries.GetAllAsync();
+
+        if (lat.HasValue && lng.HasValue)
+        {
+            var byDistance = candidates.FirstOrDefault(p =>
+                p.Latitude.HasValue && p.Longitude.HasValue &&
+                HaversineDistanceMeters(lat.Value, lng.Value, p.Latitude.Value, p.Longitude.Value) <= DuplicateRadiusMeters);
+            if (byDistance != null) return byDistance;
+        }
+
+        static string NormalizeForComparison(string s) => s.Trim().ToLowerInvariant();
+        string normalizedPlace = NormalizeForComparison(place);
+        string normalizedCity = NormalizeForComparison(city);
+        string normalizedState = NormalizeForComparison(state);
+
+        foreach (var candidate in candidates.Where(p => !p.Latitude.HasValue || !p.Longitude.HasValue))
+        {
+            var candidateAddress = await _unitOfWOrk.PropertyAddressQueries.GetByIdAsync(candidate.AddressId);
+            if (candidateAddress == null) continue;
+
+            if (NormalizeForComparison(candidateAddress.Place) == normalizedPlace &&
+                NormalizeForComparison(candidateAddress.City) == normalizedCity &&
+                NormalizeForComparison(candidateAddress.State) == normalizedState)
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static double HaversineDistanceMeters(double lat1, double lon1, double lat2, double lon2)
+    {
+        const double EarthRadiusMeters = 6371000;
+        double dLat = DegreesToRadians(lat2 - lat1);
+        double dLon = DegreesToRadians(lon2 - lon1);
+        double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                   Math.Cos(DegreesToRadians(lat1)) * Math.Cos(DegreesToRadians(lat2)) *
+                   Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        return EarthRadiusMeters * c;
+    }
+
+    private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180;
+
+    public async Task<BaseResponse<bool>> DismissDuplicateFlagAsync(Guid propertyId)
+    {
+        try
+        {
+            var property = await _unitOfWOrk.PropertyQueries.GetByIdAsync(propertyId);
+            if (property == null)
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            property.IsFlaggedDuplicate = false;
+            property.PossibleDuplicateOfPropertyId = null;
+            await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
+            await _unitOfWOrk.SaveAsync();
+
+            return new BaseResponse<bool>(true, true, string.Empty, "Duplicate flag dismissed.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in DismissDuplicateFlagAsync: {Message}", ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
         }
     }
 
@@ -311,6 +444,7 @@ public class PropertyCommandService : IPropertyCommandService
             if (ownerCheck.HasValue && property.OwnerId != ownerCheck.Value)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.PropertyNotOwnedByUser);
 
+            bool wasAlreadyPublished = property.IsPublished;
             property.IsPublished = isPublished;
             property.PublishedAt = isPublished ? DateTime.UtcNow : null;
             property.UnpublishReason = isPublished ? null : reason;
@@ -331,6 +465,15 @@ public class PropertyCommandService : IPropertyCommandService
                 }
             }
 
+            // A property only becomes discoverable once published (not at raw creation),
+            // so this — not CreateProperty — is where saved-search alerts should fire.
+            // Guarded to the actual false-to-true transition so re-publishing an
+            // already-published property (a no-op toggle) doesn't re-notify everyone.
+            if (isPublished && !wasAlreadyPublished)
+            {
+                await NotifyMatchingAlertPreferencesAsync(property);
+            }
+
             var message = isPublished ? "Property published successfully." : "Property unpublished successfully.";
             return new BaseResponse<bool>(true, true, string.Empty, message);
         }
@@ -338,6 +481,58 @@ public class PropertyCommandService : IPropertyCommandService
         {
             _logger.LogError(ex, "An error occurred in SetPropertyPublishedAsync: {Message}", ex.Message);
             return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+        }
+    }
+
+    /// <summary>Notifies every customer whose saved search matches the just-published property — in-app notification plus a best-effort email.</summary>
+    private async Task NotifyMatchingAlertPreferencesAsync(Property property)
+    {
+        try
+        {
+            var preferences = await _propertyAlertPreferenceQueryService.GetAllActiveAsync();
+            if (preferences.Count == 0) return;
+
+            var address = await _unitOfWOrk.PropertyAddressQueries.GetByIdAsync(property.AddressId);
+            var matches = preferences.Where(p => p.Matches(property, address?.City, address?.State)).ToList();
+            if (matches.Count == 0) return;
+
+            string formattedAddress = address != null ? $"{address.Place}, {address.City}, {address.State}" : "N/A";
+
+            foreach (var preference in matches)
+            {
+                var customer = await _unitOfWOrk.CustomerQueries.GetByIdAsync(preference.CustomerId);
+                if (customer == null) continue;
+
+                var notification = new Notification(
+                    customer.Id, NotificationType.PropertyMatch,
+                    "New Property Match",
+                    $"A new listing matches your saved search: \"{property.Title}\" in {address?.City ?? "N/A"}.",
+                    property.Id);
+
+                await _unitOfWOrk.NotificationCommands.InsertAsync(notification);
+
+                var notificationDto = new NotificationDto(
+                    notification.Id, notification.DateCreated, notification.RecipientId, notification.InspectionId,
+                    notification.Type, notification.Title, notification.Message, notification.IsRead, notification.PropertyId);
+                await _realtimeNotifier.SendNotificationAsync(customer.Id, notificationDto);
+
+                try
+                {
+                    await _emailService.SendPropertyAlertMatchAsync(
+                        customer.Email, customer.FirstName, property.Title, formattedAddress, property.Price);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to send property-alert-match email to {Email}", customer.Email);
+                }
+            }
+
+            await _unitOfWOrk.SaveAsync();
+        }
+        catch (Exception ex)
+        {
+            // Best-effort — a failure here shouldn't undo the publish that already succeeded.
+            _logger.LogError(ex, "An error occurred in NotifyMatchingAlertPreferencesAsync: {Message}", ex.Message);
         }
     }
 

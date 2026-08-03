@@ -6,6 +6,8 @@ using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.FileStorage;
 using HousingHub.Service.Commons.Geocoding;
 using HousingHub.Service.Commons.Mappings;
+using HousingHub.Service.NotificationService.Interfaces;
+using HousingHub.Service.PropertyAlertService.Interfaces;
 using HousingHub.Service.PropertyService;
 using Mapster;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -18,6 +20,8 @@ public class AdminPropertyCommandServiceTests
 {
     private readonly Mock<IUnitOfWOrk> _unitOfWorkMock;
     private readonly Mock<IEmailService> _emailServiceMock;
+    private readonly Mock<IPropertyAlertPreferenceQueryService> _propertyAlertPreferenceQueryServiceMock;
+    private readonly Mock<IRealtimeNotifier> _realtimeNotifierMock;
     private readonly PropertyCommandService _sut;
 
     public AdminPropertyCommandServiceTests()
@@ -29,13 +33,25 @@ public class AdminPropertyCommandServiceTests
         var fileStorage = new Mock<IFileStorageService>();
         var geocodingService = new Mock<IGeocodingService>();
         _emailServiceMock = new Mock<IEmailService>();
+        _propertyAlertPreferenceQueryServiceMock = new Mock<IPropertyAlertPreferenceQueryService>();
+        _realtimeNotifierMock = new Mock<IRealtimeNotifier>();
+
+        // The tests in this file exercise the admin-moderation paths (publish/verify/delete),
+        // not the saved-search alert hook itself — default to "no active preferences" so the
+        // publish flow's best-effort notification step is a no-op unless a test opts in.
+        _propertyAlertPreferenceQueryServiceMock
+            .Setup(p => p.GetAllActiveAsync())
+            .ReturnsAsync(new List<PropertyAlertPreference>());
+
         _sut = new PropertyCommandService(
             NullLogger<PropertyCommandService>.Instance,
             _unitOfWorkMock.Object,
             mapper,
             fileStorage.Object,
             geocodingService.Object,
-            _emailServiceMock.Object);
+            _emailServiceMock.Object,
+            _propertyAlertPreferenceQueryServiceMock.Object,
+            _realtimeNotifierMock.Object);
     }
 
     private static Property MakeProperty(bool isPublished = false) => new("Title", "Desc",
