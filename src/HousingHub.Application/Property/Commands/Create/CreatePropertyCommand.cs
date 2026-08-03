@@ -25,4 +25,5 @@ public record
     // (CreatePropertyAddressDto requires one; form binding silently dropped the whole
     // object when it was missing, so no address ever got saved on create).
     UpdatePropertyAddressDto? PropertyAddress,
-    IList<IFormFile>? Files = null) : IRequest<BaseResponse<PropertyDto?>>;
+    IList<IFormFile>? Files = null,
+    bool ConfirmDuplicate = false) : IRequest<BaseResponse<CreatePropertyResultDto?>>;

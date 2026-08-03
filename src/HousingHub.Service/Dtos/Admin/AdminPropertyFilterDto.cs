@@ -7,4 +7,5 @@ public record AdminPropertyFilterDto(
     int PageSize = 20,
     string? Search = null,
     bool? IsPublished = null,
-    PropertyAvailability? Availability = null);
+    PropertyAvailability? Availability = null,
+    bool? FlaggedDuplicateOnly = null);

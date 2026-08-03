@@ -8,8 +8,11 @@ using HousingHub.Model.Enums;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.FileStorage;
 using HousingHub.Service.Commons.Geocoding;
+using HousingHub.Service.Dtos.Notification;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.Dtos.PropertyAddress;
+using HousingHub.Service.NotificationService.Interfaces;
+using HousingHub.Service.PropertyAlertService.Interfaces;
 using HousingHub.Service.PropertyService;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -23,6 +26,9 @@ public class PropertyCommandServiceTests
     private readonly Mock<IUnitOfWOrk> _unitOfWorkMock;
     private readonly Mock<IFileStorageService> _fileStorageServiceMock;
     private readonly Mock<IGeocodingService> _geocodingServiceMock;
+    private readonly Mock<IEmailService> _emailServiceMock;
+    private readonly Mock<IPropertyAlertPreferenceQueryService> _propertyAlertPreferenceQueryServiceMock;
+    private readonly Mock<IRealtimeNotifier> _realtimeNotifierMock;
     private readonly IMapper _mapper;
     private readonly PropertyCommandService _sut;
 
@@ -34,6 +40,9 @@ public class PropertyCommandServiceTests
         _unitOfWorkMock = new Mock<IUnitOfWOrk> { DefaultValue = DefaultValue.Mock };
         _fileStorageServiceMock = new Mock<IFileStorageService>();
         _geocodingServiceMock = new Mock<IGeocodingService>();
+        _emailServiceMock = new Mock<IEmailService>();
+        _propertyAlertPreferenceQueryServiceMock = new Mock<IPropertyAlertPreferenceQueryService>();
+        _realtimeNotifierMock = new Mock<IRealtimeNotifier>();
         var config = new TypeAdapterConfig();
         new PropertyMapper().Register(config);
         _mapper = new ObjectMapper(config);
@@ -53,12 +62,38 @@ public class PropertyCommandServiceTests
             .Setup(u => u.PropertyFileCommands.InsertRangeAsync(It.IsAny<IEnumerable<HousingHub.Model.Entities.PropertyFile>>()))
             .Returns(Task.CompletedTask);
 
+        // The new duplicate-address check in CreateProperty scans PropertyQueries.GetAllAsync() —
+        // default to "no existing properties" so tests that don't care about duplicates don't
+        // accidentally trip the duplicate-detection path (DefaultValue.Mock would otherwise hand
+        // back a bare mocked IEnumerable, which is unsafe to enumerate).
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetAllAsync())
+            .ReturnsAsync(new List<HousingHub.Model.Entities.Property>());
+
         // Geocoding is best-effort and network-dependent — default to "couldn't resolve" in tests.
         _geocodingServiceMock
             .Setup(g => g.GeocodeAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .ReturnsAsync(((double, double)?)null);
 
-        _sut = new PropertyCommandService(logger, _unitOfWorkMock.Object, _mapper, _fileStorageServiceMock.Object, _geocodingServiceMock.Object, new Mock<IEmailService>().Object);
+        // No active alert preferences by default — SetPropertyPublishedInternalAsync's
+        // publish hook is a no-op unless a test explicitly sets up a matching preference.
+        _propertyAlertPreferenceQueryServiceMock
+            .Setup(p => p.GetAllActiveAsync())
+            .ReturnsAsync(new List<PropertyAlertPreference>());
+
+        _unitOfWorkMock
+            .Setup(u => u.NotificationCommands.InsertAsync(It.IsAny<Notification>()))
+            .ReturnsAsync(true);
+
+        _sut = new PropertyCommandService(
+            logger,
+            _unitOfWorkMock.Object,
+            _mapper,
+            _fileStorageServiceMock.Object,
+            _geocodingServiceMock.Object,
+            _emailServiceMock.Object,
+            _propertyAlertPreferenceQueryServiceMock.Object,
+            _realtimeNotifierMock.Object);
     }
 
     private Customer CreateOwner(CustomerType type) => new("John", "Doe", "john@test.com", "08012345678", type, "hash")
@@ -97,8 +132,9 @@ public class PropertyCommandServiceTests
         // Assert
         Assert.True(result.IsSuccessful);
         Assert.NotNull(result.Data);
-        Assert.Equal("Nice Apartment", result.Data.Title);
-        Assert.StartsWith("PROP-", result.Data.PropertyId);
+        Assert.NotNull(result.Data.Property);
+        Assert.Equal("Nice Apartment", result.Data.Property!.Title);
+        Assert.StartsWith("PROP-", result.Data.Property.PropertyId);
     }
 
     [Fact]
@@ -144,8 +180,9 @@ public class PropertyCommandServiceTests
         var result = await _sut.CreateProperty(CreateValidDto(), OwnerId);
 
         Assert.True(result.IsSuccessful);
-        Assert.True(result.Data!.Features.HasFlag(PropertyFeature.Parking));
-        Assert.True(result.Data.Features.HasFlag(PropertyFeature.Security));
+        Assert.NotNull(result.Data!.Property);
+        Assert.True(result.Data.Property!.Features.HasFlag(PropertyFeature.Parking));
+        Assert.True(result.Data.Property.Features.HasFlag(PropertyFeature.Security));
     }
 
     [Fact]
@@ -157,8 +194,9 @@ public class PropertyCommandServiceTests
         var result = await _sut.CreateProperty(CreateValidDto(), OwnerId);
 
         Assert.True(result.IsSuccessful);
-        Assert.Equal("Agent Smith", result.Data!.ContactPersonName);
-        Assert.Equal("smith@agency.com", result.Data.ContactPersonEmail);
+        Assert.NotNull(result.Data!.Property);
+        Assert.Equal("Agent Smith", result.Data.Property!.ContactPersonName);
+        Assert.Equal("smith@agency.com", result.Data.Property.ContactPersonEmail);
     }
 
     private static Mock<IFormFile> CreateFormFile(string fileName = "photo.jpg", long length = 1024)
@@ -182,7 +220,8 @@ public class PropertyCommandServiceTests
         var result = await _sut.CreateProperty(dto, OwnerId);
 
         Assert.True(result.IsSuccessful);
-        Assert.Single(result.Data!.Files!);
+        Assert.NotNull(result.Data!.Property);
+        Assert.Single(result.Data.Property!.Files!);
         _unitOfWorkMock.Verify(
             u => u.PropertyFileCommands.InsertRangeAsync(It.Is<IEnumerable<HousingHub.Model.Entities.PropertyFile>>(files => files.Count() == 1)),
             Times.Once);
@@ -351,7 +390,8 @@ public class PropertyCommandServiceTests
         var result = await _sut.CreateProperty(CreateValidDto(), OwnerId);
 
         Assert.True(result.IsSuccessful);
-        var data = result.Data!;
+        Assert.NotNull(result.Data!.Property);
+        var data = result.Data.Property!;
         Assert.Equal("Nice Apartment", data.Title);
         Assert.Equal("A lovely 3-bed apartment", data.Description);
         Assert.Equal(PropertyType.Apartment, data.PropertyType);
@@ -557,7 +597,8 @@ public class PropertyCommandServiceTests
         var result = await _sut.CreateProperty(CreateValidDto(), OwnerId);
 
         Assert.True(result.IsSuccessful);
-        Assert.NotEqual(Guid.Empty, result.Data!.AddressId);
+        Assert.NotNull(result.Data!.Property);
+        Assert.NotEqual(Guid.Empty, result.Data.Property!.AddressId);
     }
 
     [Fact]
@@ -572,8 +613,9 @@ public class PropertyCommandServiceTests
         var result = await _sut.CreateProperty(CreateValidDto(), OwnerId);
 
         Assert.True(result.IsSuccessful);
-        Assert.Equal(6.5244, result.Data!.Latitude);
-        Assert.Equal(3.3792, result.Data.Longitude);
+        Assert.NotNull(result.Data!.Property);
+        Assert.Equal(6.5244, result.Data.Property!.Latitude);
+        Assert.Equal(3.3792, result.Data.Property.Longitude);
     }
 
     [Fact]
@@ -585,8 +627,9 @@ public class PropertyCommandServiceTests
         var result = await _sut.CreateProperty(CreateValidDto(), OwnerId);
 
         Assert.True(result.IsSuccessful);
-        Assert.Null(result.Data!.Latitude);
-        Assert.Null(result.Data.Longitude);
+        Assert.NotNull(result.Data!.Property);
+        Assert.Null(result.Data.Property!.Latitude);
+        Assert.Null(result.Data.Property.Longitude);
     }
 
     [Fact]
@@ -598,7 +641,8 @@ public class PropertyCommandServiceTests
         var result = await _sut.CreateProperty(CreateValidDto(), OwnerId);
 
         Assert.True(result.IsSuccessful);
-        Assert.Equal(OwnerId, result.Data!.OwnerId);
+        Assert.NotNull(result.Data!.Property);
+        Assert.Equal(OwnerId, result.Data.Property!.OwnerId);
     }
 
     [Fact]
@@ -801,6 +845,272 @@ public class PropertyCommandServiceTests
 
         Assert.False(result.IsSuccessful);
         Assert.False(result.Data);
+    }
+
+    // ??? Create ?? on behalf of a managed owner ??????????????????????
+
+    [Fact]
+    public async Task CreateProperty_OnBehalfOfManagedOwner_Succeeds_SetsOwnerIdToTargetOwner()
+    {
+        var adminId = Guid.NewGuid();
+        var targetOwnerId = Guid.NewGuid();
+        var managedOwner = new Customer("Target", "Owner", "target@test.com", "08000000001", CustomerType.HouseOwner, "hash")
+        {
+            Id = targetOwnerId,
+            IsManagedByHousingHub = true
+        };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByIdAsync(targetOwnerId)).ReturnsAsync(managedOwner);
+        SetupInsertSuccess();
+
+        var result = await _sut.CreateProperty(CreateValidDto(), adminId, targetOwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.NotNull(result.Data!.Property);
+        Assert.Equal(targetOwnerId, result.Data.Property!.OwnerId);
+    }
+
+    [Fact]
+    public async Task CreateProperty_OnBehalfOfOwner_NotManagedByHousingHub_Fails()
+    {
+        var adminId = Guid.NewGuid();
+        var targetOwnerId = Guid.NewGuid();
+        var unmanagedOwner = new Customer("Target", "Owner", "target@test.com", "08000000002", CustomerType.HouseOwner, "hash")
+        {
+            Id = targetOwnerId,
+            IsManagedByHousingHub = false
+        };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByIdAsync(targetOwnerId)).ReturnsAsync(unmanagedOwner);
+
+        var result = await _sut.CreateProperty(CreateValidDto(), adminId, targetOwnerId);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.OwnerNotManagedByHousingHub, result.Message);
+    }
+
+    [Fact]
+    public async Task CreateProperty_OnBehalfOfOwner_WrongCustomerType_Fails()
+    {
+        var adminId = Guid.NewGuid();
+        var targetOwnerId = Guid.NewGuid();
+        var wrongTypeOwner = new Customer("Target", "Owner", "target@test.com", "08000000003", CustomerType.Customer, "hash")
+        {
+            Id = targetOwnerId,
+            IsManagedByHousingHub = true
+        };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByIdAsync(targetOwnerId)).ReturnsAsync(wrongTypeOwner);
+
+        var result = await _sut.CreateProperty(CreateValidDto(), adminId, targetOwnerId);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.UnauthorizedPropertyAction, result.Message);
+    }
+
+    [Fact]
+    public async Task CreateProperty_OnBehalfOfNonexistentOwner_Fails()
+    {
+        var adminId = Guid.NewGuid();
+        var targetOwnerId = Guid.NewGuid();
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByIdAsync(targetOwnerId)).ReturnsAsync((Customer?)null);
+
+        var result = await _sut.CreateProperty(CreateValidDto(), adminId, targetOwnerId);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Contains("Not Found", result.Message);
+    }
+
+    // ??? Create ?? possible-duplicate detection ??????????????????????
+
+    private HousingHub.Model.Entities.Property CreateExistingPropertyAt(double lat, double lng, Guid addressId) =>
+        new("Existing Listing", "Existing description", PropertyType.Apartment, 250000m,
+            PropertyAvailability.Available, PropertyLeaseType.Sale)
+        {
+            Id = Guid.NewGuid(),
+            Latitude = lat,
+            Longitude = lng,
+            AddressId = addressId
+        };
+
+    [Fact]
+    public async Task CreateProperty_DuplicateFoundByCoordinates_ConfirmDuplicateFalse_ReturnsWarningWithoutPersisting()
+    {
+        SetupOwnerLookup(CreateOwner(CustomerType.HouseOwner));
+        _geocodingServiceMock
+            .Setup(g => g.GeocodeAsync("10 Main St", "Lagos", "Lagos", "Nigeria"))
+            .ReturnsAsync((6.5244, 3.3792));
+
+        var existingAddressId = Guid.NewGuid();
+        var existingProperty = CreateExistingPropertyAt(6.5244, 3.3792, existingAddressId);
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetAllAsync()).ReturnsAsync(new List<HousingHub.Model.Entities.Property> { existingProperty });
+        _unitOfWorkMock
+            .Setup(u => u.PropertyAddressQueries.GetByIdAsync(existingAddressId))
+            .ReturnsAsync(new HousingHub.Model.Entities.PropertyAddress("10 Main St", "Lagos", "Lagos", "Nigeria", "100001") { Id = existingAddressId });
+
+        var dto = CreateValidDto() with { ConfirmDuplicate = false };
+        var result = await _sut.CreateProperty(dto, OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Null(result.Data!.Property);
+        Assert.NotNull(result.Data.PossibleDuplicate);
+        Assert.Equal(existingProperty.Id, result.Data.PossibleDuplicate!.PropertyId);
+        _unitOfWorkMock.Verify(u => u.PropertyCommands.InsertAsync(It.IsAny<HousingHub.Model.Entities.Property>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateProperty_DuplicateFoundByCoordinates_ConfirmDuplicateTrue_CreatesAndFlagsAsDuplicate()
+    {
+        SetupOwnerLookup(CreateOwner(CustomerType.HouseOwner));
+        SetupInsertSuccess();
+        _geocodingServiceMock
+            .Setup(g => g.GeocodeAsync("10 Main St", "Lagos", "Lagos", "Nigeria"))
+            .ReturnsAsync((6.5244, 3.3792));
+
+        var existingAddressId = Guid.NewGuid();
+        var existingProperty = CreateExistingPropertyAt(6.5244, 3.3792, existingAddressId);
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetAllAsync()).ReturnsAsync(new List<HousingHub.Model.Entities.Property> { existingProperty });
+
+        HousingHub.Model.Entities.Property? insertedProperty = null;
+        _unitOfWorkMock
+            .Setup(u => u.PropertyCommands.InsertAsync(It.IsAny<HousingHub.Model.Entities.Property>()))
+            .Callback<HousingHub.Model.Entities.Property>(p => insertedProperty = p)
+            .ReturnsAsync(true);
+
+        var dto = CreateValidDto() with { ConfirmDuplicate = true };
+        var result = await _sut.CreateProperty(dto, OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.NotNull(result.Data!.Property);
+        _unitOfWorkMock.Verify(u => u.PropertyCommands.InsertAsync(It.IsAny<HousingHub.Model.Entities.Property>()), Times.Once);
+        Assert.NotNull(insertedProperty);
+        Assert.True(insertedProperty!.IsFlaggedDuplicate);
+        Assert.Equal(existingProperty.Id, insertedProperty.PossibleDuplicateOfPropertyId);
+    }
+
+    [Fact]
+    public async Task CreateProperty_NoMatchingDuplicate_CreatesNormally_NotFlagged()
+    {
+        SetupOwnerLookup(CreateOwner(CustomerType.HouseOwner));
+        SetupInsertSuccess();
+        // Default mock setup already returns an empty list from PropertyQueries.GetAllAsync(),
+        // so there's nothing for FindPossibleDuplicateAsync to match against.
+
+        HousingHub.Model.Entities.Property? insertedProperty = null;
+        _unitOfWorkMock
+            .Setup(u => u.PropertyCommands.InsertAsync(It.IsAny<HousingHub.Model.Entities.Property>()))
+            .Callback<HousingHub.Model.Entities.Property>(p => insertedProperty = p)
+            .ReturnsAsync(true);
+
+        var result = await _sut.CreateProperty(CreateValidDto(), OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.NotNull(result.Data!.Property);
+        Assert.NotNull(insertedProperty);
+        Assert.False(insertedProperty!.IsFlaggedDuplicate);
+        Assert.Null(insertedProperty.PossibleDuplicateOfPropertyId);
+    }
+
+    // ??? DismissDuplicateFlagAsync ????????????????????????????????????
+
+    [Fact]
+    public async Task DismissDuplicateFlagAsync_ExistingProperty_ClearsFlagAndSucceeds()
+    {
+        var property = new HousingHub.Model.Entities.Property("Flagged Listing", "Desc", PropertyType.Apartment,
+            150000m, PropertyAvailability.Available, PropertyLeaseType.Rent)
+        {
+            Id = PropertyId,
+            IsFlaggedDuplicate = true,
+            PossibleDuplicateOfPropertyId = Guid.NewGuid()
+        };
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId)).ReturnsAsync(property);
+
+        var result = await _sut.DismissDuplicateFlagAsync(PropertyId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.True(result.Data);
+        Assert.False(property.IsFlaggedDuplicate);
+        Assert.Null(property.PossibleDuplicateOfPropertyId);
+        _unitOfWorkMock.Verify(u => u.PropertyCommands.UpdateAsync(property), Times.Once);
+        _unitOfWorkMock.Verify(u => u.SaveAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task DismissDuplicateFlagAsync_PropertyNotFound_Fails()
+    {
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId)).ReturnsAsync((HousingHub.Model.Entities.Property?)null);
+
+        var result = await _sut.DismissDuplicateFlagAsync(PropertyId);
+
+        Assert.False(result.IsSuccessful);
+        Assert.False(result.Data);
+        Assert.Contains("Not Found", result.Message);
+    }
+
+    // ??? SetPropertyPublishedInternalAsync ?? saved-search alert matching ????
+
+    [Fact]
+    public async Task SetPropertyPublished_FirstTimePublish_WithMatchingPreference_NotifiesMatchingCustomer()
+    {
+        var property = new HousingHub.Model.Entities.Property("Alert Match", "Desc", PropertyType.Apartment,
+            200000m, PropertyAvailability.Available, PropertyLeaseType.Rent)
+        {
+            Id = Guid.NewGuid(),
+            IsPublished = false,
+            OwnerId = Guid.NewGuid(),
+            AddressId = Guid.NewGuid()
+        };
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
+            .ReturnsAsync(property);
+        _unitOfWorkMock.Setup(u => u.PropertyCommands.UpdateAsync(It.IsAny<HousingHub.Model.Entities.Property>())).Returns(Task.CompletedTask);
+
+        var address = new HousingHub.Model.Entities.PropertyAddress("1 Match Rd", "Ikeja", "Lagos", "Nigeria", "100001") { Id = property.AddressId };
+        _unitOfWorkMock.Setup(u => u.PropertyAddressQueries.GetByIdAsync(property.AddressId)).ReturnsAsync(address);
+
+        var matchingCustomer = new Customer("Alice", "Buyer", "alice@test.com", "08033334444", CustomerType.Customer, "hash")
+        {
+            Id = Guid.NewGuid()
+        };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByIdAsync(matchingCustomer.Id)).ReturnsAsync(matchingCustomer);
+
+        // All filter fields null == "any" per PropertyAlertPreference.Matches, so this always matches.
+        var preference = new PropertyAlertPreference(matchingCustomer.Id, null, null, null, null, null, null);
+        _propertyAlertPreferenceQueryServiceMock.Setup(p => p.GetAllActiveAsync()).ReturnsAsync(new List<PropertyAlertPreference> { preference });
+
+        var result = await _sut.SetPropertyPublishedAsync(property.Id, true);
+
+        Assert.True(result.IsSuccessful);
+        _unitOfWorkMock.Verify(u => u.NotificationCommands.InsertAsync(It.IsAny<Notification>()), Times.Once);
+        _realtimeNotifierMock.Verify(r => r.SendNotificationAsync(matchingCustomer.Id, It.IsAny<NotificationDto>()), Times.Once);
+        _emailServiceMock.Verify(
+            e => e.SendPropertyAlertMatchAsync(matchingCustomer.Email, matchingCustomer.FirstName, property.Title, It.IsAny<string>(), property.Price),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task SetPropertyPublished_AlreadyPublished_DoesNotReNotify()
+    {
+        var property = new HousingHub.Model.Entities.Property("Already Live", "Desc", PropertyType.Apartment,
+            200000m, PropertyAvailability.Available, PropertyLeaseType.Rent)
+        {
+            Id = Guid.NewGuid(),
+            IsPublished = true,
+            OwnerId = Guid.NewGuid(),
+            AddressId = Guid.NewGuid()
+        };
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
+            .ReturnsAsync(property);
+        _unitOfWorkMock.Setup(u => u.PropertyCommands.UpdateAsync(It.IsAny<HousingHub.Model.Entities.Property>())).Returns(Task.CompletedTask);
+
+        // Even with a matching preference present, re-publishing an already-published
+        // property is a no-op toggle and must not re-fire the alert.
+        var preference = new PropertyAlertPreference(Guid.NewGuid(), null, null, null, null, null, null);
+        _propertyAlertPreferenceQueryServiceMock.Setup(p => p.GetAllActiveAsync()).ReturnsAsync(new List<PropertyAlertPreference> { preference });
+
+        var result = await _sut.SetPropertyPublishedAsync(property.Id, true);
+
+        Assert.True(result.IsSuccessful);
+        _unitOfWorkMock.Verify(u => u.NotificationCommands.InsertAsync(It.IsAny<Notification>()), Times.Never);
+        _realtimeNotifierMock.Verify(r => r.SendNotificationAsync(It.IsAny<Guid>(), It.IsAny<NotificationDto>()), Times.Never);
     }
 
     // ??? Helpers ??????????????????????????????????????????????????????

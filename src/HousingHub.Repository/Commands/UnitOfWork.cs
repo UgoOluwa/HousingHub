@@ -28,6 +28,8 @@ public class UnitOfWork : IUnitOfWOrk
     public IChatMessageQueryRepository ChatMessageQueries { get; }
     public IRefreshTokenCommandRepository RefreshTokenCommands { get; }
     public IRefreshTokenQueryRepository RefreshTokenQueries { get; }
+    public IPropertyAlertPreferenceCommandRepository PropertyAlertPreferenceCommands { get; }
+    public IPropertyAlertPreferenceQueryRepository PropertyAlertPreferenceQueries { get; }
 
     public UnitOfWork(
         ICustomerAddressCommandRepository customerAddressCommands,
@@ -51,7 +53,9 @@ public class UnitOfWork : IUnitOfWOrk
         IChatMessageCommandRepository chatMessageCommands,
         IChatMessageQueryRepository chatMessageQueries,
         IRefreshTokenCommandRepository refreshTokenCommands,
-        IRefreshTokenQueryRepository refreshTokenQueries)
+        IRefreshTokenQueryRepository refreshTokenQueries,
+        IPropertyAlertPreferenceCommandRepository propertyAlertPreferenceCommands,
+        IPropertyAlertPreferenceQueryRepository propertyAlertPreferenceQueries)
     {
         CustomerAddressCommands = customerAddressCommands;
         CustomerAddressQueries = customerAddressQueries;
@@ -75,6 +79,8 @@ public class UnitOfWork : IUnitOfWOrk
         ChatMessageQueries = chatMessageQueries;
         RefreshTokenCommands = refreshTokenCommands;
         RefreshTokenQueries = refreshTokenQueries;
+        PropertyAlertPreferenceCommands = propertyAlertPreferenceCommands;
+        PropertyAlertPreferenceQueries = propertyAlertPreferenceQueries;
     }
 
     public Task SaveAsync()

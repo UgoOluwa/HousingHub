@@ -52,6 +52,11 @@ public class Property : BaseEntity
     /// <summary>Reason an admin gave when unpublishing this listing; cleared on republish.</summary>
     public string? UnpublishReason { get; set; }
 
+    /// <summary>Set when this property was created despite a possible-duplicate warning being overridden, so admins can review it later.</summary>
+    public bool IsFlaggedDuplicate { get; set; } = false;
+    /// <summary>The existing property this one was flagged as a possible duplicate of. Null unless <see cref="IsFlaggedDuplicate"/> is set.</summary>
+    public Guid? PossibleDuplicateOfPropertyId { get; set; }
+
     public Property() { }
 
     public Property(string title, string description, PropertyType propertyType, decimal price, PropertyAvailability availability, PropertyLeaseType propertyLeaseType)

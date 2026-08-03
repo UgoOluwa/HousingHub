@@ -36,6 +36,8 @@ public static class ConfigureServices
         services.AddScoped<IChatMessageQueryRepository, ChatMessageQueryRepository>();
         services.AddScoped<IRefreshTokenCommandRepository, RefreshTokenCommandRepository>();
         services.AddScoped<IRefreshTokenQueryRepository, RefreshTokenQueryRepository>();
+        services.AddScoped<IPropertyAlertPreferenceCommandRepository, PropertyAlertPreferenceCommandRepository>();
+        services.AddScoped<IPropertyAlertPreferenceQueryRepository, PropertyAlertPreferenceQueryRepository>();
 
         return services;
     }

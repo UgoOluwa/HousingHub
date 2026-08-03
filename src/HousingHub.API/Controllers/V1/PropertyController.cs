@@ -57,7 +57,7 @@ public class PropertyController : ControllerBase
     [Authorize(Policy = "PropertyOwnerOrAgent")]
     [HttpPost]
     [Consumes("multipart/form-data")]
-    [ProducesResponseType(typeof(BaseResponse<PropertyDto?>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BaseResponse<CreatePropertyResultDto?>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Create([FromForm] CreatePropertyCommand command)
     {
         var userId = GetAuthenticatedUserId();

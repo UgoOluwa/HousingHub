@@ -23,4 +23,7 @@ public interface ICustomerCommandService
 
     /// <summary>Admin: restore a previously suspended account.</summary>
     Task<BaseResponse<bool>> ReactivateCustomer(Guid customerId);
+
+    /// <summary>SuperAdmin: flag/unflag a house owner or agent as one whose listings HousingHub fully manages, allowing admins to post properties on their behalf.</summary>
+    Task<BaseResponse<bool>> SetManagedByHousingHubAsync(Guid customerId, bool isManaged);
 }

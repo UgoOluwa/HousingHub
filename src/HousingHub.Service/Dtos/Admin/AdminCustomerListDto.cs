@@ -11,4 +11,5 @@ public record AdminCustomerListDto(
     bool IsKycVerified,
     bool KycPending,
     int CustomerType,
-    int PendingInspections);
+    int PendingInspections,
+    bool IsManagedByHousingHub = false);

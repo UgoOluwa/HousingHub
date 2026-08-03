@@ -15,6 +15,11 @@ public class Notification : BaseEntity
     [DynamoDBIgnore]
     public PropertyInspection? Inspection { get; set; }
 
+    /// <summary>Set for property-alert-match notifications, so the FE can deep-link to the listing.</summary>
+    public Guid? PropertyId { get; set; }
+    [DynamoDBIgnore]
+    public Property? Property { get; set; }
+
     public NotificationType Type { get; set; }
 
     public string Title { get; set; } = null!;
@@ -30,6 +35,16 @@ public class Notification : BaseEntity
         Id = Guid.NewGuid();
         RecipientId = recipientId;
         InspectionId = inspectionId;
+        Type = type;
+        Title = title;
+        Message = message;
+    }
+
+    public Notification(Guid recipientId, NotificationType type, string title, string message, Guid? propertyId)
+    {
+        Id = Guid.NewGuid();
+        RecipientId = recipientId;
+        PropertyId = propertyId;
         Type = type;
         Title = title;
         Message = message;

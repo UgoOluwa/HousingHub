@@ -71,6 +71,10 @@ public class DynamoDbTableInitializer
             CreateGsi("TokenHash-index", "TokenHash"),
             CreateGsi("AdminId-index", "AdminId"),
         }),
+        ["PropertyAlertPreferences"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            CreateGsi("CustomerId-index", "CustomerId"),
+        }),
     };
 
     public DynamoDbTableInitializer(IAmazonDynamoDB client, ILogger<DynamoDbTableInitializer> logger)

@@ -27,6 +27,8 @@ public interface IUnitOfWOrk : IDisposable
     IChatMessageQueryRepository ChatMessageQueries { get; }
     IRefreshTokenCommandRepository RefreshTokenCommands { get; }
     IRefreshTokenQueryRepository RefreshTokenQueries { get; }
+    IPropertyAlertPreferenceCommandRepository PropertyAlertPreferenceCommands { get; }
+    IPropertyAlertPreferenceQueryRepository PropertyAlertPreferenceQueries { get; }
 
     Task SaveAsync();
 }

@@ -5,4 +5,5 @@ public record AdminCustomerFilterDto(
     int PageSize = 20,
     string? Search = null,
     bool? IsVerified = null,
-    bool? IsActive = null);
+    bool? IsActive = null,
+    bool? IsManaged = null);

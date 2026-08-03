@@ -3,6 +3,7 @@ using HousingHub.Model.Enums;
 using HousingHub.Service.CustomerService.Interfaces;
 using HousingHub.Service.Dtos.Admin;
 using HousingHub.Service.Dtos.Customer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HousingHub.Admin.API.Controllers;
@@ -119,6 +120,22 @@ public class AdminOwnerController(
     public async Task<IActionResult> Reactivate(Guid id)
     {
         var result = await customerCommandService.ReactivateCustomer(id);
+        if (!result.IsSuccessful) return NotFound(result);
+        return Ok(result);
+    }
+
+    /// <summary>Flags or unflags an owner/agent as one whose listings HousingHub fully manages — only managed owners can have properties posted on their behalf by an admin. SuperAdmin only.</summary>
+    /// <param name="id">Owner/agent's database ID.</param>
+    /// <param name="isManaged">True to mark as managed, false to unmark.</param>
+    /// <response code="200">Managed flag updated.</response>
+    /// <response code="404">Not found.</response>
+    [HttpPut("{id:guid}/managed")]
+    [Authorize(Policy = "SuperAdminOnly")]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetManaged(Guid id, [FromQuery] bool isManaged)
+    {
+        var result = await customerCommandService.SetManagedByHousingHubAsync(id, isManaged);
         if (!result.IsSuccessful) return NotFound(result);
         return Ok(result);
     }

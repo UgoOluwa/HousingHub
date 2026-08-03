@@ -20,6 +20,8 @@ using HousingHub.Service.NotificationService;
 using HousingHub.Service.NotificationService.Interfaces;
 using HousingHub.Service.PropertyAddressService;
 using HousingHub.Service.PropertyAddressService.Interfaces;
+using HousingHub.Service.PropertyAlertService;
+using HousingHub.Service.PropertyAlertService.Interfaces;
 using HousingHub.Service.PropertyFileService;
 using HousingHub.Service.PropertyFileService.Interfaces;
 using HousingHub.Service.PropertyReportService;
@@ -76,6 +78,8 @@ public static class ConfigureServices
         services.AddScoped<IPropertyFileQueryService, PropertyFileQueryService>();
         services.AddScoped<IChatCommandService, ChatCommandService>();
         services.AddScoped<IChatQueryService, ChatQueryService>();
+        services.AddScoped<IPropertyAlertPreferenceCommandService, PropertyAlertPreferenceCommandService>();
+        services.AddScoped<IPropertyAlertPreferenceQueryService, PropertyAlertPreferenceQueryService>();
         services.AddSingleton<IUtilityService, UtilityService>();
 
         // AWS S3 File Storage

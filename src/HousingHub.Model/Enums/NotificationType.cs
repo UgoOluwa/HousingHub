@@ -20,5 +20,8 @@ public enum NotificationType
     InspectionCancelled = 4,
 
     [Description("New Message")]
-    NewMessage = 5
+    NewMessage = 5,
+
+    [Description("Property Match")]
+    PropertyMatch = 6
 }
