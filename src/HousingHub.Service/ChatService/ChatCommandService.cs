@@ -51,8 +51,11 @@ public class ChatCommandService : IChatCommandService
             if (senderName == null)
                 return new BaseResponse<ChatMessageDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("sender"));
 
-            var recipient = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == request.RecipientId);
-            if (recipient == null)
+            // Recipient is usually a Customer, but a customer/owner messaging an
+            // admin (or replying to one) is also valid — falls back to the Admins
+            // table when not found among customers, same as ResolveSenderNameAsync.
+            var recipientInfo = await ResolveRecipientInfoAsync(request.RecipientId);
+            if (recipientInfo == null)
                 return new BaseResponse<ChatMessageDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("recipient"));
 
             // Find or create conversation
@@ -116,7 +119,7 @@ public class ChatCommandService : IChatCommandService
                 0);
             await _realtimeNotifier.NotifyConversationUpdatedAsync(request.RecipientId, conversationUpdate);
 
-            await SafeSendNewMessageEmailAsync(recipient, senderName, conversation.LastMessage);
+            await SafeSendNewMessageEmailAsync(recipientInfo.Value.Email, recipientInfo.Value.FirstName, senderName, conversation.LastMessage);
 
             return new BaseResponse<ChatMessageDto>(dto, true, string.Empty, ResponseMessages.Successful);
         }
@@ -171,6 +174,15 @@ public class ChatCommandService : IChatCommandService
         return admin != null ? $"Admin - {admin.FirstName} {admin.LastName}" : null;
     }
 
+    private async Task<(string Email, string FirstName)?> ResolveRecipientInfoAsync(Guid recipientId)
+    {
+        var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == recipientId);
+        if (customer != null) return (customer.Email, customer.FirstName);
+
+        var admin = await _dynamoDb.LoadAsync<Admin>(recipientId);
+        return admin != null ? (admin.Email, admin.FirstName) : null;
+    }
+
     private async Task<Conversation?> FindConversationAsync(Guid userOneId, Guid userTwoId)
     {
         return await _unitOfWOrk.ConversationQueries.GetByAsync(
@@ -178,15 +190,15 @@ public class ChatCommandService : IChatCommandService
                  (c.ParticipantOneId == userTwoId && c.ParticipantTwoId == userOneId));
     }
 
-    private async Task SafeSendNewMessageEmailAsync(Customer recipient, string senderName, string messagePreview)
+    private async Task SafeSendNewMessageEmailAsync(string recipientEmail, string recipientFirstName, string senderName, string messagePreview)
     {
         try
         {
-            await _emailService.SendNewMessageAsync(recipient.Email, recipient.FirstName, senderName, messagePreview);
+            await _emailService.SendNewMessageAsync(recipientEmail, recipientFirstName, senderName, messagePreview);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to send new-message email to {Email}", recipient.Email);
+            _logger.LogWarning(ex, "Failed to send new-message email to {Email}", recipientEmail);
         }
     }
 }

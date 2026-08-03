@@ -128,6 +128,32 @@ public class ChatCommandServiceTests
     }
 
     [Fact]
+    public async Task SendMessageAsync_RecipientIsAdmin_ResolvesFromAdminsTableAndSucceeds()
+    {
+        // Recipient isn't a Customer at all (e.g. an owner messaging/replying to
+        // an admin) — falls back to the Admins table instead of failing as
+        // "recipient not found".
+        var sender = CreateCustomer(SenderId, "John", "Doe");
+        _unitOfWorkMock
+            .SetupSequence(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<Customer, bool>>>()))
+            .ReturnsAsync(sender) // sender lookup hits
+            .ReturnsAsync((Customer?)null); // recipient lookup misses among customers
+        _dynamoDbMock
+            .Setup(d => d.LoadAsync<AdminEntity>(It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminEntity { Id = RecipientId, FirstName = "Ada", LastName = "Min", Email = "ada@test.com" });
+        SetupConversationLookup(CreateConversation());
+        SetupSaveAsync();
+
+        var dto = new SendMessageDto(RecipientId, "Hi, I have a question.");
+        var result = await _sut.SendMessageAsync(dto, SenderId);
+
+        Assert.True(result.IsSuccessful);
+        _emailServiceMock.Verify(
+            e => e.SendNewMessageAsync("ada@test.com", "Ada", "John Doe", "Hi, I have a question."),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task SendMessageAsync_RecipientNotFound_ReturnsFailure()
     {
         // First call returns sender, second call returns null (recipient not found)
