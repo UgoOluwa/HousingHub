@@ -317,6 +317,44 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(ownerEmail, $"Your Property \"{propertyTitle}\" Has Been Removed", text, html);
     }
 
+    public async Task<bool> SendInspectionHandoffToAdminsAsync(string adminEmail, string adminFirstName, string ownerName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime)
+    {
+        string adminBaseUrl = _configuration["Email:AdminBaseUrl"] ?? "https://localhost";
+
+        string body = $"""
+            {P($"Hi {adminFirstName},")}
+            {P($"<strong style=\"color:{Ink};\">{ownerName}</strong> has handed an inspection request off to HousingHub instead of managing it directly. It needs a staff member assigned.")}
+            {DetailRow("Property", propertyTitle)}
+            {DetailRow("Owner", ownerName)}
+            {DetailRow("Date &amp; time", $"{scheduledDate:dddd, d MMMM yyyy} &middot; {scheduledTime:hh\\:mm}")}
+            {Button("Assign a Staff Member", $"{adminBaseUrl}/admin/inspections")}
+            """;
+
+        string html = WrapInLayout("Inspection handed off to HousingHub", body, Hero("&#128203;", "Needs staff assignment"));
+        string text = $"Hi {adminFirstName}, {ownerName} handed an inspection for {propertyTitle} off to HousingHub. Log in to assign a staff member.";
+
+        return await SendAsync(adminEmail, $"Inspection Handed Off — {propertyTitle}", text, html);
+    }
+
+    public async Task<bool> SendStaffAssignedToInspectionAsync(string staffEmail, string staffFirstName, string propertyTitle, string ownerName, DateTime scheduledDate, TimeSpan scheduledTime)
+    {
+        string adminBaseUrl = _configuration["Email:AdminBaseUrl"] ?? "https://localhost";
+
+        string body = $"""
+            {P($"Hi {staffFirstName},")}
+            {P("You've been assigned to manage an inspection that was handed off to HousingHub. You can confirm, decline, or reschedule it from your dashboard.")}
+            {DetailRow("Property", propertyTitle)}
+            {DetailRow("Owner", ownerName)}
+            {DetailRow("Date &amp; time", $"{scheduledDate:dddd, d MMMM yyyy} &middot; {scheduledTime:hh\\:mm}")}
+            {Button("View Inspection", $"{adminBaseUrl}/admin/inspections")}
+            """;
+
+        string html = WrapInLayout("You've been assigned an inspection", body, Hero("&#128100;", "New assignment"));
+        string text = $"Hi {staffFirstName}, you've been assigned to manage the inspection for {propertyTitle}. Log in to your dashboard for details.";
+
+        return await SendAsync(staffEmail, $"You've Been Assigned an Inspection — {propertyTitle}", text, html);
+    }
+
     // ── Brand tokens ─────────────────────────────────────────────────────────
     // Navy carries the structure; gold is an accent only (~10-15% of any view).
     private const string Navy = "#0B2545";

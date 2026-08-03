@@ -124,7 +124,7 @@ public class ChatCommandServiceTests
         var result = await _sut.SendMessageAsync(dto, SenderId);
 
         Assert.True(result.IsSuccessful);
-        Assert.Equal("Ada Min", result.Data!.SenderName);
+        Assert.Equal("Admin - Ada Min", result.Data!.SenderName);
     }
 
     [Fact]

@@ -42,6 +42,14 @@ public class ChatQueryService : IChatQueryService
                 c => otherParticipantIds.Contains(c.Id));
             var participantMap = participants.ToDictionary(c => c.Id, c => $"{c.FirstName} {c.LastName}");
 
+            // Any participant not found among customers may be an admin (e.g. a message
+            // sent from the Admin dashboard in an admin<->customer conversation).
+            foreach (var id in otherParticipantIds.Except(participantMap.Keys))
+            {
+                var admin = await _dynamoDb.LoadAsync<Admin>(id);
+                if (admin != null) participantMap[id] = $"Admin - {admin.FirstName} {admin.LastName}";
+            }
+
             // Fetch unread counts per conversation
             var allMessages = await _unitOfWOrk.ChatMessageQueries.GetAllAsync(
                 m => m.SenderId != userId && !m.IsRead);
@@ -109,7 +117,7 @@ public class ChatQueryService : IChatQueryService
             foreach (var id in senderIds.Except(senderMap.Keys))
             {
                 var admin = await _dynamoDb.LoadAsync<Admin>(id);
-                if (admin != null) senderMap[id] = $"{admin.FirstName} {admin.LastName}";
+                if (admin != null) senderMap[id] = $"Admin - {admin.FirstName} {admin.LastName}";
             }
 
             var messageDtos = pagedMessages

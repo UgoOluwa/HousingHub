@@ -8,7 +8,14 @@ public interface IInspectionCommandService
 {
     Task<BaseResponse<InspectionDto>> ScheduleInspectionAsync(ScheduleInspectionDto request, Guid authenticatedUserId);
     Task<BaseResponse<InspectionDto>> RespondToInspectionAsync(RespondToInspectionDto request, Guid authenticatedUserId, bool isAdminAction = false);
-    Task<BaseResponse<InspectionDto>> RescheduleInspectionAsync(RescheduleInspectionDto request, Guid authenticatedUserId);
+
+    /// <summary>The property owner hands the inspection off to HousingHub staff instead of managing it themselves. Notifies all active SuperAdmins by email.</summary>
+    Task<BaseResponse<InspectionDto>> HandOffToHousingHubAsync(Guid inspectionId, Guid ownerId);
+
+    /// <summary>A SuperAdmin assigns a handed-off inspection to a specific staff member. Notifies the assigned staff member by email.</summary>
+    Task<BaseResponse<InspectionDto>> AssignInspectionToStaffAsync(Guid inspectionId, Guid staffAdminId, Guid callerAdminId);
+
+    Task<BaseResponse<InspectionDto>> RescheduleInspectionAsync(RescheduleInspectionDto request, Guid authenticatedUserId, bool isAdminAction = false);
     Task<BaseResponse<InspectionDto>> RespondToRescheduleAsync(Guid inspectionId, bool accept, Guid authenticatedUserId, string? note = null);
     Task<BaseResponse<bool>> CancelInspectionAsync(Guid inspectionId, Guid authenticatedUserId, bool isAdminAction = false);
 

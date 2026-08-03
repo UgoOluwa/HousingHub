@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Asp.Versioning;
 using HousingHub.Application.Commons.Bases;
 using HousingHub.Application.Inspection.Commands.Cancel;
+using HousingHub.Application.Inspection.Commands.HandOff;
 using HousingHub.Application.Inspection.Commands.Reschedule;
 using HousingHub.Application.Inspection.Commands.Respond;
 using HousingHub.Application.Inspection.Commands.RespondReschedule;
@@ -110,6 +111,18 @@ public class InspectionController : ControllerBase
 
         var enrichedCommand = command with { InspectionId = id, AuthenticatedUserId = userId.Value };
         var response = await _mediator.Send(enrichedCommand);
+        return Ok(response);
+    }
+
+    /// <summary>Hands an inspection off to HousingHub instead of the owner managing it directly. Notifies active SuperAdmins to assign a staff member.</summary>
+    [HttpPut("{id:guid}/handoff")]
+    [ProducesResponseType(typeof(BaseResponse<InspectionDto?>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> HandOff(Guid id)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId == null) return Unauthorized();
+
+        var response = await _mediator.Send(new HandOffInspectionCommand(id, userId.Value));
         return Ok(response);
     }
 

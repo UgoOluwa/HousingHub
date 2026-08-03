@@ -1,5 +1,6 @@
 ﻿using System.Reflection;
 using Amazon.S3;
+using HousingHub.Service.AdminService;
 using HousingHub.Service.AuthService;
 using HousingHub.Service.AuthService.Interfaces;
 using HousingHub.Service.ChatService;
@@ -44,6 +45,11 @@ public static class ConfigureServices
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
         services.AddSingleton<ITokenProvider, TokenProvider>();
         services.AddScoped<IAuthService, AuthService.AuthService>();
+
+        // Admin/staff directory — needed by InspectionCommandService/InspectionQueryService
+        // (both consumer and admin APIs) to resolve SuperAdmins/staff for the inspection
+        // hand-off flow, not just by the Admin API's own auth endpoints.
+        services.AddScoped<IAdminAuthService, AdminAuthService>();
 
         // Email (Resend)
         services.AddHttpClient<ResendEmailService>();

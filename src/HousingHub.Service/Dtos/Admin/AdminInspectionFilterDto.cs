@@ -8,4 +8,6 @@ public record AdminInspectionFilterDto(
     InspectionStatus? Status = null,
     DateTime? Date = null,
     Guid? PropertyId = null,
-    Guid? CustomerId = null);
+    Guid? CustomerId = null,
+    bool? HandedOff = null,
+    Guid? AssignedStaffId = null);

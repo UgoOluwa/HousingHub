@@ -15,4 +15,7 @@ public record AdminInspectionListDto(
     DateTime DateRequested,
     InspectionStatus Status,
     string? Note,
-    string? DeclineNote);
+    string? DeclineNote,
+    DateTime? HandedOffAt = null,
+    Guid? AssignedStaffId = null,
+    string? AssignedStaffName = null);

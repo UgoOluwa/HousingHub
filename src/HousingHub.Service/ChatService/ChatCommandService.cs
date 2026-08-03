@@ -168,7 +168,7 @@ public class ChatCommandService : IChatCommandService
         if (customer != null) return $"{customer.FirstName} {customer.LastName}";
 
         var admin = await _dynamoDb.LoadAsync<Admin>(senderId);
-        return admin != null ? $"{admin.FirstName} {admin.LastName}" : null;
+        return admin != null ? $"Admin - {admin.FirstName} {admin.LastName}" : null;
     }
 
     private async Task<Conversation?> FindConversationAsync(Guid userOneId, Guid userTwoId)

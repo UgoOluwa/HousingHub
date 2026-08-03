@@ -1,9 +1,11 @@
+using Amazon.DynamoDBv2.DataModel;
 using HousingHub.Service.Commons.Mappings;
 using HousingHub.Core;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
+using HousingHub.Service.AdminService;
 using HousingHub.Service.ChatService.Interfaces;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Dtos.Chat;
@@ -20,8 +22,10 @@ public class InspectionCommandService : IInspectionCommandService
     private readonly IUnitOfWOrk _unitOfWOrk;
     private readonly IMapper _mapper;
     private readonly IEmailService _emailService;
+    private readonly IAdminAuthService _adminAuthService;
     private readonly IRealtimeNotifier _realtimeNotifier;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
+    private readonly IDynamoDBContext _dynamoDb;
     private readonly ILogger<InspectionCommandService> _logger;
     private const string ClassName = "inspection";
 
@@ -29,15 +33,19 @@ public class InspectionCommandService : IInspectionCommandService
         IUnitOfWOrk unitOfWOrk,
         IMapper mapper,
         IEmailService emailService,
+        IAdminAuthService adminAuthService,
         IRealtimeNotifier realtimeNotifier,
         IChatRealtimeNotifier chatRealtimeNotifier,
+        IDynamoDBContext dynamoDb,
         ILogger<InspectionCommandService> logger)
     {
         _unitOfWOrk = unitOfWOrk;
         _mapper = mapper;
         _emailService = emailService;
+        _adminAuthService = adminAuthService;
         _realtimeNotifier = realtimeNotifier;
         _chatRealtimeNotifier = chatRealtimeNotifier;
+        _dynamoDb = dynamoDb;
         _logger = logger;
     }
 
@@ -212,7 +220,111 @@ public class InspectionCommandService : IInspectionCommandService
         }
     }
 
-    public async Task<BaseResponse<InspectionDto>> RescheduleInspectionAsync(RescheduleInspectionDto request, Guid authenticatedUserId)
+    public async Task<BaseResponse<InspectionDto>> HandOffToHousingHubAsync(Guid inspectionId, Guid ownerId)
+    {
+        try
+        {
+            var inspection = await _unitOfWOrk.PropertyInspectionQueries.GetByAsync(
+                x => x.Id == inspectionId);
+
+            if (inspection == null)
+                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            var property = await _unitOfWOrk.PropertyQueries.GetByAsync(
+                x => x.Id == inspection.PropertyId);
+
+            if (property == null)
+                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("property"));
+
+            if (property.OwnerId != ownerId)
+                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionNotOwner);
+
+            if (inspection.HandedOffAt != null)
+                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionAlreadyHandedOff);
+
+            if (inspection.Status is InspectionStatus.Declined or InspectionStatus.Completed or InspectionStatus.Cancelled)
+                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionCannotHandOff);
+
+            inspection.HandedOffAt = DateTime.UtcNow;
+            await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
+            await _unitOfWOrk.SaveAsync();
+
+            var owner = await _unitOfWOrk.CustomerQueries.GetByIdAsync(ownerId);
+            string ownerName = owner != null ? $"{owner.FirstName} {owner.LastName}" : "A property owner";
+
+            var staff = await _adminAuthService.GetAllStaffAsync();
+            var superAdmins = staff.Where(a => a.Role == AdminRoles.SuperAdmin && a.IsActive);
+
+            foreach (var admin in superAdmins)
+            {
+                try
+                {
+                    await _emailService.SendInspectionHandoffToAdminsAsync(
+                        admin.Email, admin.FirstName, ownerName, property.Title,
+                        inspection.ScheduledDate, inspection.ScheduledTime);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to send handoff notification email to {Email}", admin.Email);
+                }
+            }
+
+            return new BaseResponse<InspectionDto>(_mapper.Map<InspectionDto>(inspection), true, string.Empty, ResponseMessages.SetUpdateSuccessMessage(ClassName));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in HandOffToHousingHubAsync: {Message}", ex.Message);
+            return new BaseResponse<InspectionDto>(null, false, string.Empty, ex.Message);
+        }
+    }
+
+    public async Task<BaseResponse<InspectionDto>> AssignInspectionToStaffAsync(Guid inspectionId, Guid staffAdminId, Guid callerAdminId)
+    {
+        try
+        {
+            var inspection = await _unitOfWOrk.PropertyInspectionQueries.GetByAsync(
+                x => x.Id == inspectionId);
+
+            if (inspection == null)
+                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            if (inspection.HandedOffAt == null)
+                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionNotHandedOff);
+
+            var staff = await _adminAuthService.GetAllStaffAsync();
+            var assignee = staff.FirstOrDefault(a => a.Id == staffAdminId);
+            if (assignee == null)
+                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("staff member"));
+
+            inspection.AssignedStaffId = staffAdminId;
+            await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
+            await _unitOfWOrk.SaveAsync();
+
+            var property = await _unitOfWOrk.PropertyQueries.GetByAsync(x => x.Id == inspection.PropertyId);
+            var owner = property != null ? await _unitOfWOrk.CustomerQueries.GetByIdAsync(property.OwnerId) : null;
+            string ownerName = owner != null ? $"{owner.FirstName} {owner.LastName}" : "the property owner";
+
+            try
+            {
+                await _emailService.SendStaffAssignedToInspectionAsync(
+                    assignee.Email, assignee.FirstName, property?.Title ?? "a property", ownerName,
+                    inspection.ScheduledDate, inspection.ScheduledTime);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to send staff-assigned notification email to {Email}", assignee.Email);
+            }
+
+            return new BaseResponse<InspectionDto>(_mapper.Map<InspectionDto>(inspection), true, string.Empty, ResponseMessages.SetUpdateSuccessMessage(ClassName));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in AssignInspectionToStaffAsync: {Message}", ex.Message);
+            return new BaseResponse<InspectionDto>(null, false, string.Empty, ex.Message);
+        }
+    }
+
+    public async Task<BaseResponse<InspectionDto>> RescheduleInspectionAsync(RescheduleInspectionDto request, Guid authenticatedUserId, bool isAdminAction = false)
     {
         try
         {
@@ -231,7 +343,7 @@ public class InspectionCommandService : IInspectionCommandService
             bool isOwner = property.OwnerId == authenticatedUserId;
             bool isCustomer = inspection.CustomerId == authenticatedUserId;
 
-            if (!isOwner && !isCustomer)
+            if (!isAdminAction && !isOwner && !isCustomer)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionNotParticipant);
 
             if (inspection.Status != InspectionStatus.Pending && inspection.Status != InspectionStatus.Confirmed)
@@ -244,28 +356,46 @@ public class InspectionCommandService : IInspectionCommandService
 
             await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
 
-            var initiator = await _unitOfWOrk.CustomerQueries.GetByAsync(
-                x => x.Id == authenticatedUserId);
+            var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == inspection.CustomerId);
+            var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == property.OwnerId);
 
-            // Notify the other party
-            Guid recipientId = isOwner ? inspection.CustomerId : property.OwnerId;
-            string initiatorName = initiator != null ? $"{initiator.FirstName} {initiator.LastName}" : "A user";
-            string role = isOwner ? "property owner" : "requester";
+            // A staff member isn't one of the inspection's two original participants,
+            // so "notify the other party" doesn't apply — notify both instead.
+            string initiatorName;
+            var notifyRecipients = new List<Customer>();
+            if (isAdminAction)
+            {
+                var admin = await _dynamoDb.LoadAsync<Admin>(authenticatedUserId);
+                initiatorName = admin != null ? $"Admin - {admin.FirstName} {admin.LastName}" : "HousingHub";
+                if (customer != null) notifyRecipients.Add(customer);
+                if (owner != null) notifyRecipients.Add(owner);
+            }
+            else
+            {
+                var initiator = isOwner ? owner : customer;
+                initiatorName = initiator != null ? $"{initiator.FirstName} {initiator.LastName}" : "A user";
+                var otherParty = isOwner ? customer : owner;
+                if (otherParty != null) notifyRecipients.Add(otherParty);
+            }
 
-            var recipient = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == recipientId);
+            string role = isAdminAction ? "HousingHub team" : isOwner ? "property owner" : "requester";
 
-            var notification = new Notification(
-                recipientId,
-                inspection.Id,
-                NotificationType.InspectionRescheduled,
-                "Inspection Rescheduled",
-                $"The {role} has rescheduled the inspection for \"{property.Title}\" to {request.RescheduledDate:yyyy-MM-dd} at {request.RescheduledTime:hh\\:mm}.{(string.IsNullOrWhiteSpace(request.Note) ? "" : $" Note: {request.Note}")}");
+            foreach (var recipient in notifyRecipients)
+            {
+                var notification = new Notification(
+                    recipient.Id,
+                    inspection.Id,
+                    NotificationType.InspectionRescheduled,
+                    "Inspection Rescheduled",
+                    $"The {role} has rescheduled the inspection for \"{property.Title}\" to {request.RescheduledDate:yyyy-MM-dd} at {request.RescheduledTime:hh\\:mm}.{(string.IsNullOrWhiteSpace(request.Note) ? "" : $" Note: {request.Note}")}");
 
-            await _unitOfWOrk.NotificationCommands.InsertAsync(notification);
-            await PushRealtimeNotificationAsync(notification);
+                await _unitOfWOrk.NotificationCommands.InsertAsync(notification);
+                await PushRealtimeNotificationAsync(notification);
+            }
+
             await _unitOfWOrk.SaveAsync();
 
-            if (recipient != null && initiator != null)
+            foreach (var recipient in notifyRecipients)
             {
                 _ = _emailService.SendInspectionResponseAsync(
                     recipient.Email, recipient.FirstName,

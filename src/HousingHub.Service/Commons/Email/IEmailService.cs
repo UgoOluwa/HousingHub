@@ -25,4 +25,8 @@ public interface IEmailService
     Task<bool> SendPropertyUnpublishedAsync(string ownerEmail, string ownerName, string propertyTitle, string reason);
     /// <summary>Sent to the property owner when an admin deletes their listing.</summary>
     Task<bool> SendPropertyDeletedAsync(string ownerEmail, string ownerName, string propertyTitle, string reason);
+    /// <summary>Sent to each active SuperAdmin when a property owner hands an inspection off to HousingHub.</summary>
+    Task<bool> SendInspectionHandoffToAdminsAsync(string adminEmail, string adminFirstName, string ownerName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime);
+    /// <summary>Sent to a staff member when a SuperAdmin assigns them a handed-off inspection.</summary>
+    Task<bool> SendStaffAssignedToInspectionAsync(string staffEmail, string staffFirstName, string propertyTitle, string ownerName, DateTime scheduledDate, TimeSpan scheduledTime);
 }
