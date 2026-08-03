@@ -18,4 +18,9 @@ public record InspectionDto(
     TimeSpan? RescheduledTime,
     string? RescheduleNote,
     string? PropertyImageUrl = null,
-    Guid? PropertyOwnerId = null);
+    Guid? PropertyOwnerId = null,
+    string? CustomerName = null,
+    string? PropertyOwnerName = null,
+    DateTime? HandedOffAt = null,
+    Guid? AssignedStaffId = null,
+    string? AssignedStaffName = null);

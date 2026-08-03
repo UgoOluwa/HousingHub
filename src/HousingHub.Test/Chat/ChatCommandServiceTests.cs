@@ -124,7 +124,7 @@ public class ChatCommandServiceTests
         var result = await _sut.SendMessageAsync(dto, SenderId);
 
         Assert.True(result.IsSuccessful);
-        Assert.Equal("Ada Min", result.Data!.SenderName);
+        Assert.Equal("Admin - Ada Min", result.Data!.SenderName);
     }
 
     [Fact]
@@ -300,6 +300,39 @@ public class ChatCommandServiceTests
 
         Assert.True(result.IsSuccessful);
         Assert.Equal("John Doe", result.Data!.SenderName);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_SendsNewMessageEmailToRecipient()
+    {
+        SetupSenderAndRecipient();
+        SetupConversationLookup(CreateConversation());
+        SetupSaveAsync();
+
+        var dto = new SendMessageDto(RecipientId, "Hi Jane, are you around?");
+        await _sut.SendMessageAsync(dto, SenderId);
+
+        _emailServiceMock.Verify(
+            e => e.SendNewMessageAsync("jane@test.com", "Jane", "John Doe", "Hi Jane, are you around?"),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_WhenEmailServiceThrows_StillReturnsSuccess()
+    {
+        // The email is a best-effort notification — a Resend outage or bad
+        // recipient address must not fail the message send itself.
+        SetupSenderAndRecipient();
+        SetupConversationLookup(CreateConversation());
+        SetupSaveAsync();
+        _emailServiceMock
+            .Setup(e => e.SendNewMessageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ThrowsAsync(new HttpRequestException("Resend unreachable"));
+
+        var dto = new SendMessageDto(RecipientId, "Hello!");
+        var result = await _sut.SendMessageAsync(dto, SenderId);
+
+        Assert.True(result.IsSuccessful);
     }
 
     [Fact]

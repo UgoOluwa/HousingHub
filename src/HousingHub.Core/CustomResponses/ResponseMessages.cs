@@ -58,6 +58,9 @@ public static class ResponseMessages
     public const string InspectionCannotReschedule = "Only pending or confirmed inspections can be rescheduled.";
     public const string CannotInspectOwnProperty = "You cannot schedule an inspection for your own property.";
     public const string InspectionAlreadyPending = "You already have a pending inspection request for this property.";
+    public const string InspectionAlreadyHandedOff = "This inspection has already been handed off to HousingHub.";
+    public const string InspectionCannotHandOff = "Completed, declined, or cancelled inspections can't be handed off.";
+    public const string InspectionNotHandedOff = "This inspection hasn't been handed off to HousingHub yet, so it can't be assigned to staff.";
     public const string CannotReportOwnProperty = "You cannot report your own property.";
     public const string PropertyReportSubmitted = "Thanks — your report has been submitted for review.";
 

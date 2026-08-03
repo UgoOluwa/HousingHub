@@ -36,6 +36,12 @@ public class PropertyInspection : BaseEntity
     /// <summary>Set once the 24-hour reminder has been sent, so the reminder worker never sends it twice.</summary>
     public DateTime? ReminderSentAt { get; set; }
 
+    /// <summary>Set when the property owner hands this inspection off to HousingHub staff instead of managing it themselves. Null means it's still owner-managed.</summary>
+    public DateTime? HandedOffAt { get; set; }
+
+    /// <summary>The staff Admin a SuperAdmin assigned this inspection to, after it was handed off. Null means handed off but not yet assigned.</summary>
+    public Guid? AssignedStaffId { get; set; }
+
     [DynamoDBIgnore]
     public TimeSpan ScheduledTime
     {

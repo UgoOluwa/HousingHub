@@ -2,6 +2,7 @@ using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
+using HousingHub.Service.AdminService;
 using HousingHub.Service.Commons.Mappings;
 using HousingHub.Service.Dtos.Admin;
 using HousingHub.Service.InspectionService;
@@ -15,15 +16,18 @@ namespace HousingHub.Test.Admin;
 public class AdminInspectionQueryServiceTests
 {
     private readonly Mock<IUnitOfWOrk> _unitOfWorkMock;
+    private readonly Mock<IAdminAuthService> _adminAuthServiceMock;
     private readonly InspectionQueryService _sut;
 
     public AdminInspectionQueryServiceTests()
     {
         _unitOfWorkMock = new Mock<IUnitOfWOrk> { DefaultValue = DefaultValue.Mock };
+        _adminAuthServiceMock = new Mock<IAdminAuthService>();
+        _adminAuthServiceMock.Setup(a => a.GetAllStaffAsync()).ReturnsAsync(new List<AdminStaffDto>());
         var config = new TypeAdapterConfig();
         new InspectionMapper().Register(config);
         var mapper = new ObjectMapper(config);
-        _sut = new InspectionQueryService(_unitOfWorkMock.Object, mapper, NullLogger<InspectionQueryService>.Instance);
+        _sut = new InspectionQueryService(_unitOfWorkMock.Object, mapper, _adminAuthServiceMock.Object, NullLogger<InspectionQueryService>.Instance);
     }
 
     private static PropertyInspection MakeInspection(

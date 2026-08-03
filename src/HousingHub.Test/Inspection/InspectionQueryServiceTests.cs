@@ -1,9 +1,11 @@
 using Mapster;
+using HousingHub.Service.AdminService;
 using HousingHub.Service.Commons.Mappings;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
+using HousingHub.Service.Dtos.Admin;
 using HousingHub.Service.Dtos.Inspection;
 using HousingHub.Service.InspectionService;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -15,6 +17,7 @@ namespace HousingHub.Test.Inspection;
 public class InspectionQueryServiceTests
 {
     private readonly Mock<IUnitOfWOrk> _unitOfWorkMock;
+    private readonly Mock<IAdminAuthService> _adminAuthServiceMock;
     private readonly IMapper _mapper;
     private readonly InspectionQueryService _sut;
 
@@ -26,14 +29,22 @@ public class InspectionQueryServiceTests
     public InspectionQueryServiceTests()
     {
         _unitOfWorkMock = new Mock<IUnitOfWOrk> { DefaultValue = DefaultValue.Mock };
+        _adminAuthServiceMock = new Mock<IAdminAuthService>();
+        _adminAuthServiceMock.Setup(a => a.GetAllStaffAsync()).ReturnsAsync(new List<AdminStaffDto>());
         var logger = NullLogger<InspectionQueryService>.Instance;
 
         var config = new TypeAdapterConfig();
         new InspectionMapper().Register(config);
         _mapper = new ObjectMapper(config);
 
-        _sut = new InspectionQueryService(_unitOfWorkMock.Object, _mapper, logger);
+        _sut = new InspectionQueryService(_unitOfWorkMock.Object, _mapper, _adminAuthServiceMock.Object, logger);
     }
+
+    private static Customer CreateCustomer(Guid id, string firstName, string lastName) =>
+        new(firstName, lastName, $"{firstName.ToLower()}@test.com", "08012345678", CustomerType.Customer, "hash")
+        {
+            Id = id
+        };
 
     private static Property CreateProperty(Guid? id = null, Guid? ownerId = null) => new()
     {
@@ -73,6 +84,28 @@ public class InspectionQueryServiceTests
         Assert.NotNull(result.Data);
         Assert.Equal(InspectionId, result.Data!.Id);
         Assert.Equal(OwnerId, result.Data.PropertyOwnerId);
+    }
+
+    [Fact]
+    public async Task GetInspectionAsync_PopulatesCustomerAndOwnerNames()
+    {
+        var inspection = CreateInspection();
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetByAsync(
+            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync(inspection);
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByAsync(
+            It.IsAny<Expression<Func<Property, bool>>>()))
+            .ReturnsAsync(CreateProperty());
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByIdAsync(CustomerId))
+            .ReturnsAsync(CreateCustomer(CustomerId, "Jane", "Doe"));
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByIdAsync(OwnerId))
+            .ReturnsAsync(CreateCustomer(OwnerId, "John", "Smith"));
+
+        var result = await _sut.GetInspectionAsync(InspectionId, CustomerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal("Jane Doe", result.Data!.CustomerName);
+        Assert.Equal("John Smith", result.Data.PropertyOwnerName);
     }
 
     [Fact]

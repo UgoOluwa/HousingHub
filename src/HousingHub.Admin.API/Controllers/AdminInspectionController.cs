@@ -3,6 +3,7 @@ using HousingHub.Model.Enums;
 using HousingHub.Service.Dtos.Admin;
 using HousingHub.Service.Dtos.Inspection;
 using HousingHub.Service.InspectionService.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HousingHub.Admin.API.Controllers;
@@ -94,6 +95,40 @@ public class AdminInspectionController(
         var result = await inspectionCommandService.CancelInspectionAsync(id, adminId, isAdminAction: true);
         if (!result.IsSuccessful) return NotFound(result);
         return NoContent();
+    }
+
+    /// <summary>Proposes a new date/time for an inspection on the platform's behalf.</summary>
+    /// <param name="id">Inspection's database ID.</param>
+    /// <param name="request">The proposed new date/time.</param>
+    /// <response code="200">Inspection rescheduled.</response>
+    /// <response code="404">Inspection not found.</response>
+    [HttpPut("{id:guid}/reschedule")]
+    [ProducesResponseType(typeof(BaseResponse<InspectionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Reschedule(Guid id, [FromBody] RescheduleInspectionDto request)
+    {
+        var adminId = GetAdminId();
+        var dto = request with { InspectionId = id };
+        var result = await inspectionCommandService.RescheduleInspectionAsync(dto, adminId, isAdminAction: true);
+        if (!result.IsSuccessful) return NotFound(result);
+        return Ok(result);
+    }
+
+    /// <summary>Assigns an inspection that's been handed off to HousingHub to a specific staff member. SuperAdmin only.</summary>
+    /// <param name="id">Inspection's database ID.</param>
+    /// <param name="request">The staff member to assign.</param>
+    /// <response code="200">Inspection assigned.</response>
+    /// <response code="404">Inspection or staff member not found.</response>
+    [HttpPut("{id:guid}/assign")]
+    [Authorize(Policy = "SuperAdminOnly")]
+    [ProducesResponseType(typeof(BaseResponse<InspectionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Assign(Guid id, [FromBody] AssignInspectionDto request)
+    {
+        var adminId = GetAdminId();
+        var result = await inspectionCommandService.AssignInspectionToStaffAsync(id, request.StaffAdminId, adminId);
+        if (!result.IsSuccessful) return NotFound(result);
+        return Ok(result);
     }
 
     private Guid GetAdminId()

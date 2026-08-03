@@ -1,12 +1,16 @@
+using Amazon.DynamoDBv2.DataModel;
 using Mapster;
+using HousingHub.Service.AdminService;
 using HousingHub.Service.Commons.Mappings;
 using HousingHub.Core;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
+using AdminEntity = HousingHub.Model.Entities.Admin;
 using HousingHub.Model.Enums;
 using HousingHub.Service.ChatService.Interfaces;
 using HousingHub.Service.Commons.Email;
+using HousingHub.Service.Dtos.Admin;
 using HousingHub.Service.Dtos.Chat;
 using HousingHub.Service.Dtos.Inspection;
 using HousingHub.Service.InspectionService;
@@ -22,8 +26,10 @@ public class InspectionCommandServiceTests
 {
     private readonly Mock<IUnitOfWOrk> _unitOfWorkMock;
     private readonly Mock<IEmailService> _emailServiceMock;
+    private readonly Mock<IAdminAuthService> _adminAuthServiceMock;
     private readonly Mock<IRealtimeNotifier> _realtimeNotifierMock;
     private readonly Mock<IChatRealtimeNotifier> _chatRealtimeNotifierMock;
+    private readonly Mock<IDynamoDBContext> _dynamoDbMock;
     private readonly IMapper _mapper;
     private readonly InspectionCommandService _sut;
 
@@ -36,8 +42,10 @@ public class InspectionCommandServiceTests
     {
         _unitOfWorkMock = new Mock<IUnitOfWOrk> { DefaultValue = DefaultValue.Mock };
         _emailServiceMock = new Mock<IEmailService>();
+        _adminAuthServiceMock = new Mock<IAdminAuthService>();
         _realtimeNotifierMock = new Mock<IRealtimeNotifier>();
         _chatRealtimeNotifierMock = new Mock<IChatRealtimeNotifier>();
+        _dynamoDbMock = new Mock<IDynamoDBContext>();
         var logger = NullLogger<InspectionCommandService>.Instance;
 
         var config = new TypeAdapterConfig();
@@ -58,8 +66,21 @@ public class InspectionCommandServiceTests
         _emailServiceMock.Setup(e => e.SendInspectionResponseAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<TimeSpan?>())).ReturnsAsync(true);
+        _emailServiceMock.Setup(e => e.SendInspectionHandoffToAdminsAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<DateTime>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
+        _emailServiceMock.Setup(e => e.SendStaffAssignedToInspectionAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<DateTime>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
 
-        _sut = new InspectionCommandService(_unitOfWorkMock.Object, _mapper, _emailServiceMock.Object, _realtimeNotifierMock.Object, _chatRealtimeNotifierMock.Object, logger);
+        _adminAuthServiceMock.Setup(a => a.GetAllStaffAsync()).ReturnsAsync(new List<AdminStaffDto>());
+        _dynamoDbMock
+            .Setup(d => d.LoadAsync<AdminEntity>(It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AdminEntity?)null);
+
+        _sut = new InspectionCommandService(
+            _unitOfWorkMock.Object, _mapper, _emailServiceMock.Object, _adminAuthServiceMock.Object,
+            _realtimeNotifierMock.Object, _chatRealtimeNotifierMock.Object, _dynamoDbMock.Object, logger);
     }
 
     private static Customer CreateCustomer(Guid id, string firstName = "Test", string lastName = "User") =>
@@ -342,6 +363,125 @@ public class InspectionCommandServiceTests
             Times.Once);
     }
 
+    // ── HandOffToHousingHubAsync ──────────────────────────────────
+
+    [Fact]
+    public async Task HandOff_AsOwner_SetsHandedOffAtAndEmailsActiveSuperAdmins()
+    {
+        var inspection = CreateInspection(status: InspectionStatus.Pending);
+        SetupInspectionLookup(inspection);
+        SetupPropertyLookup(CreateProperty(ownerId: OwnerId));
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByIdAsync(OwnerId)).ReturnsAsync(CreateCustomer(OwnerId, "Owner", "User"));
+
+        var activeSuperAdmin = new AdminStaffDto(Guid.NewGuid(), "Ada", "Min", "ada@test.com", DateTime.UtcNow, true, AdminRoles.SuperAdmin);
+        var inactiveSuperAdmin = new AdminStaffDto(Guid.NewGuid(), "Old", "Admin", "old@test.com", DateTime.UtcNow, false, AdminRoles.SuperAdmin);
+        var staffMember = new AdminStaffDto(Guid.NewGuid(), "Jane", "Staff", "jane@test.com", DateTime.UtcNow, true, AdminRoles.Admin);
+        _adminAuthServiceMock.Setup(a => a.GetAllStaffAsync())
+            .ReturnsAsync(new List<AdminStaffDto> { activeSuperAdmin, inactiveSuperAdmin, staffMember });
+
+        var result = await _sut.HandOffToHousingHubAsync(InspectionId, OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.NotNull(inspection.HandedOffAt);
+        _emailServiceMock.Verify(e => e.SendInspectionHandoffToAdminsAsync(
+            "ada@test.com", "Ada", "Owner User", "Test Property", It.IsAny<DateTime>(), It.IsAny<TimeSpan>()), Times.Once);
+        _emailServiceMock.Verify(e => e.SendInspectionHandoffToAdminsAsync(
+            "old@test.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<TimeSpan>()), Times.Never);
+        _emailServiceMock.Verify(e => e.SendInspectionHandoffToAdminsAsync(
+            "jane@test.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<TimeSpan>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandOff_WhenNotOwner_ReturnsFailure()
+    {
+        var inspection = CreateInspection(status: InspectionStatus.Pending);
+        SetupInspectionLookup(inspection);
+        SetupPropertyLookup(CreateProperty(ownerId: OwnerId));
+
+        var result = await _sut.HandOffToHousingHubAsync(InspectionId, Guid.NewGuid());
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.InspectionNotOwner, result.Message);
+        Assert.Null(inspection.HandedOffAt);
+    }
+
+    [Fact]
+    public async Task HandOff_WhenAlreadyHandedOff_ReturnsFailure()
+    {
+        var inspection = CreateInspection(status: InspectionStatus.Pending);
+        inspection.HandedOffAt = DateTime.UtcNow.AddDays(-1);
+        SetupInspectionLookup(inspection);
+        SetupPropertyLookup(CreateProperty(ownerId: OwnerId));
+
+        var result = await _sut.HandOffToHousingHubAsync(InspectionId, OwnerId);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.InspectionAlreadyHandedOff, result.Message);
+    }
+
+    [Fact]
+    public async Task HandOff_WhenCancelled_ReturnsFailure()
+    {
+        var inspection = CreateInspection(status: InspectionStatus.Cancelled);
+        SetupInspectionLookup(inspection);
+        SetupPropertyLookup(CreateProperty(ownerId: OwnerId));
+
+        var result = await _sut.HandOffToHousingHubAsync(InspectionId, OwnerId);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.InspectionCannotHandOff, result.Message);
+    }
+
+    // ── AssignInspectionToStaffAsync ──────────────────────────────
+
+    [Fact]
+    public async Task Assign_WhenHandedOff_SetsAssignedStaffAndEmailsAssignee()
+    {
+        var inspection = CreateInspection(status: InspectionStatus.Pending);
+        inspection.HandedOffAt = DateTime.UtcNow;
+        SetupInspectionLookup(inspection);
+        SetupPropertyLookup(CreateProperty(ownerId: OwnerId));
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByIdAsync(OwnerId)).ReturnsAsync(CreateCustomer(OwnerId, "Owner", "User"));
+
+        var staffId = Guid.NewGuid();
+        var staffMember = new AdminStaffDto(staffId, "Jane", "Staff", "jane@test.com", DateTime.UtcNow, true, AdminRoles.Admin);
+        _adminAuthServiceMock.Setup(a => a.GetAllStaffAsync()).ReturnsAsync(new List<AdminStaffDto> { staffMember });
+
+        var result = await _sut.AssignInspectionToStaffAsync(InspectionId, staffId, Guid.NewGuid());
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(staffId, inspection.AssignedStaffId);
+        _emailServiceMock.Verify(e => e.SendStaffAssignedToInspectionAsync(
+            "jane@test.com", "Jane", "Test Property", "Owner User", It.IsAny<DateTime>(), It.IsAny<TimeSpan>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Assign_WhenNotHandedOff_ReturnsFailure()
+    {
+        var inspection = CreateInspection(status: InspectionStatus.Pending);
+        SetupInspectionLookup(inspection);
+
+        var result = await _sut.AssignInspectionToStaffAsync(InspectionId, Guid.NewGuid(), Guid.NewGuid());
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.InspectionNotHandedOff, result.Message);
+        Assert.Null(inspection.AssignedStaffId);
+    }
+
+    [Fact]
+    public async Task Assign_WhenStaffNotFound_ReturnsFailure()
+    {
+        var inspection = CreateInspection(status: InspectionStatus.Pending);
+        inspection.HandedOffAt = DateTime.UtcNow;
+        SetupInspectionLookup(inspection);
+        _adminAuthServiceMock.Setup(a => a.GetAllStaffAsync()).ReturnsAsync(new List<AdminStaffDto>());
+
+        var result = await _sut.AssignInspectionToStaffAsync(InspectionId, Guid.NewGuid(), Guid.NewGuid());
+
+        Assert.False(result.IsSuccessful);
+        Assert.Null(inspection.AssignedStaffId);
+    }
+
     // ── RescheduleInspectionAsync ────────────────────────────────
 
     [Fact]
@@ -403,6 +543,31 @@ public class InspectionCommandServiceTests
 
         Assert.False(result.IsSuccessful);
         Assert.Equal(ResponseMessages.InspectionCannotReschedule, result.Message);
+    }
+
+    [Fact]
+    public async Task RescheduleInspection_AsAdmin_BypassesParticipantCheckAndNotifiesBothParties()
+    {
+        var adminId = Guid.NewGuid();
+        var inspection = CreateInspection(status: InspectionStatus.Pending);
+        SetupInspectionLookup(inspection);
+        SetupPropertyLookup(CreateProperty(ownerId: OwnerId));
+        SetupCustomerLookupSequence(CreateCustomer(CustomerId, "Jane", "Doe"), CreateCustomer(OwnerId, "Owner", "User"));
+        _dynamoDbMock
+            .Setup(d => d.LoadAsync<AdminEntity>(adminId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminEntity { Id = adminId, FirstName = "Ada", LastName = "Min", Email = "ada@test.com" });
+
+        var dto = new RescheduleInspectionDto(InspectionId, DateTime.UtcNow.AddDays(14), TimeSpan.FromHours(14), "Staff rescheduled");
+        var result = await _sut.RescheduleInspectionAsync(dto, adminId, isAdminAction: true);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(InspectionStatus.Rescheduled, inspection.Status);
+        _emailServiceMock.Verify(e => e.SendInspectionResponseAsync(
+            "jane@test.com", "Jane", "Admin - Ada Min", "Test Property", "Rescheduled",
+            It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<TimeSpan?>()), Times.Once);
+        _emailServiceMock.Verify(e => e.SendInspectionResponseAsync(
+            "owner@test.com", "Owner", "Admin - Ada Min", "Test Property", "Rescheduled",
+            It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<TimeSpan?>()), Times.Once);
     }
 
     // ── RespondToRescheduleAsync ─────────────────────────────────

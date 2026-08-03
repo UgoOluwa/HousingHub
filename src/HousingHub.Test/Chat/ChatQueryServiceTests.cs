@@ -117,6 +117,24 @@ public class ChatQueryServiceTests
     }
 
     [Fact]
+    public async Task GetConversationsAsync_OtherParticipantIsAdmin_ResolvesNameFromAdminsTable()
+    {
+        var conversation = CreateConversation();
+        SetupConversationsList(new List<Conversation> { conversation });
+        SetupParticipants(new List<Customer>()); // the other participant isn't a customer
+        SetupAllUnreadMessages(new List<ChatMessage>());
+
+        _dynamoDbMock
+            .Setup(d => d.LoadAsync<AdminEntity>(OtherUserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminEntity { Id = OtherUserId, FirstName = "Ada", LastName = "Min", Email = "ada@test.com" });
+
+        var result = await _sut.GetConversationsAsync(UserId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal("Admin - Ada Min", result.Data![0].ParticipantName);
+    }
+
+    [Fact]
     public async Task GetConversationsAsync_IncludesUnreadCount()
     {
         var conversation = CreateConversation();
@@ -298,7 +316,7 @@ public class ChatQueryServiceTests
         var result = await _sut.GetMessagesAsync(ConversationId, UserId, 1, 10);
 
         Assert.True(result.IsSuccessful);
-        Assert.Equal("Ada Min", result.Data!.Items[0].SenderName);
+        Assert.Equal("Admin - Ada Min", result.Data!.Items[0].SenderName);
     }
 
     [Fact]

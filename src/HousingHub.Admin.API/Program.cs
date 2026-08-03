@@ -134,7 +134,6 @@ public static class Program
 
         // Admin-specific services
         builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
-        builder.Services.AddScoped<IAdminAuthService, AdminAuthService>();
         builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 
         // Chat (IChatCommandService/IChatQueryService, registered generically by

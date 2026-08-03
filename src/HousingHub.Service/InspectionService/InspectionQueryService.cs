@@ -3,6 +3,7 @@ using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
+using HousingHub.Service.AdminService;
 using HousingHub.Service.Dtos.Admin;
 using HousingHub.Service.Dtos.Inspection;
 using HousingHub.Service.InspectionService.Interfaces;
@@ -14,13 +15,16 @@ public class InspectionQueryService : IInspectionQueryService
 {
     private readonly IUnitOfWOrk _unitOfWOrk;
     private readonly IMapper _mapper;
+    private readonly IAdminAuthService _adminAuthService;
     private readonly ILogger<InspectionQueryService> _logger;
     private const string ClassName = "inspection";
 
-    public InspectionQueryService(IUnitOfWOrk unitOfWOrk, IMapper mapper, ILogger<InspectionQueryService> logger)
+    public InspectionQueryService(
+        IUnitOfWOrk unitOfWOrk, IMapper mapper, IAdminAuthService adminAuthService, ILogger<InspectionQueryService> logger)
     {
         _unitOfWOrk = unitOfWOrk;
         _mapper = mapper;
+        _adminAuthService = adminAuthService;
         _logger = logger;
     }
 
@@ -39,7 +43,19 @@ public class InspectionQueryService : IInspectionQueryService
                 return new BaseResponse<InspectionDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
             var imageUrl = await GetFirstPropertyImageUrlAsync(inspection.PropertyId);
-            var dto = _mapper.Map<InspectionDto>(inspection) with { PropertyImageUrl = imageUrl, PropertyOwnerId = property?.OwnerId };
+
+            var customer = await _unitOfWOrk.CustomerQueries.GetByIdAsync(inspection.CustomerId);
+            var owner = property != null ? await _unitOfWOrk.CustomerQueries.GetByIdAsync(property.OwnerId) : null;
+            var assignedStaffName = await ResolveStaffNameAsync(inspection.AssignedStaffId);
+
+            var dto = _mapper.Map<InspectionDto>(inspection) with
+            {
+                PropertyImageUrl = imageUrl,
+                PropertyOwnerId = property?.OwnerId,
+                CustomerName = customer != null ? $"{customer.FirstName} {customer.LastName}" : null,
+                PropertyOwnerName = owner != null ? $"{owner.FirstName} {owner.LastName}" : null,
+                AssignedStaffName = assignedStaffName
+            };
 
             return new BaseResponse<InspectionDto?>(dto, true, string.Empty, ResponseMessages.Successful);
         }
@@ -48,6 +64,14 @@ public class InspectionQueryService : IInspectionQueryService
             _logger.LogError(ex, "An error occurred in GetInspectionAsync: {Message}", ex.Message);
             return new BaseResponse<InspectionDto?>(null, false, string.Empty, ex.Message);
         }
+    }
+
+    private async Task<string?> ResolveStaffNameAsync(Guid? staffId)
+    {
+        if (!staffId.HasValue) return null;
+        var staff = await _adminAuthService.GetAllStaffAsync();
+        var match = staff.FirstOrDefault(s => s.Id == staffId.Value);
+        return match != null ? $"{match.FirstName} {match.LastName}" : null;
     }
 
     public async Task<BaseResponse<InspectionDto?>> GetInspectionAsync(Guid id)
@@ -59,7 +83,19 @@ public class InspectionQueryService : IInspectionQueryService
                 return new BaseResponse<InspectionDto?>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
             var imageUrl = await GetFirstPropertyImageUrlAsync(inspection.PropertyId);
-            var dto = _mapper.Map<InspectionDto>(inspection) with { PropertyImageUrl = imageUrl };
+            var property = await _unitOfWOrk.PropertyQueries.GetByAsync(x => x.Id == inspection.PropertyId);
+            var customer = await _unitOfWOrk.CustomerQueries.GetByIdAsync(inspection.CustomerId);
+            var owner = property != null ? await _unitOfWOrk.CustomerQueries.GetByIdAsync(property.OwnerId) : null;
+            var assignedStaffName = await ResolveStaffNameAsync(inspection.AssignedStaffId);
+
+            var dto = _mapper.Map<InspectionDto>(inspection) with
+            {
+                PropertyImageUrl = imageUrl,
+                PropertyOwnerId = property?.OwnerId,
+                CustomerName = customer != null ? $"{customer.FirstName} {customer.LastName}" : null,
+                PropertyOwnerName = owner != null ? $"{owner.FirstName} {owner.LastName}" : null,
+                AssignedStaffName = assignedStaffName
+            };
 
             return new BaseResponse<InspectionDto?>(dto, true, string.Empty, ResponseMessages.Successful);
         }
@@ -180,6 +216,12 @@ public class InspectionQueryService : IInspectionQueryService
             if (filter.CustomerId.HasValue)
                 query = query.Where(i => i.CustomerId == filter.CustomerId.Value);
 
+            if (filter.HandedOff.HasValue)
+                query = query.Where(i => (i.HandedOffAt != null) == filter.HandedOff.Value);
+
+            if (filter.AssignedStaffId.HasValue)
+                query = query.Where(i => i.AssignedStaffId == filter.AssignedStaffId.Value);
+
             var ordered = query.OrderByDescending(i => i.DateCreated).ToList();
             var totalCount = ordered.Count;
 
@@ -209,6 +251,15 @@ public class InspectionQueryService : IInspectionQueryService
             await Task.WhenAll(addressTasks);
             var addressById = addressTasks.Select(t => t.Result).Where(a => a != null).ToDictionary(a => a!.Id);
 
+            // Only fetched when at least one item on this page is actually assigned —
+            // a full staff scan isn't worth paying for on every unassigned inspection list.
+            Dictionary<Guid, string> staffNameById = new();
+            if (paged.Any(i => i.AssignedStaffId.HasValue))
+            {
+                var staff = await _adminAuthService.GetAllStaffAsync();
+                staffNameById = staff.ToDictionary(s => s.Id, s => $"{s.FirstName} {s.LastName}");
+            }
+
             var items = paged.Select(i =>
             {
                 propertyMap.TryGetValue(i.PropertyId, out var prop);
@@ -217,6 +268,9 @@ public class InspectionQueryService : IInspectionQueryService
 
                 var address = addr != null ? $"{addr.Place}, {addr.City}, {addr.State}" : "N/A";
                 var customerName = cust != null ? $"{cust.FirstName} {cust.LastName}" : "N/A";
+                var assignedStaffName = i.AssignedStaffId.HasValue
+                    ? staffNameById.GetValueOrDefault(i.AssignedStaffId.Value)
+                    : null;
 
                 return new AdminInspectionListDto(
                     i.Id,
@@ -231,7 +285,10 @@ public class InspectionQueryService : IInspectionQueryService
                     i.DateCreated,
                     i.Status,
                     i.Note,
-                    i.DeclineNote);
+                    i.DeclineNote,
+                    i.HandedOffAt,
+                    i.AssignedStaffId,
+                    assignedStaffName);
             }).ToList();
 
             return new BaseResponse<PaginatedResult<AdminInspectionListDto>>(
