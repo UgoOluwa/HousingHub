@@ -47,11 +47,12 @@ public class PropertyFileCommandService : IPropertyFileCommandService
         try
         {
             var validation = ValidateFile(request.file);
-            if (validation != null)
-                return new BaseResponse<PropertyFileDto>(null, false, string.Empty, validation);
+            if (!validation.IsValid)
+                return new BaseResponse<PropertyFileDto>(null, false, string.Empty, validation.Error!);
 
             var fileType = ResolveFileType(request.file);
-            var fileUrl = await _fileStorageService.UploadFileAsync(request.file, $"properties/{request.PropertyId}");
+            var fileUrl = await _fileStorageService.UploadFileAsync(
+                request.file, $"properties/{request.PropertyId}", validation.ContentType);
 
             var entity = new PropertyFile(fileUrl, fileType, request.file.Length)
             {
@@ -100,11 +101,12 @@ public class PropertyFileCommandService : IPropertyFileCommandService
             foreach (var file in files)
             {
                 var validation = ValidateFile(file);
-                if (validation != null)
-                    return new BaseResponse<List<PropertyFileDto>>(null, false, string.Empty, $"{file.FileName}: {validation}");
+                if (!validation.IsValid)
+                    return new BaseResponse<List<PropertyFileDto>>(null, false, string.Empty, $"{file.FileName}: {validation.Error}");
 
                 var fileType = ResolveFileType(file);
-                var fileUrl = await _fileStorageService.UploadFileAsync(file, $"properties/{propertyId}");
+                var fileUrl = await _fileStorageService.UploadFileAsync(
+                    file, $"properties/{propertyId}", validation.ContentType);
 
                 var entity = new PropertyFile(fileUrl, fileType, file.Length)
                 {
@@ -162,16 +164,18 @@ public class PropertyFileCommandService : IPropertyFileCommandService
         }
     }
 
-    private static string? ValidateFile(IFormFile file)
+    /// <summary>
+    /// Validates the upload and returns the content type it should be stored as.
+    /// Extension checks alone were not enough: the browser-supplied content type is
+    /// attacker-controlled, so a .jpg could previously be stored as text/html and
+    /// served as script from the bucket origin.
+    /// </summary>
+    private static UploadedFileValidator.Result ValidateFile(IFormFile file)
     {
-        if (file.Length > MaxFileSizeBytes)
-            return ResponseMessages.FileTooLarge;
+        var allowed = new HashSet<string>(AllowedImageExtensions, StringComparer.OrdinalIgnoreCase);
+        allowed.UnionWith(AllowedVideoExtensions);
 
-        var ext = Path.GetExtension(file.FileName);
-        if (!AllowedImageExtensions.Contains(ext) && !AllowedVideoExtensions.Contains(ext))
-            return ResponseMessages.InvalidFileType;
-
-        return null;
+        return UploadedFileValidator.Validate(file, allowed, MaxFileSizeBytes);
     }
 
     private static PropertyFileType ResolveFileType(IFormFile file)

@@ -174,11 +174,12 @@ public class PropertyCommandService : IPropertyCommandService
                 foreach (var file in request.Files)
                 {
                     var validation = ValidateFile(file);
-                    if (validation != null)
-                        return new BaseResponse<CreatePropertyResultDto>(null, false, string.Empty, $"{file.FileName}: {validation}");
+                    if (!validation.IsValid)
+                        return new BaseResponse<CreatePropertyResultDto>(null, false, string.Empty, $"{file.FileName}: {validation.Error}");
 
                     var fileType = ResolveFileType(file);
-                    var fileUrl = await _fileStorageService.UploadFileAsync(file, $"properties/{property.Id}");
+                    var fileUrl = await _fileStorageService.UploadFileAsync(
+                        file, $"properties/{property.Id}", validation.ContentType);
 
                     var propertyFile = new PropertyFile(fileUrl, fileType, file.Length)
                     {
@@ -284,16 +285,13 @@ public class PropertyCommandService : IPropertyCommandService
         }
     }
 
-    private static string? ValidateFile(IFormFile file)
+    /// <summary>Validates the upload and returns the content type to store it as.</summary>
+    private static UploadedFileValidator.Result ValidateFile(IFormFile file)
     {
-        if (file.Length > MaxFileSizeBytes)
-            return ResponseMessages.FileTooLarge;
+        var allowed = new HashSet<string>(AllowedImageExtensions, StringComparer.OrdinalIgnoreCase);
+        allowed.UnionWith(AllowedVideoExtensions);
 
-        var ext = Path.GetExtension(file.FileName);
-        if (!AllowedImageExtensions.Contains(ext) && !AllowedVideoExtensions.Contains(ext))
-            return ResponseMessages.InvalidFileType;
-
-        return null;
+        return UploadedFileValidator.Validate(file, allowed, MaxFileSizeBytes);
     }
 
     private static PropertyFileType ResolveFileType(IFormFile file)

@@ -195,7 +195,21 @@ public class CustomerCommandService : ICustomerCommandService
             // A null file clears the picture; otherwise upload and replace.
             string? newUrl = null;
             if (file is not null)
-                newUrl = await _fileStorageService.UploadFileAsync(file, $"profile-photos/{customerId}");
+            {
+                // This path previously had no validation of any kind — no size cap, no
+                // extension allow-list, no content check — so any authenticated user
+                // could push arbitrary content into the public bucket.
+                var validation = UploadedFileValidator.Validate(
+                    file,
+                    UploadedFileValidator.ImageExtensions,
+                    maxBytes: 5 * 1024 * 1024);
+
+                if (!validation.IsValid)
+                    return new BaseResponse<string?>(null, false, string.Empty, validation.Error!);
+
+                newUrl = await _fileStorageService.UploadFileAsync(
+                    file, $"profile-photos/{customerId}", validation.ContentType);
+            }
 
             // Best-effort cleanup of the previous object so we don't leak storage.
             if (!string.IsNullOrEmpty(customer.ProfileImageUrl))
@@ -225,6 +239,20 @@ public class CustomerCommandService : ICustomerCommandService
             if (customer is null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
 
+            // The document reference comes from the request body, so a caller could
+            // otherwise point their KYC record at any object — including another
+            // user's already-approved document. Only accept a key that the upload
+            // endpoint would have produced for this same customer.
+            if (!string.IsNullOrWhiteSpace(request.IdDocumentUrl)
+                && !IsOwnKycDocumentKey(request.IdDocumentUrl, customerId))
+            {
+                _logger.LogWarning(
+                    "Rejected KYC submission for {CustomerId}: document reference is not scoped to this customer",
+                    customerId);
+                return new BaseResponse<bool>(false, false, string.Empty,
+                    "The uploaded document could not be matched to your account. Please upload it again.");
+            }
+
             customer.AddKYCDetails(
                 request.DateOfBirth,
                 request.NationalIdNumber,
@@ -246,6 +274,15 @@ public class CustomerCommandService : ICustomerCommandService
             return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
         }
     }
+
+    /// <summary>
+    /// True when the reference is an object key produced by the KYC upload endpoint
+    /// for this specific customer, i.e. <c>private/kyc/{customerId}/...</c>.
+    /// </summary>
+    private static bool IsOwnKycDocumentKey(string reference, Guid customerId) =>
+        reference.StartsWith(
+            $"{S3FileStorageService.PrivatePrefix}/kyc/{customerId}/",
+            StringComparison.OrdinalIgnoreCase);
 
     public async Task<BaseResponse<bool>> VerifyKyc(Guid customerId, bool isApproved, string? rejectionReason = null)
     {

@@ -1,5 +1,6 @@
 using HousingHub.Core.CustomResponses;
 using HousingHub.Model.Enums;
+using HousingHub.Service.Commons.FileStorage;
 using HousingHub.Service.CustomerService.Interfaces;
 using HousingHub.Service.Dtos.Admin;
 using HousingHub.Service.Dtos.Customer;
@@ -13,8 +14,12 @@ namespace HousingHub.Admin.API.Controllers;
 [Produces("application/json")]
 public class AdminCustomerController(
     ICustomerQueryService customerQueryService,
-    ICustomerCommandService customerCommandService) : ControllerBase
+    ICustomerCommandService customerCommandService,
+    IFileStorageService fileStorageService) : ControllerBase
 {
+    /// <summary>How long a KYC document viewing link stays valid.</summary>
+    private static readonly TimeSpan KycDocumentLinkLifetime = TimeSpan.FromMinutes(10);
+
     /// <summary>Returns a filtered, paginated list of customers.</summary>
     /// <remarks>
     /// Only returns accounts with CustomerType = Customer (excludes owners, agents, and admins).
@@ -58,6 +63,43 @@ public class AdminCustomerController(
         var result = await customerCommandService.VerifyKyc(id, approve, reason);
         if (!result.IsSuccessful) return NotFound(result);
         return Ok(result);
+    }
+
+    /// <summary>Mints a short-lived link for viewing a customer's KYC identity document.</summary>
+    /// <remarks>
+    /// KYC documents live in a private bucket prefix and are not publicly readable, so
+    /// the stored value is an object key rather than a URL. This returns a presigned
+    /// URL valid for a few minutes, which is long enough to review and short enough
+    /// that a leaked link is not a lasting exposure.
+    /// </remarks>
+    /// <param name="id">Customer's database ID.</param>
+    /// <response code="200">Presigned URL.</response>
+    /// <response code="404">Customer not found, or no document on file.</response>
+    [HttpGet("{id:guid}/kyc/document-url")]
+    [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetKycDocumentUrl(Guid id)
+    {
+        var customer = await customerQueryService.GetCustomerAsync(id);
+
+        var stored = customer?.Data?.IdDocumentUrl;
+        if (string.IsNullOrWhiteSpace(stored))
+            return NotFound(new BaseResponse<string?>(null, false, string.Empty, "No KYC document on file."));
+
+        // Documents submitted before KYC moved to the private bucket are stored as full
+        // public URLs rather than object keys. Presigning those would produce nonsense,
+        // so hand them back as-is and flag that the object is still publicly readable —
+        // those rows need migrating into the private prefix.
+        if (stored.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+        {
+            return Ok(new BaseResponse<string>(
+                stored, true, string.Empty,
+                "Legacy document stored in the public bucket — pending migration."));
+        }
+
+        var url = await fileStorageService.GetPresignedUrlAsync(stored, KycDocumentLinkLifetime);
+
+        return Ok(new BaseResponse<string>(url, true, string.Empty, "Link valid for 10 minutes."));
     }
 
     /// <summary>Suspends a customer account (sets IsActive = false).</summary>
