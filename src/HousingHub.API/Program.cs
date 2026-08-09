@@ -10,6 +10,7 @@ using HousingHub.API.Common.Extensions;
 using HousingHub.API.Common.Middlewares;
 using HousingHub.API.Hubs;
 using HousingHub.Application;
+using HousingHub.Core.Configuration;
 using HousingHub.Data.Contexts;
 using HousingHub.Model.Enums;
 using HousingHub.Repository;
@@ -37,6 +38,15 @@ namespace HousingHub.API
         public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            // Refuse to start on a missing or placeholder secret rather than booting
+            // with a value that is committed to source control. Runs before anything
+            // reads configuration, so a misconfigured deploy fails immediately and
+            // loudly instead of silently signing forgeable tokens.
+            RequiredSecrets.Validate(
+                builder.Configuration,
+                signingKeys: ["Jwt:Secret"],
+                otherRequired: ["Email:ResendApiKey", "Google:ClientSecret"]);
 
             var isLambda = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME"));
 
