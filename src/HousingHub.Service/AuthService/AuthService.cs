@@ -218,6 +218,10 @@ public class AuthService : IAuthService
             customer.PasswordResetToken = null;
             customer.PasswordResetTokenExpiry = null;
 
+            // The whole point of a reset is often that someone else has access. Leaving
+            // their refresh token valid means the password change achieves nothing.
+            await RevokeAllRefreshTokensAsync(customer.Id);
+
             await _unitOfWork.CustomerCommands.UpdateAsync(customer);
             await _unitOfWork.SaveAsync();
 
@@ -252,6 +256,10 @@ public class AuthService : IAuthService
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.CurrentPasswordIncorrect);
 
             customer.PasswordHash = _passwordHasher.Hash(request.NewPassword);
+
+            // Same reasoning as ResetPassword: end every other session so a compromised
+            // one cannot survive the password change.
+            await RevokeAllRefreshTokensAsync(customer.Id);
 
             await _unitOfWork.CustomerCommands.UpdateAsync(customer);
             await _unitOfWork.SaveAsync();
@@ -495,6 +503,16 @@ public class AuthService : IAuthService
             if (customer == null)
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidRefreshToken);
 
+            // A suspended account previously kept refreshing indefinitely: suspension
+            // only set a flag and never touched the token family, so the session
+            // outlived the suspension by up to the refresh token's full lifetime.
+            if (!customer.IsActive)
+            {
+                await RevokeAllRefreshTokensAsync(customer.Id);
+                await _unitOfWork.SaveAsync();
+                return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidRefreshToken);
+            }
+
             existing.IsRevoked = true;
             await _unitOfWork.RefreshTokenCommands.UpdateAsync(existing);
 
@@ -510,6 +528,54 @@ public class AuthService : IAuthService
         {
             _logger.LogError(ex, "Error in RefreshToken: {Message}", ex.Message);
             return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Ends the presented session by revoking its refresh token.
+    /// </summary>
+    /// <remarks>
+    /// There was previously no server-side logout at all — signing out only cleared
+    /// client state, leaving the refresh token valid for its full 30-day life. Anyone
+    /// who recovered it from a shared machine, a backup or an XSS payload had a working
+    /// session long after the user believed they had left.
+    ///
+    /// Always reports success: whether the token was already revoked, expired or never
+    /// existed, the caller's session is over either way, and distinguishing those cases
+    /// would leak whether a token value is real.
+    /// </remarks>
+    public async Task<BaseResponse<bool>> Logout(string refreshToken, bool allSessions = false)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(refreshToken))
+                return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.Successful);
+
+            var existing = await _unitOfWork.RefreshTokenQueries.GetByTokenHashAsync(HashToken(refreshToken));
+
+            if (existing is not null)
+            {
+                if (allSessions)
+                {
+                    await RevokeAllRefreshTokensAsync(existing.CustomerId);
+                }
+                else if (!existing.IsRevoked)
+                {
+                    existing.IsRevoked = true;
+                    await _unitOfWork.RefreshTokenCommands.UpdateAsync(existing);
+                }
+
+                await _unitOfWork.SaveAsync();
+            }
+
+            return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.Successful);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in Logout: {Message}", ex.Message);
+            // Never surface a logout failure — the client is discarding its state
+            // regardless, and a false error would only encourage a retry loop.
+            return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.Successful);
         }
     }
 
@@ -530,6 +596,16 @@ public class AuthService : IAuthService
 
         await _unitOfWork.RefreshTokenCommands.InsertAsync(refreshToken);
         return rawToken;
+    }
+
+    /// <summary>
+    /// Public entry point for revoking every session on an account. Used by admin
+    /// suspension, which previously left the suspended user's tokens working.
+    /// </summary>
+    public async Task RevokeAllSessionsAsync(Guid customerId)
+    {
+        await RevokeAllRefreshTokensAsync(customerId);
+        await _unitOfWork.SaveAsync();
     }
 
     private async Task RevokeAllRefreshTokensAsync(Guid customerId)

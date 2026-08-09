@@ -276,6 +276,22 @@ public class CustomerCommandService : ICustomerCommandService
     }
 
     /// <summary>
+    /// Revokes every active refresh token for an account. Done here through the unit of
+    /// work rather than by injecting IAuthService, to avoid a dependency cycle between
+    /// the customer and auth services.
+    /// </summary>
+    private async Task RevokeAllSessionsAsync(Guid customerId)
+    {
+        var activeTokens = await _unitOfWOrk.RefreshTokenQueries.GetActiveByCustomerIdAsync(customerId);
+
+        foreach (var token in activeTokens)
+        {
+            token.IsRevoked = true;
+            await _unitOfWOrk.RefreshTokenCommands.UpdateAsync(token);
+        }
+    }
+
+    /// <summary>
     /// True when the reference is an object key produced by the KYC upload endpoint
     /// for this specific customer, i.e. <c>private/kyc/{customerId}/...</c>.
     /// </summary>
@@ -344,6 +360,12 @@ public class CustomerCommandService : ICustomerCommandService
 
             customer.IsActive = false;
             customer.DateModified = DateTime.UtcNow;
+
+            // Suspension previously only set a flag. The account's refresh tokens stayed
+            // valid, so a suspended user kept working until their token expired — up to
+            // 30 days. Revoke the whole family so the suspension takes effect now.
+            await RevokeAllSessionsAsync(customerId);
+
             await _unitOfWOrk.CustomerCommands.UpdateAsync(customer);
             await _unitOfWOrk.SaveAsync();
 

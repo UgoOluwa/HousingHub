@@ -44,6 +44,20 @@ public class AdminAuthController(IAdminAuthService adminAuthService) : Controlle
         return Ok(result);
     }
 
+    /// <summary>Ends the current admin session by revoking its refresh token.</summary>
+    /// <remarks>
+    /// Anonymous by design: an admin whose access token has already expired must still
+    /// be able to sign out, and the refresh token in the body is itself the proof of
+    /// possession. Always returns 200 — the client is discarding its state regardless.
+    /// </remarks>
+    [AllowAnonymous]
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout([FromBody] AdminLogoutRequest request)
+    {
+        await adminAuthService.LogoutAsync(request.RefreshToken, request.AllSessions);
+        return Ok(new { message = "Signed out." });
+    }
+
     // Seeding endpoint — restrict in production via env var or remove after first use
     [AllowAnonymous]
     [HttpPost("create")]
@@ -61,4 +75,7 @@ public class AdminAuthController(IAdminAuthService adminAuthService) : Controlle
 public record AdminOtpRequest(string Email);
 public record AdminOtpVerifyRequest(string Email, string Code);
 public record AdminRefreshTokenRequest(string RefreshToken);
+
+/// <param name="AllSessions">Revoke every active session for this admin, not just this one.</param>
+public record AdminLogoutRequest(string RefreshToken, bool AllSessions = false);
 public record CreateAdminRequest(string SeedKey, string Email, string Password, string FirstName, string LastName);

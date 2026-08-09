@@ -4,6 +4,7 @@ using HousingHub.Application.Auth.Commands.ChangePassword;
 using HousingHub.Application.Auth.Commands.ForgotPassword;
 using HousingHub.Application.Auth.Commands.GoogleSignIn;
 using HousingHub.Application.Auth.Commands.Login;
+using HousingHub.Application.Auth.Commands.Logout;
 using HousingHub.Application.Auth.Commands.RefreshToken;
 using HousingHub.Application.Auth.Commands.Register;
 using HousingHub.Application.Auth.Commands.ResendOtp;
@@ -64,6 +65,21 @@ public class AuthController : ControllerBase
     [HttpPost("refresh-token")]
     [ProducesResponseType(typeof(BaseResponse<LoginCustomerResponseDto?>), StatusCodes.Status200OK)]
     public async Task<IActionResult> RefreshToken(RefreshTokenCommand command)
+    {
+        var response = await _mediator.Send(command);
+        return Ok(response);
+    }
+
+    /// <summary>Ends the current session by revoking its refresh token.</summary>
+    /// <remarks>
+    /// Anonymous by design: a client whose access token has already expired must still
+    /// be able to sign out, and the refresh token in the body is itself the proof of
+    /// possession. Always returns success — see AuthService.Logout.
+    /// </remarks>
+    [AllowAnonymous]
+    [HttpPost("logout")]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Logout(LogoutCommand command)
     {
         var response = await _mediator.Send(command);
         return Ok(response);

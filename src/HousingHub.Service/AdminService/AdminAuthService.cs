@@ -167,6 +167,36 @@ public class AdminAuthService(
         return rawToken;
     }
 
+    /// <summary>
+    /// Ends an admin session. Silent on unknown or already-revoked tokens: the session
+    /// is over either way, and distinguishing the cases would confirm whether a token
+    /// value is real.
+    /// </summary>
+    public async Task LogoutAsync(string refreshToken, bool allSessions = false)
+    {
+        if (string.IsNullOrWhiteSpace(refreshToken)) return;
+
+        var matches = await dynamoDb.QueryAsync<AdminRefreshToken>(
+            HashToken(refreshToken),
+            new DynamoDBOperationConfig { IndexName = "TokenHash-index" })
+            .GetRemainingAsync();
+
+        var existing = matches.FirstOrDefault();
+        if (existing is null) return;
+
+        if (allSessions)
+        {
+            await RevokeAllRefreshTokensAsync(existing.AdminId);
+            return;
+        }
+
+        if (existing.IsRevoked) return;
+
+        existing.IsRevoked = true;
+        existing.DateModified = DateTime.UtcNow;
+        await dynamoDb.SaveAsync(existing);
+    }
+
     private async Task RevokeAllRefreshTokensAsync(Guid adminId)
     {
         var tokens = await dynamoDb.QueryAsync<AdminRefreshToken>(
@@ -288,6 +318,13 @@ public class AdminAuthService(
         admin.IsActive = false;
         admin.DateModified = DateTime.UtcNow;
         await dynamoDb.SaveAsync(admin);
+
+        // Deactivation previously only flipped a flag. RefreshTokenAsync does check
+        // IsActive, but the already-issued access token stayed valid for its full
+        // lifetime, and the refresh token was never revoked. Revoke the family so the
+        // deactivated admin cannot mint another access token.
+        await RevokeAllRefreshTokensAsync(adminId);
+
         return true;
     }
 
@@ -308,7 +345,10 @@ public class AdminAuthService(
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
-        int expirationInMinutes = int.TryParse(configuration["AdminJwt:ExpirationInMinutes"], out var mins) ? mins : 480;
+        // Fall back to 30 minutes, matching appsettings, rather than the previous 8
+        // hours. Admin tokens are not revocable once issued, so a misconfigured
+        // environment should shorten the blast radius, not widen it.
+        int expirationInMinutes = int.TryParse(configuration["AdminJwt:ExpirationInMinutes"], out var mins) ? mins : 30;
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {

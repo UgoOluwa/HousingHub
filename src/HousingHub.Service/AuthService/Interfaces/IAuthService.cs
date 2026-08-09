@@ -19,4 +19,19 @@ public interface IAuthService
     Task<BaseResponse<LoginCustomerResponseDto>> SetAccountType(Guid customerId, CustomerType customerType);
     /// <summary>Exchanges a valid, unexpired refresh token for a new access token and a rotated refresh token.</summary>
     Task<BaseResponse<LoginCustomerResponseDto>> RefreshToken(string refreshToken);
+
+    /// <summary>
+    /// Revokes the presented refresh token, ending that session server-side.
+    /// </summary>
+    /// <param name="allSessions">
+    /// When true, revokes every active token for the account rather than just this one
+    /// — for "sign out everywhere".
+    /// </param>
+    Task<BaseResponse<bool>> Logout(string refreshToken, bool allSessions = false);
+
+    /// <summary>
+    /// Revokes every active refresh token for an account. Called when an admin
+    /// suspends the account, so the session cannot outlive the suspension.
+    /// </summary>
+    Task RevokeAllSessionsAsync(Guid customerId);
 }
