@@ -41,10 +41,27 @@ public class PropertyFileQueryService : IPropertyFileQueryService
         }
     }
 
-    public async Task<BaseResponse<List<PropertyFileDto>>> GetAllPropertyFilesAsync(Guid propertyId)
+    /// <param name="requestingUserId">
+    /// Caller id, or null when anonymous. Photos of unpublished (draft or
+    /// admin-unpublished) listings are visible only to the owner, matching how
+    /// PropertyQueryService.GetPropertyAsync treats the listing itself.
+    /// </param>
+    public async Task<BaseResponse<List<PropertyFileDto>>> GetAllPropertyFilesAsync(Guid propertyId, Guid? requestingUserId = null)
     {
         try
         {
+            var property = await _unitOfWOrk.PropertyQueries.GetByIdAsync(propertyId);
+            bool visible = property is not null
+                && (property.IsPublished
+                    || (requestingUserId is not null && property.OwnerId == requestingUserId.Value));
+
+            if (!visible)
+            {
+                return new BaseResponse<List<PropertyFileDto>>(
+                    new List<PropertyFileDto>(), false, string.Empty,
+                    ResponseMessages.SetNotFoundMessage(ClassName));
+            }
+
             var properties = await _unitOfWOrk.PropertyFileQueries.GetAllAsync(x => x.PropertyId == propertyId);
             if (!properties.Any())
             {

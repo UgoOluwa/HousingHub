@@ -20,6 +20,7 @@ public class PropertyAddressServiceTests
 
     private static readonly Guid PropertyId = Guid.NewGuid();
     private static readonly Guid AddressId = Guid.NewGuid();
+    private static readonly Guid OwnerId = Guid.NewGuid();
 
     public PropertyAddressServiceTests()
     {
@@ -37,6 +38,19 @@ public class PropertyAddressServiceTests
         _commandSut = new PropertyAddressCommandService(commandLogger, _unitOfWorkMock.Object, _mapper);
         _querySut = new PropertyAddressQueryService(_unitOfWorkMock.Object, _mapper, queryLogger);
     }
+
+    private static Property CreateProperty(bool isPublished = true) => new()
+    {
+        Id = PropertyId,
+        Title = "Test Property",
+        OwnerId = OwnerId,
+        IsPublished = isPublished
+    };
+
+    /// <summary>Makes the property lookup used by the ownership/visibility guards succeed.</summary>
+    private void GivenProperty(bool isPublished = true) =>
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId))
+            .ReturnsAsync(CreateProperty(isPublished));
 
     private static HousingHub.Model.Entities.PropertyAddress CreateAddress(Guid? id = null, Guid? propertyId = null)
     {
@@ -57,8 +71,9 @@ public class PropertyAddressServiceTests
             It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyAddress, bool>>>()))
             .ReturnsAsync(false);
 
+        GivenProperty();
         var dto = new CreatePropertyAddressDto("Lekki Phase 1", "Lagos", "Lagos", "Nigeria", "101001", PropertyId);
-        var result = await _commandSut.CreatePropertyAddress(dto);
+        var result = await _commandSut.CreatePropertyAddress(dto, OwnerId);
 
         Assert.True(result.IsSuccessful);
         Assert.NotNull(result.Data);
@@ -72,8 +87,9 @@ public class PropertyAddressServiceTests
             It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyAddress, bool>>>()))
             .ReturnsAsync(true);
 
+        GivenProperty();
         var dto = new CreatePropertyAddressDto("Lekki Phase 1", "Lagos", "Lagos", "Nigeria", "101001", PropertyId);
-        var result = await _commandSut.CreatePropertyAddress(dto);
+        var result = await _commandSut.CreatePropertyAddress(dto, OwnerId);
 
         Assert.False(result.IsSuccessful);
     }
@@ -86,8 +102,9 @@ public class PropertyAddressServiceTests
             .ReturnsAsync(false);
         _unitOfWorkMock.Setup(u => u.PropertyAddressCommands.InsertAsync(It.IsAny<HousingHub.Model.Entities.PropertyAddress>())).ReturnsAsync(false);
 
+        GivenProperty();
         var dto = new CreatePropertyAddressDto("Lekki Phase 1", "Lagos", "Lagos", "Nigeria", "101001", PropertyId);
-        var result = await _commandSut.CreatePropertyAddress(dto);
+        var result = await _commandSut.CreatePropertyAddress(dto, OwnerId);
 
         Assert.False(result.IsSuccessful);
     }
@@ -99,8 +116,9 @@ public class PropertyAddressServiceTests
             It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyAddress, bool>>>()))
             .ReturnsAsync(false);
 
+        GivenProperty();
         var dto = new CreatePropertyAddressDto("Lekki Phase 1", "Lagos", "Lagos", "Nigeria", "101001", PropertyId);
-        await _commandSut.CreatePropertyAddress(dto);
+        await _commandSut.CreatePropertyAddress(dto, OwnerId);
 
         _unitOfWorkMock.Verify(u => u.SaveAsync(), Times.Once);
     }
@@ -110,6 +128,7 @@ public class PropertyAddressServiceTests
     [Fact]
     public async Task GetPropertyAddressAsync_WhenFound_ReturnsSuccess()
     {
+        GivenProperty();
         var address = CreateAddress();
         _unitOfWorkMock.Setup(u => u.PropertyAddressQueries.GetByAsync(
             It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyAddress, bool>>>()))
@@ -138,6 +157,7 @@ public class PropertyAddressServiceTests
     [Fact]
     public async Task GetPropertyAddressByPropertyIdAsync_WhenFound_ReturnsSuccess()
     {
+        GivenProperty();
         var address = CreateAddress(propertyId: PropertyId);
         _unitOfWorkMock.Setup(u => u.PropertyAddressQueries.GetByAsync(
             It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyAddress, bool>>>()))
@@ -159,5 +179,59 @@ public class PropertyAddressServiceTests
         var result = await _querySut.GetPropertyAddressByPropertyIdAsync(Guid.NewGuid());
 
         Assert.False(result.IsSuccessful);
+    }
+
+    // ── Visibility / ownership guards ────────────────────────────
+
+    [Fact]
+    public async Task CreatePropertyAddress_WhenCallerDoesNotOwnProperty_ReturnsFailure()
+    {
+        GivenProperty();
+        var dto = new CreatePropertyAddressDto("Lekki Phase 1", "Lagos", "Lagos", "Nigeria", "101001", PropertyId);
+
+        var result = await _commandSut.CreatePropertyAddress(dto, Guid.NewGuid());
+
+        Assert.False(result.IsSuccessful);
+        _unitOfWorkMock.Verify(u => u.PropertyAddressCommands.InsertAsync(
+            It.IsAny<HousingHub.Model.Entities.PropertyAddress>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetPropertyAddressByPropertyIdAsync_WhenUnpublishedAndAnonymous_ReturnsFailure()
+    {
+        GivenProperty(isPublished: false);
+        _unitOfWorkMock.Setup(u => u.PropertyAddressQueries.GetByAsync(
+            It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyAddress, bool>>>()))
+            .ReturnsAsync(CreateAddress(propertyId: PropertyId));
+
+        var result = await _querySut.GetPropertyAddressByPropertyIdAsync(PropertyId);
+
+        Assert.False(result.IsSuccessful);
+    }
+
+    [Fact]
+    public async Task GetPropertyAddressByPropertyIdAsync_WhenUnpublishedAndCallerIsOwner_ReturnsSuccess()
+    {
+        GivenProperty(isPublished: false);
+        _unitOfWorkMock.Setup(u => u.PropertyAddressQueries.GetByAsync(
+            It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyAddress, bool>>>()))
+            .ReturnsAsync(CreateAddress(propertyId: PropertyId));
+
+        var result = await _querySut.GetPropertyAddressByPropertyIdAsync(PropertyId, OwnerId);
+
+        Assert.True(result.IsSuccessful);
+    }
+
+    [Fact]
+    public async Task GetPropertyAddressByPropertyIdAsync_WhenUnpublishedAndAdminOverride_ReturnsSuccess()
+    {
+        GivenProperty(isPublished: false);
+        _unitOfWorkMock.Setup(u => u.PropertyAddressQueries.GetByAsync(
+            It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyAddress, bool>>>()))
+            .ReturnsAsync(CreateAddress(propertyId: PropertyId));
+
+        var result = await _querySut.GetPropertyAddressByPropertyIdAsync(PropertyId, includeUnpublished: true);
+
+        Assert.True(result.IsSuccessful);
     }
 }

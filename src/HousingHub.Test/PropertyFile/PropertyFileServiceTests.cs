@@ -62,11 +62,12 @@ public class PropertyFileServiceTests
             Id = id ?? OwnerId
         };
 
-    private static Property CreateProperty(Guid? id = null, Guid? ownerId = null) => new()
+    private static Property CreateProperty(Guid? id = null, Guid? ownerId = null, bool isPublished = false) => new()
     {
         Id = id ?? PropertyId,
         Title = "Test Property",
-        OwnerId = ownerId ?? OwnerId
+        OwnerId = ownerId ?? OwnerId,
+        IsPublished = isPublished
     };
 
     private static Mock<IFormFile> CreateFormFile(string fileName = "test.jpg", long length = 1024)
@@ -285,8 +286,11 @@ public class PropertyFileServiceTests
     // ── GetAllPropertyFilesAsync ─────────────────────────────────
 
     [Fact]
-    public async Task GetAllPropertyFilesAsync_WhenFilesExist_ReturnsSuccess()
+    public async Task GetAllPropertyFilesAsync_WhenPublishedAndFilesExist_ReturnsSuccess()
     {
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId))
+            .ReturnsAsync(CreateProperty(isPublished: true));
+
         var files = new List<HousingHub.Model.Entities.PropertyFile> { CreateFile(), CreateFile() };
         _unitOfWorkMock.Setup(u => u.PropertyFileQueries.GetAllAsync(
             It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, bool>>>()))
@@ -299,8 +303,11 @@ public class PropertyFileServiceTests
     }
 
     [Fact]
-    public async Task GetAllPropertyFilesAsync_WhenNoFiles_ReturnsFailure()
+    public async Task GetAllPropertyFilesAsync_WhenPublishedAndNoFiles_ReturnsFailure()
     {
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId))
+            .ReturnsAsync(CreateProperty(isPublished: true));
+
         _unitOfWorkMock.Setup(u => u.PropertyFileQueries.GetAllAsync(
             It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, bool>>>()))
             .ReturnsAsync(Enumerable.Empty<HousingHub.Model.Entities.PropertyFile>());
@@ -308,5 +315,32 @@ public class PropertyFileServiceTests
         var result = await _querySut.GetAllPropertyFilesAsync(PropertyId);
 
         Assert.False(result.IsSuccessful);
+    }
+
+    [Fact]
+    public async Task GetAllPropertyFilesAsync_WhenUnpublishedAndCallerIsNotOwner_ReturnsNotFound()
+    {
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId))
+            .ReturnsAsync(CreateProperty(isPublished: false));
+
+        var result = await _querySut.GetAllPropertyFilesAsync(PropertyId, Guid.NewGuid());
+
+        Assert.False(result.IsSuccessful);
+        Assert.Empty(result.Data!);
+    }
+
+    [Fact]
+    public async Task GetAllPropertyFilesAsync_WhenUnpublishedAndCallerIsOwner_ReturnsSuccess()
+    {
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId))
+            .ReturnsAsync(CreateProperty(isPublished: false));
+
+        _unitOfWorkMock.Setup(u => u.PropertyFileQueries.GetAllAsync(
+            It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, bool>>>()))
+            .ReturnsAsync(new List<HousingHub.Model.Entities.PropertyFile> { CreateFile() });
+
+        var result = await _querySut.GetAllPropertyFilesAsync(PropertyId, OwnerId);
+
+        Assert.True(result.IsSuccessful);
     }
 }

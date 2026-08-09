@@ -39,6 +39,8 @@ public class AuthController : ControllerBase
         _configuration = configuration;
     }
 
+    [AllowAnonymous]
+
     [HttpPost("register")]
     [ProducesResponseType(typeof(BaseResponse<CustomerDto?>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Register(RegisterAuthCommand command)
@@ -46,6 +48,8 @@ public class AuthController : ControllerBase
         var response = await _mediator.Send(command);
         return Ok(response);
     }
+
+    [AllowAnonymous]
 
     [HttpPost("login")]
     [ProducesResponseType(typeof(BaseResponse<LoginCustomerResponseDto?>), StatusCodes.Status200OK)]
@@ -56,6 +60,7 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>Exchanges a refresh token for a new access token and a rotated refresh token.</summary>
+    [AllowAnonymous]
     [HttpPost("refresh-token")]
     [ProducesResponseType(typeof(BaseResponse<LoginCustomerResponseDto?>), StatusCodes.Status200OK)]
     public async Task<IActionResult> RefreshToken(RefreshTokenCommand command)
@@ -63,6 +68,8 @@ public class AuthController : ControllerBase
         var response = await _mediator.Send(command);
         return Ok(response);
     }
+
+    [AllowAnonymous]
 
     [HttpPost("verify-email")]
     [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
@@ -76,6 +83,7 @@ public class AuthController : ControllerBase
     /// Resends the email verification link. Throttled server-side; the response data
     /// is the number of seconds until another resend is allowed.
     /// </summary>
+    [AllowAnonymous]
     [HttpPost("resend-otp")]
     [ProducesResponseType(typeof(BaseResponse<int>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ResendOtp(ResendOtpCommand command)
@@ -84,6 +92,8 @@ public class AuthController : ControllerBase
         return Ok(response);
     }
 
+    [AllowAnonymous]
+
     [HttpPost("forgot-password")]
     [ProducesResponseType(typeof(BaseResponse<string?>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordCommand command)
@@ -91,6 +101,8 @@ public class AuthController : ControllerBase
         var response = await _mediator.Send(command);
         return Ok(response);
     }
+
+    [AllowAnonymous]
 
     [HttpPost("reset-password")]
     [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
@@ -119,6 +131,7 @@ public class AuthController : ControllerBase
     /// <summary>
     /// Client-side flow: Frontend sends a Google ID token obtained from the Google Sign-In SDK.
     /// </summary>
+    [AllowAnonymous]
     [HttpPost("google")]
     [ProducesResponseType(typeof(BaseResponse<LoginCustomerResponseDto?>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GoogleSignIn(GoogleSignInCommand command)
@@ -150,6 +163,7 @@ public class AuthController : ControllerBase
     /// Server-side flow: Redirects the user to the Google consent screen.
     /// Pass a returnUrl so the callback knows where to send the JWT.
     /// </summary>
+    [AllowAnonymous]
     [HttpGet("google-login")]
     public IActionResult GoogleLogin([FromQuery] string returnUrl)
     {
@@ -170,6 +184,7 @@ public class AuthController : ControllerBase
     /// Reads the authenticated Google claims, registers or logs in the user, and
     /// redirects to the returnUrl with the JWT as a query parameter.
     /// </summary>
+    [AllowAnonymous]
     [HttpGet("google-callback")]
     public async Task<IActionResult> GoogleCallback([FromQuery] string? returnUrl)
     {

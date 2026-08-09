@@ -33,26 +33,36 @@ namespace HousingHub.API.Controllers.V1
             _mediator = mediator;
         }
 
-        // ─── Admin: Create / Read / Delete ────────────────────────────────
-
-        [HttpPost]
-        [ProducesResponseType(typeof(BaseResponse<CustomerDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> Create(CreateCustomerCommand command)
-        {
-            var response = await _mediator.Send(command);
-            return Ok(response);
-        }
+        // ─── Read / Delete ────────────────────────────────────────────────
+        //
+        // POST /api/v1/Customer was removed. It was anonymous and bound CustomerType
+        // straight from the request body, making it a second route to creating an
+        // Admin account alongside /Auth/register.
+        //
+        // It was also dead: Customer is the same entity AuthService creates on
+        // registration and on Google sign-in, so every authenticated caller already
+        // has a row. CreateCustomer rejects on a duplicate email or phone, so the
+        // endpoint could only ever return "customer already exists".
+        //
+        // CreateCustomerCommand, its handler and CustomerCommandService.CreateCustomer
+        // remain (unexposed and still covered by tests) in case an admin-side
+        // "create customer" feature wants them later.
 
         [Authorize]
         [HttpGet("{id:guid}")]
         [ProducesResponseType(typeof(BaseResponse<CustomerWithDetailsDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> Get(Guid id)
         {
+            // Returns National ID number and KYC document URL — self or admin only.
+            if (!CanActOnCustomer(id))
+                return NotFound();
+
             var response = await _mediator.Send(new GetCustomerByIdQuery(id));
             return Ok(response);
         }
 
-        [Authorize]
+        /// <summary>Enumerates every customer. Administrative — not for consumer sessions.</summary>
+        [Authorize(Policy = "AdminOnly")]
         [HttpGet("all")]
         [ProducesResponseType(typeof(BaseResponsePagination<HousingHub.Core.CustomResponses.PaginatedResult<CustomerDto>>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
@@ -66,6 +76,9 @@ namespace HousingHub.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         public async Task<IActionResult> Delete(Guid id)
         {
+            if (!CanActOnCustomer(id))
+                return NotFound();
+
             await _mediator.Send(new DeleteCustomerCommand(id));
             return NoContent();
         }
@@ -182,6 +195,33 @@ namespace HousingHub.API.Controllers.V1
                 return userId;
 
             return null;
+        }
+
+        private CustomerType? GetAuthenticatedCustomerType()
+        {
+            var claim = User.FindFirst("customer_type")?.Value;
+
+            return Enum.TryParse<CustomerType>(claim, ignoreCase: true, out var customerType)
+                ? customerType
+                : null;
+        }
+
+        /// <summary>
+        /// True when the caller may read or mutate the given customer record — that is,
+        /// when it is their own record, or they are an admin.
+        /// </summary>
+        /// <remarks>
+        /// Callers should return <c>404</c> rather than <c>403</c> on failure. A 403
+        /// confirms the record exists, which turns GUID enumeration into a user-existence
+        /// oracle.
+        /// </remarks>
+        private bool CanActOnCustomer(Guid customerId)
+        {
+            var callerId = GetAuthenticatedUserId();
+            if (callerId is null) return false;
+
+            return callerId == customerId
+                || GetAuthenticatedCustomerType() == CustomerType.Admin;
         }
     }
 

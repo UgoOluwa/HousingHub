@@ -20,6 +20,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
@@ -97,6 +98,21 @@ namespace HousingHub.API
 
             builder.Services.AddAuthorization(options =>
             {
+                // Deny by default. Every endpoint requires an authenticated user unless it
+                // explicitly opts out with [AllowAnonymous].
+                //
+                // This inverts the previous default of "open unless secured", which is how
+                // GET /Customer/all, GET /Customer/{id} and DELETE /Customer/{id} ended up
+                // reachable by any signed-in user. A missing [Authorize] is now a closed
+                // door rather than an open one.
+                //
+                // The genuinely public surface is: all of AuthController, the public
+                // property reads (all/{id}/new/trending/nearby/{id}/files), the
+                // PropertyAddress reads, FaqController, UtilityController and /health.
+                options.FallbackPolicy = new AuthorizationPolicyBuilder()
+                    .RequireAuthenticatedUser()
+                    .Build();
+
                 // Property owners, agents and developers all manage listings.
                 // Keep in sync with CustomerTypeExtensions.CanManageProperties().
                 options.AddPolicy("PropertyOwnerOrAgent", policy =>
@@ -228,10 +244,13 @@ namespace HousingHub.API
 
             await app.InitializeDynamoDbAsync();
 
-            app.MapHealthChecks("health", new HealthCheckOptions
+            // Must stay anonymous: the deny-by-default FallbackPolicy applies to every
+            // routed endpoint, including this one. Without the opt-out, load balancer
+            // and container health probes receive 401 and mark the target unhealthy.
+            app.MapHealthChecks("/health", new HealthCheckOptions
             {
                 ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
-            });
+            }).AllowAnonymous();
 
             if (!isLambda)
             {

@@ -5,5 +5,5 @@ namespace HousingHub.Service.PropertyAddressService.Interfaces;
 
 public interface IPropertyAddressCommandService
 {
-    Task<BaseResponse<PropertyAddressDto>> CreatePropertyAddress(CreatePropertyAddressDto request);
+    Task<BaseResponse<PropertyAddressDto>> CreatePropertyAddress(CreatePropertyAddressDto request, Guid requestingUserId);
 }

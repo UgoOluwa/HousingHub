@@ -56,11 +56,16 @@ public class InspectionController : ControllerBase
         return Ok(response);
     }
 
+    /// <summary>Lists inspections booked against a property. Property owner only.</summary>
     [HttpGet("property/{propertyId:guid}")]
     [ProducesResponseType(typeof(BaseResponsePagination<HousingHub.Core.CustomResponses.PaginatedResult<InspectionDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetByProperty(Guid propertyId, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10, [FromQuery] InspectionStatus? status = null)
     {
-        var response = await _mediator.Send(new GetInspectionsByPropertyQuery(propertyId, pageNumber, pageSize, status));
+        var userId = GetAuthenticatedUserId();
+        if (userId is null) return Unauthorized();
+
+        var response = await _mediator.Send(
+            new GetInspectionsByPropertyQuery(propertyId, userId.Value, pageNumber, pageSize, status));
         return Ok(response);
     }
 

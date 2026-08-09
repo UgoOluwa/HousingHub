@@ -191,12 +191,15 @@ public class InspectionQueryServiceTests
     [Fact]
     public async Task GetInspectionsByPropertyAsync_ReturnsPagedResults()
     {
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId))
+            .ReturnsAsync(CreateProperty());
+
         var inspections = new List<PropertyInspection> { CreateInspection(), CreateInspection() };
         _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetPagedAsync(
             1, 10, It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
             .ReturnsAsync((inspections.AsEnumerable(), 2));
 
-        var result = await _sut.GetInspectionsByPropertyAsync(PropertyId, 1, 10);
+        var result = await _sut.GetInspectionsByPropertyAsync(PropertyId, OwnerId, 1, 10);
 
         Assert.True(result.IsSuccessful);
         Assert.Equal(2, result.Data!.TotalCount);
@@ -206,11 +209,13 @@ public class InspectionQueryServiceTests
     [Fact]
     public async Task GetInspectionsByPropertyAsync_WithStatusFilter_PassesPredicate()
     {
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId))
+            .ReturnsAsync(CreateProperty());
         _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetPagedAsync(
             1, 10, It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
             .ReturnsAsync((Enumerable.Empty<PropertyInspection>(), 0));
 
-        var result = await _sut.GetInspectionsByPropertyAsync(PropertyId, 1, 10, InspectionStatus.Pending);
+        var result = await _sut.GetInspectionsByPropertyAsync(PropertyId, OwnerId, 1, 10, InspectionStatus.Pending);
 
         Assert.True(result.IsSuccessful);
         _unitOfWorkMock.Verify(u => u.PropertyInspectionQueries.GetPagedAsync(
@@ -220,14 +225,42 @@ public class InspectionQueryServiceTests
     [Fact]
     public async Task GetInspectionsByPropertyAsync_WhenEmpty_ReturnsEmptyResult()
     {
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId))
+            .ReturnsAsync(CreateProperty());
         _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetPagedAsync(
             1, 10, It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
             .ReturnsAsync((Enumerable.Empty<PropertyInspection>(), 0));
 
-        var result = await _sut.GetInspectionsByPropertyAsync(PropertyId, 1, 10);
+        var result = await _sut.GetInspectionsByPropertyAsync(PropertyId, OwnerId, 1, 10);
 
         Assert.True(result.IsSuccessful);
         Assert.Equal(0, result.Data!.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetInspectionsByPropertyAsync_WhenCallerIsNotPropertyOwner_ReturnsFailure()
+    {
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId))
+            .ReturnsAsync(CreateProperty());
+
+        var result = await _sut.GetInspectionsByPropertyAsync(PropertyId, Guid.NewGuid(), 1, 10);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Null(result.Data);
+        _unitOfWorkMock.Verify(u => u.PropertyInspectionQueries.GetPagedAsync(
+            It.IsAny<int>(), It.IsAny<int>(),
+            It.IsAny<Expression<Func<PropertyInspection, bool>>>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetInspectionsByPropertyAsync_WhenPropertyMissing_ReturnsFailure()
+    {
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId))
+            .ReturnsAsync((Property?)null);
+
+        var result = await _sut.GetInspectionsByPropertyAsync(PropertyId, OwnerId, 1, 10);
+
+        Assert.False(result.IsSuccessful);
     }
 
     // ── GetInspectionsByCustomerAsync ────────────────────────────

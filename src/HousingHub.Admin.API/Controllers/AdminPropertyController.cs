@@ -68,7 +68,8 @@ public class AdminPropertyController(
             new AdminInspectionFilterDto(1, int.MaxValue));
         var addressTasks = propertyIds.ToDictionary(
             id => id,
-            id => propertyAddressQueryService.GetPropertyAddressByPropertyIdAsync(id));
+            // Admins moderate unpublished listings, so they see those addresses too.
+            id => propertyAddressQueryService.GetPropertyAddressByPropertyIdAsync(id, includeUnpublished: true));
 
         await Task.WhenAll(addressTasks.Values.Cast<Task>().Append(ownersTask).Append(inspCountTask));
 
