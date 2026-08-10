@@ -318,8 +318,9 @@ public class InspectionQueryServiceTests
             It.IsAny<Expression<Func<Property, bool>>>()))
             .ReturnsAsync(new[] { property });
 
-        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetAllAsync(
-            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetManyByAsync(
+            It.IsAny<Expression<Func<PropertyInspection, Guid>>>(),
+            It.IsAny<IEnumerable<Guid>>()))
             .ReturnsAsync(new[] { inspection });
 
         var result = await _sut.GetInspectionsByOwnerAsync(OwnerId, 1, 10);
@@ -339,8 +340,9 @@ public class InspectionQueryServiceTests
             It.IsAny<Expression<Func<Property, bool>>>()))
             .ReturnsAsync(new[] { property });
 
-        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetAllAsync(
-            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetManyByAsync(
+            It.IsAny<Expression<Func<PropertyInspection, Guid>>>(),
+            It.IsAny<IEnumerable<Guid>>()))
             .ReturnsAsync(new[] { inspection });
 
         var file = new HousingHub.Model.Entities.PropertyFile("https://files/owner-view.jpg", PropertyFileType.Image, 1024)
@@ -348,8 +350,9 @@ public class InspectionQueryServiceTests
             PropertyId = property.Id,
             DateUploaded = DateTime.UtcNow
         };
-        _unitOfWorkMock.Setup(u => u.PropertyFileQueries.GetAllAsync(
-            It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, bool>>>()))
+        _unitOfWorkMock.Setup(u => u.PropertyFileQueries.GetManyByAsync(
+            It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, Guid>>>(),
+            It.IsAny<IEnumerable<Guid>>()))
             .ReturnsAsync(new List<HousingHub.Model.Entities.PropertyFile> { file });
 
         var result = await _sut.GetInspectionsByOwnerAsync(OwnerId, 1, 10);
@@ -368,8 +371,9 @@ public class InspectionQueryServiceTests
             It.IsAny<Expression<Func<Property, bool>>>()))
             .ReturnsAsync(new[] { property });
 
-        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetAllAsync(
-            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetManyByAsync(
+            It.IsAny<Expression<Func<PropertyInspection, Guid>>>(),
+            It.IsAny<IEnumerable<Guid>>()))
             .ReturnsAsync(new[] { pendingInspection });
 
         var result = await _sut.GetInspectionsByOwnerAsync(OwnerId, 1, 10, InspectionStatus.Pending);
@@ -390,8 +394,9 @@ public class InspectionQueryServiceTests
             It.IsAny<Expression<Func<Property, bool>>>()))
             .ReturnsAsync(new[] { property });
 
-        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetAllAsync(
-            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetManyByAsync(
+            It.IsAny<Expression<Func<PropertyInspection, Guid>>>(),
+            It.IsAny<IEnumerable<Guid>>()))
             .ReturnsAsync(inspections);
 
         var result = await _sut.GetInspectionsByOwnerAsync(OwnerId, 1, 2);

@@ -363,7 +363,9 @@ public class ChatQueryServiceTests
     private void SetupParticipants(List<Customer> customers)
     {
         _unitOfWorkMock
-            .Setup(u => u.CustomerQueries.GetAllAsync(It.IsAny<Expression<Func<Customer, bool>>>()))
+            .Setup(u => u.CustomerQueries.GetManyByAsync(
+                It.IsAny<Expression<Func<Customer, Guid>>>(),
+                It.IsAny<IEnumerable<Guid>>()))
             .ReturnsAsync(customers);
     }
 
@@ -391,7 +393,9 @@ public class ChatQueryServiceTests
     private void SetupMessageSenders(List<Customer> customers)
     {
         _unitOfWorkMock
-            .Setup(u => u.CustomerQueries.GetAllAsync(It.IsAny<Expression<Func<Customer, bool>>>()))
+            .Setup(u => u.CustomerQueries.GetManyByAsync(
+                It.IsAny<Expression<Func<Customer, Guid>>>(),
+                It.IsAny<IEnumerable<Guid>>()))
             .ReturnsAsync(customers);
     }
 }
