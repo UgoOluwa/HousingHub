@@ -88,7 +88,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in Register: {Message}", ex.Message);
-            return new BaseResponse<CustomerDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -105,11 +105,14 @@ public class AuthService : IAuthService
             // Whether a sign-in method is available is decided by the credentials the
             // account actually holds, not by which provider created it — an account can
             // hold both a password and a linked Google identity.
+            // Deliberately identical to a wrong password. Distinguishing "this account
+            // exists but has no password" confirmed both that the address is registered
+            // and that it is a Google-only account — a useful pair of facts for an
+            // attacker, and not something a legitimate user needs at this point. The
+            // reset flow handles adding a password and says so in its own copy.
             if (string.IsNullOrEmpty(customer.PasswordHash))
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty,
-                    string.IsNullOrEmpty(customer.GoogleId)
-                        ? ResponseMessages.InvalidCredentials
-                        : ResponseMessages.AccountHasNoPassword);
+                    ResponseMessages.InvalidCredentials);
 
             if (!_passwordHasher.Verify(request.Password, customer.PasswordHash))
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidCredentials);
@@ -127,7 +130,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in Login: {Message}", ex.Message);
-            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -137,13 +140,15 @@ public class AuthService : IAuthService
         {
             var customer = await _unitOfWork.CustomerQueries.GetByEmailAsync(request.Email);
 
+            // Same response as a bad token: an unknown address must not be
+            // distinguishable from a wrong code, or this becomes a registration oracle.
             if (customer == null)
-                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.EmailVerificationFailed);
 
             if (customer.EmailVerified)
                 return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.EmailAlreadyVerified);
 
-            if (customer.EmailVerificationToken != request.Token
+            if (!FixedTimeEquals(customer.EmailVerificationToken, request.Token)
                 || customer.EmailVerificationTokenExpiry == null
                 || customer.EmailVerificationTokenExpiry < DateTime.UtcNow)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.EmailVerificationFailed);
@@ -160,7 +165,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in VerifyEmail: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -196,7 +201,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in ForgotPassword: {Message}", ex.Message);
-            return new BaseResponse<string>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<string>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -206,10 +211,12 @@ public class AuthService : IAuthService
         {
             var customer = await _unitOfWork.CustomerQueries.GetByEmailAsync(request.Email);
 
+            // Same response as an invalid token, so this cannot be used to test whether
+            // an address is registered.
             if (customer == null)
-                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.PasswordResetFailed);
 
-            if (customer.PasswordResetToken != request.Token
+            if (!FixedTimeEquals(customer.PasswordResetToken, request.Token)
                 || customer.PasswordResetTokenExpiry == null
                 || customer.PasswordResetTokenExpiry < DateTime.UtcNow)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.PasswordResetFailed);
@@ -234,7 +241,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in ResetPassword: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -271,7 +278,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in ChangePassword: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -337,7 +344,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in GoogleSignIn: {Message}", ex.Message);
-            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -422,7 +429,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in GoogleSignInFromClaims: {Message}", ex.Message);
-            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -465,7 +472,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in SetAccountType: {Message}", ex.Message);
-            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -530,7 +537,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in RefreshToken: {Message}", ex.Message);
-            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -621,6 +628,23 @@ public class AuthService : IAuthService
         }
     }
 
+    /// <summary>
+    /// Length-independent, constant-time comparison for secret values.
+    /// </summary>
+    /// <remarks>
+    /// Ordinary string equality short-circuits at the first differing character, which
+    /// leaks how much of a guess was correct. These tokens are 256-bit so the practical
+    /// risk is small, but the correct comparison costs nothing.
+    /// </remarks>
+    private static bool FixedTimeEquals(string? a, string? b)
+    {
+        if (a is null || b is null) return false;
+
+        return CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(a),
+            System.Text.Encoding.UTF8.GetBytes(b));
+    }
+
     private static string HashToken(string rawToken)
     {
         byte[] hashBytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(rawToken));
@@ -639,8 +663,17 @@ public class AuthService : IAuthService
         {
             var customer = await _unitOfWork.CustomerQueries.GetByEmailAsync(email);
 
+            // An unknown address gets the same shape as a successful send — including
+            // the cooldown value, so the client's countdown behaves identically — rather
+            // than "customer not found", which turned this into a registration oracle.
+            //
+            // Note: the "already verified" branch below still reveals that an address is
+            // registered. That is a deliberate trade: it is genuinely useful to tell
+            // someone they can just log in, registration necessarily leaks the same fact
+            // anyway, and this endpoint is now rate limited.
             if (customer == null)
-                return new BaseResponse<int>(0, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
+                return new BaseResponse<int>((int)ResendVerificationCooldown.TotalSeconds, true, string.Empty,
+                    "Email verification link sent successfully.");
 
             if (customer.EmailVerified)
                 return new BaseResponse<int>(0, false, string.Empty, ResponseMessages.EmailAlreadyVerified);
@@ -671,7 +704,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in ResendEmailVerificationToken: {Message}", ex.Message);
-            return new BaseResponse<int>(0, false, string.Empty, ex.Message);
+            return new BaseResponse<int>(0, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 

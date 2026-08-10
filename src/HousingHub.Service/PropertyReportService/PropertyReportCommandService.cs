@@ -59,7 +59,7 @@ public class PropertyReportCommandService : IPropertyReportCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in CreateReportAsync: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

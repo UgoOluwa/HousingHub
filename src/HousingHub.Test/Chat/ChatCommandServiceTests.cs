@@ -372,7 +372,9 @@ public class ChatCommandServiceTests
         var result = await _sut.SendMessageAsync(dto, SenderId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("DB error", result.Message);
+        // The raw exception text is no longer returned to callers — it is logged
+        // server-side and the client gets a generic message instead.
+        Assert.Equal(ResponseMessages.UnexpectedError, result.Message);
     }
 
     // ── MarkConversationAsReadAsync ──────────────────────────────────────
@@ -467,7 +469,9 @@ public class ChatCommandServiceTests
         var result = await _sut.MarkConversationAsReadAsync(ConversationId, RecipientId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("DB error", result.Message);
+        // The raw exception text is no longer returned to callers — it is logged
+        // server-side and the client gets a generic message instead.
+        Assert.Equal(ResponseMessages.UnexpectedError, result.Message);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────

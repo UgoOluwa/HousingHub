@@ -46,7 +46,7 @@ public class PropertyAlertPreferenceCommandService : IPropertyAlertPreferenceCom
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in CreateAsync: {Message}", ex.Message);
-            return new BaseResponse<PropertyAlertPreferenceDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PropertyAlertPreferenceDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -69,7 +69,7 @@ public class PropertyAlertPreferenceCommandService : IPropertyAlertPreferenceCom
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in DeleteAsync: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

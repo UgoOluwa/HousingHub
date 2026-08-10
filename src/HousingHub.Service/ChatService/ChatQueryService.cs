@@ -80,7 +80,7 @@ public class ChatQueryService : IChatQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetConversationsAsync: {Message}", ex.Message);
-            return new BaseResponse<List<ConversationDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<List<ConversationDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -139,7 +139,7 @@ public class ChatQueryService : IChatQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetMessagesAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<ChatMessageDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<ChatMessageDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

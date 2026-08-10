@@ -64,7 +64,7 @@ public class PropertyAddressCommandService : IPropertyAddressCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in CreatePropertyAddress: {Message}", ex.Message);
-            return new BaseResponse<PropertyAddressDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PropertyAddressDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

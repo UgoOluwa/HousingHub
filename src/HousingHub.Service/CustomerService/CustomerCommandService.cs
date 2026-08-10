@@ -61,7 +61,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in CreateCustomer: {Message}", ex.Message);
-            return new BaseResponse<CustomerDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -93,7 +93,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in CreateCustomer: {Message}", ex.Message);
-            return new BaseResponse<CustomerDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -118,7 +118,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in LoginCustomer: {Message}", ex.Message);
-            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -152,7 +152,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in UpdateCustomer: {Message}", ex.Message);
-            return new BaseResponse<CustomerDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -180,7 +180,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in UpdateProfile: {Message}", ex.Message);
-            return new BaseResponse<CustomerDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -227,7 +227,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in UpdateProfilePhoto: {Message}", ex.Message);
-            return new BaseResponse<string?>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<string?>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -271,7 +271,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in SubmitKyc: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -325,7 +325,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in VerifyKyc: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -346,7 +346,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in DeleteCustomer: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -374,7 +374,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in SuspendCustomer: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -398,7 +398,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in ReactivateCustomer: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -426,7 +426,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in SetManagedByHousingHubAsync: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

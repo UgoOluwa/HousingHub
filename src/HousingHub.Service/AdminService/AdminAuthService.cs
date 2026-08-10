@@ -43,7 +43,11 @@ public class AdminAuthService(
         if (admin.OtpRequestedAt.HasValue && DateTime.UtcNow - admin.OtpRequestedAt.Value < OtpResendCooldown)
             return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.OtpSent);
 
-        string code = Random.Shared.Next(0, 1_000_000).ToString("D6");
+        // Must be cryptographically random: admin sign-in is OTP-only, so this six
+        // digits is the entire credential. Random.Shared is a seeded, process-wide
+        // xoshiro256** stream — observing a handful of outputs is enough to recover its
+        // state and predict the codes issued to other admins.
+        string code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
         admin.OtpCode = code;
         admin.OtpExpiresAt = DateTime.UtcNow.Add(OtpValidity);
         admin.OtpRequestedAt = DateTime.UtcNow;
@@ -72,7 +76,7 @@ public class AdminAuthService(
             || admin.OtpExpiresAt < DateTime.UtcNow)
             return new BaseResponse<AdminLoginResultDto>(null, false, string.Empty, ResponseMessages.OtpInvalidOrExpired);
 
-        if (admin.OtpCode != code)
+        if (!FixedTimeEquals(admin.OtpCode, code))
         {
             admin.OtpAttempts++;
 
@@ -210,6 +214,23 @@ public class AdminAuthService(
             refreshToken.DateModified = DateTime.UtcNow;
             await dynamoDb.SaveAsync(refreshToken);
         }
+    }
+
+    /// <summary>
+    /// Length-independent, constant-time string comparison for secrets.
+    /// </summary>
+    /// <remarks>
+    /// The practical risk here is low — the OTP has an attempt limit and tokens are
+    /// 256-bit — but ordinary string equality short-circuits on the first differing
+    /// character, which is a timing signal, and the fix is free.
+    /// </remarks>
+    private static bool FixedTimeEquals(string? a, string? b)
+    {
+        if (a is null || b is null) return false;
+
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(a),
+            Encoding.UTF8.GetBytes(b));
     }
 
     private static string HashToken(string rawToken)

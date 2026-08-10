@@ -43,7 +43,7 @@ public class NotificationQueryService : INotificationQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetNotificationsAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<NotificationDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<NotificationDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -59,7 +59,7 @@ public class NotificationQueryService : INotificationQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetUnreadCountAsync: {Message}", ex.Message);
-            return new BaseResponse<int>(0, false, string.Empty, ex.Message);
+            return new BaseResponse<int>(0, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

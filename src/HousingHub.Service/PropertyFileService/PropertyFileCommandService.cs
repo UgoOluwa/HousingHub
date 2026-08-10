@@ -70,7 +70,7 @@ public class PropertyFileCommandService : IPropertyFileCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in CreatePropertyFile: {Message}", ex.Message);
-            return new BaseResponse<PropertyFileDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PropertyFileDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -124,7 +124,7 @@ public class PropertyFileCommandService : IPropertyFileCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in UploadPropertyFiles: {Message}", ex.Message);
-            return new BaseResponse<List<PropertyFileDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<List<PropertyFileDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -160,7 +160,7 @@ public class PropertyFileCommandService : IPropertyFileCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in DeletePropertyFile: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 

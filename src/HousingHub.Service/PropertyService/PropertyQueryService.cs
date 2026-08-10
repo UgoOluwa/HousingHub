@@ -60,7 +60,7 @@ public class PropertyQueryService : IPropertyQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetPropertyAsync: {Message}", ex.Message);
-            return new BaseResponse<PropertyDto?>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PropertyDto?>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -81,7 +81,7 @@ public class PropertyQueryService : IPropertyQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetPropertyByPropertyIdAsync: {Message}", ex.Message);
-            return new BaseResponse<PropertyDto?>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PropertyDto?>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -99,7 +99,7 @@ public class PropertyQueryService : IPropertyQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetAllPropertiesAsync: {Message}", ex.Message);
-            return new BaseResponse<List<PropertyDto>>(new List<PropertyDto>(), false, string.Empty, ex.Message);
+            return new BaseResponse<List<PropertyDto>>(new List<PropertyDto>(), false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -186,7 +186,7 @@ public class PropertyQueryService : IPropertyQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetAllPropertiesPaginatedAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<PropertyDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<PropertyDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -205,7 +205,7 @@ public class PropertyQueryService : IPropertyQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetPropertiesByOwnerAsync: {Message}", ex.Message);
-            return new BaseResponse<List<PropertyDto>>(new List<PropertyDto>(), false, string.Empty, ex.Message);
+            return new BaseResponse<List<PropertyDto>>(new List<PropertyDto>(), false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -236,7 +236,7 @@ public class PropertyQueryService : IPropertyQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetPropertiesByOwnerPaginatedAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<PropertyDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<PropertyDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -259,7 +259,7 @@ public class PropertyQueryService : IPropertyQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetNewPropertiesAsync: {Message}", ex.Message);
-            return new BaseResponse<List<PropertyDto>>(new List<PropertyDto>(), false, string.Empty, ex.Message);
+            return new BaseResponse<List<PropertyDto>>(new List<PropertyDto>(), false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -283,7 +283,7 @@ public class PropertyQueryService : IPropertyQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetTrendingPropertiesAsync: {Message}", ex.Message);
-            return new BaseResponse<List<PropertyDto>>(new List<PropertyDto>(), false, string.Empty, ex.Message);
+            return new BaseResponse<List<PropertyDto>>(new List<PropertyDto>(), false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -315,7 +315,7 @@ public class PropertyQueryService : IPropertyQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetNearbyPropertiesAsync: {Message}", ex.Message);
-            return new BaseResponse<List<PropertyDto>>(new List<PropertyDto>(), false, string.Empty, ex.Message);
+            return new BaseResponse<List<PropertyDto>>(new List<PropertyDto>(), false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -386,7 +386,7 @@ public class PropertyQueryService : IPropertyQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetOwnerDashboardStatsAsync: {Message}", ex.Message);
-            return new BaseResponse<OwnerDashboardStatsDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<OwnerDashboardStatsDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

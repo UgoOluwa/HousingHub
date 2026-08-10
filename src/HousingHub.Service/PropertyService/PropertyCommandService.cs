@@ -205,7 +205,7 @@ public class PropertyCommandService : IPropertyCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in CreateProperty: {Message}", ex.Message);
-            return new BaseResponse<CreatePropertyResultDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CreatePropertyResultDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -281,7 +281,7 @@ public class PropertyCommandService : IPropertyCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in DismissDuplicateFlagAsync: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -382,7 +382,7 @@ public class PropertyCommandService : IPropertyCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in UpdateProperty: {Message}", ex.Message);
-            return new BaseResponse<PropertyDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PropertyDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -412,7 +412,7 @@ public class PropertyCommandService : IPropertyCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in DeleteProperty: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -478,7 +478,7 @@ public class PropertyCommandService : IPropertyCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in SetPropertyPublishedAsync: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -558,7 +558,7 @@ public class PropertyCommandService : IPropertyCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in AdminDeletePropertyAsync: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -593,7 +593,7 @@ public class PropertyCommandService : IPropertyCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in SetPropertyVerifiedAsync: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

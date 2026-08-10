@@ -129,7 +129,7 @@ public class InspectionCommandService : IInspectionCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in ScheduleInspectionAsync: {Message}", ex.Message);
-            return new BaseResponse<InspectionDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -216,7 +216,7 @@ public class InspectionCommandService : IInspectionCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in RespondToInspectionAsync: {Message}", ex.Message);
-            return new BaseResponse<InspectionDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -274,7 +274,7 @@ public class InspectionCommandService : IInspectionCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in HandOffToHousingHubAsync: {Message}", ex.Message);
-            return new BaseResponse<InspectionDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -320,7 +320,7 @@ public class InspectionCommandService : IInspectionCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in AssignInspectionToStaffAsync: {Message}", ex.Message);
-            return new BaseResponse<InspectionDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -409,7 +409,7 @@ public class InspectionCommandService : IInspectionCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in RescheduleInspectionAsync: {Message}", ex.Message);
-            return new BaseResponse<InspectionDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -495,7 +495,7 @@ public class InspectionCommandService : IInspectionCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in RespondToRescheduleAsync: {Message}", ex.Message);
-            return new BaseResponse<InspectionDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -545,7 +545,7 @@ public class InspectionCommandService : IInspectionCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in CancelInspectionAsync: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -601,7 +601,7 @@ public class InspectionCommandService : IInspectionCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in SendDueInspectionRemindersAsync: {Message}", ex.Message);
-            return new BaseResponse<int>(0, false, string.Empty, ex.Message);
+            return new BaseResponse<int>(0, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 

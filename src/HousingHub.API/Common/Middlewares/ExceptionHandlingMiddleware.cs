@@ -29,7 +29,15 @@ internal class ExceptionHandlingMiddleware : IMiddleware
     private static async Task HandleExceptionAsync(HttpContext httpContext, Exception exception)
     {
         var statusCode = GetStatusCode(exception);
-        var response = new BaseErrorResponse(GetErrors(exception), statusCode.ToString(), exception.Message);
+
+        // Validation failures are written by us and safe to show. Anything else is an
+        // unhandled exception whose message can carry table names, driver detail or
+        // other internals — the full exception is already logged above.
+        var message = exception is ValidationException
+            ? exception.Message
+            : ResponseMessages.UnexpectedError;
+
+        var response = new BaseErrorResponse(GetErrors(exception), statusCode.ToString(), message);
         httpContext.Response.ContentType = "application/json";
         httpContext.Response.StatusCode = statusCode;
         await httpContext.Response.WriteAsync(JsonSerializer.Serialize(response));

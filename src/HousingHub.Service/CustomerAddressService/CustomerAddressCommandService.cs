@@ -48,7 +48,7 @@ public class CustomerAddressCommandService : ICustomerAddressCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in CreateCustomerAddress: {Message}", ex.Message);
-            return new BaseResponse<CustomerAddressDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CustomerAddressDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

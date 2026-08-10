@@ -200,7 +200,9 @@ public class ChatQueryServiceTests
         var result = await _sut.GetConversationsAsync(UserId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("DB error", result.Message);
+        // The raw exception text is no longer returned to callers — it is logged
+        // server-side and the client gets a generic message instead.
+        Assert.Equal(ResponseMessages.UnexpectedError, result.Message);
     }
 
     // ── GetMessagesAsync ─────────────────────────────────────────────────
@@ -344,7 +346,9 @@ public class ChatQueryServiceTests
         var result = await _sut.GetMessagesAsync(ConversationId, UserId, 1, 10);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("DB error", result.Message);
+        // The raw exception text is no longer returned to callers — it is logged
+        // server-side and the client gets a generic message instead.
+        Assert.Equal(ResponseMessages.UnexpectedError, result.Message);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────

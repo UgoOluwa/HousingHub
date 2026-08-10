@@ -62,7 +62,7 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetInspectionAsync: {Message}", ex.Message);
-            return new BaseResponse<InspectionDto?>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<InspectionDto?>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -102,7 +102,7 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetInspectionAsync: {Message}", ex.Message);
-            return new BaseResponse<InspectionDto?>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<InspectionDto?>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -137,7 +137,7 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetInspectionsByPropertyAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<InspectionDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<InspectionDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -162,7 +162,7 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetInspectionsByCustomerAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<InspectionDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<InspectionDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -206,7 +206,7 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetInspectionsByOwnerAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<OwnerInspectionDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<OwnerInspectionDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -311,7 +311,7 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetAllInspectionsPaginatedAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<AdminInspectionListDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<AdminInspectionListDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -371,7 +371,7 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetTodaysInspectionsPaginatedAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<AdminTodayInspectionDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<AdminTodayInspectionDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -447,7 +447,7 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetRecentActivityAsync: {Message}", ex.Message);
-            return new BaseResponse<List<AdminRecentActivityDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<List<AdminRecentActivityDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

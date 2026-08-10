@@ -17,6 +17,7 @@ using HousingHub.Repository;
 using HousingHub.Service;
 using HousingHub.Service.NotificationService.Interfaces;
 using HousingHub.Service.ChatService.Interfaces;
+using HousingHub.Service.Commons.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
@@ -77,7 +78,12 @@ namespace HousingHub.API
 
             builder.Services.AddAppRateLimiting();
             builder.Services.AddHealthChecks();
-            builder.Services.AddControllers();
+            builder.Services.AddControllers(options =>
+            {
+                // Bounds page size everywhere at once — see the filter for why this is
+                // global rather than per-endpoint.
+                options.Filters.Add<PaginationClampFilter>();
+            });
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddTransient<IConfigureOptions<SwaggerGenOptions>, ConfigureSwaggerOptions>();

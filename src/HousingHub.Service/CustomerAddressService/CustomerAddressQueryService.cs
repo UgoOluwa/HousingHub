@@ -35,7 +35,7 @@ public class CustomerAddressQueryService : ICustomerAddressQueryService
         }
         catch (Exception ex) {
             _logger.LogError(ex, "An error occurred in GetAddressAsync: {Message}", ex.Message);
-            return new BaseResponse<CustomerAddressDto?>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CustomerAddressDto?>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }       
     }
 
@@ -54,7 +54,7 @@ public class CustomerAddressQueryService : ICustomerAddressQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetAllCustomerAddressesAsync: {Message}", ex.Message);
-            return new BaseResponse<List<CustomerAddressDto>>(new List<CustomerAddressDto>(), false, string.Empty, ex.Message);
+            return new BaseResponse<List<CustomerAddressDto>>(new List<CustomerAddressDto>(), false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -73,7 +73,7 @@ public class CustomerAddressQueryService : ICustomerAddressQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetCustomerAddressByCustomerIdAsync: {Message}", ex.Message);
-            return new BaseResponse<CustomerAddressDto?>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CustomerAddressDto?>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

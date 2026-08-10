@@ -37,7 +37,7 @@ public class PropertyFileQueryService : IPropertyFileQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetPropertyAsync: {Message}", ex.Message);
-            return new BaseResponse<PropertyFileDto?>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PropertyFileDto?>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -73,7 +73,7 @@ public class PropertyFileQueryService : IPropertyFileQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetAllPropertiesAsync: {Message}", ex.Message);
-            return new BaseResponse<List<PropertyFileDto>>(new List<PropertyFileDto>(), false, string.Empty, ex.Message);
+            return new BaseResponse<List<PropertyFileDto>>(new List<PropertyFileDto>(), false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

@@ -14,6 +14,7 @@ using HousingHub.Repository;
 using HousingHub.Service;
 using HousingHub.Service.AdminService;
 using HousingHub.Service.ChatService.Interfaces;
+using HousingHub.Service.Commons.Web;
 using HousingHub.Service.Commons.Authentication;
 using HousingHub.Service.NotificationService.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -66,7 +67,12 @@ public static class Program
 
         builder.Services.AddAdminRateLimiting();
 
-        builder.Services.AddControllers();
+        builder.Services.AddControllers(options =>
+        {
+            // Bounds page size everywhere at once — see the filter for why this is
+            // global rather than per-endpoint.
+            options.Filters.Add<PaginationClampFilter>();
+        });
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen(c =>
         {

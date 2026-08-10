@@ -41,7 +41,7 @@ public class PropertyAddressQueryService : IPropertyAddressQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetPropertyAddressAsync: {Message}", ex.Message);
-            return new BaseResponse<PropertyAddressDto?>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PropertyAddressDto?>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -64,7 +64,7 @@ public class PropertyAddressQueryService : IPropertyAddressQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetPropertyAddressByPropertyIdAsync: {Message}", ex.Message);
-            return new BaseResponse<PropertyAddressDto?>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PropertyAddressDto?>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
