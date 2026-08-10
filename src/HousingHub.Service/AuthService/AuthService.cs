@@ -56,11 +56,24 @@ public class AuthService : IAuthService
     {
         try
         {
-            bool exists = await _unitOfWork.CustomerQueries.GetByEmailAsync(request.Email) != null
-                       || await _unitOfWork.CustomerQueries.GetByPhoneNumberAsync(request.PhoneNumber) != null;
+            var existingByEmail = await _unitOfWork.CustomerQueries.GetByEmailAsync(request.Email);
+            var existing = existingByEmail
+                        ?? await _unitOfWork.CustomerQueries.GetByPhoneNumberAsync(request.PhoneNumber);
 
-            if (exists)
-                return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.CustomerAlreadyExists);
+            if (existing is not null)
+            {
+                // Do not reveal that the address is taken. Returning "customer already
+                // exists" turned registration into an oracle: submit an address, learn
+                // whether it has an account here.
+                //
+                // Instead the real account holder is emailed, which is both the
+                // security notification and the recovery path for someone who forgot
+                // they had signed up. Best-effort — a mail failure must not change the
+                // response, or the timing and outcome would leak the same fact again.
+                await SafeSendExistingAccountNoticeAsync(existing);
+
+                return RegistrationAccepted();
+            }
 
             string passwordHash = _passwordHasher.Hash(request.Password);
 
@@ -81,14 +94,59 @@ public class AuthService : IAuthService
 
             await _emailService.SendEmailVerificationAsync(customer.Email, customer.FirstName, customer.EmailVerificationToken!);
 
-            var dto = _mapper.Map<CustomerDto>(customer);
-            return new BaseResponse<CustomerDto>(dto, true, string.Empty,
-                ResponseMessages.SetCreationSuccessMessage("customer") + ". Please verify your email.");
+            // Deliberately returns no customer data. Echoing the created CustomerDto
+            // here while the duplicate path returns null would make the two responses
+            // trivially distinguishable, undoing the whole point. The client only
+            // reads IsSuccessful and navigates using the address it already submitted.
+            return RegistrationAccepted();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in Register: {Message}", ex.Message);
             return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
+        }
+    }
+
+    /// <summary>
+    /// The single response registration ever gives, whether the address was free or
+    /// already taken. Both paths must return this exact value — any difference in
+    /// data, flag or wording re-opens the enumeration hole.
+    /// </summary>
+    private static BaseResponse<CustomerDto> RegistrationAccepted() =>
+        new(null, true, string.Empty,
+            "Account created. Please check your email to verify your address.");
+
+    /// <summary>
+    /// The response resend-verification gives for an unknown address, an
+    /// already-verified address, and a genuine send alike.
+    /// </summary>
+    /// <remarks>
+    /// Carries the full cooldown so the client's countdown behaves the same in every
+    /// case. One residual signal remains: a request inside an existing cooldown
+    /// returns the *remaining* seconds, which differs from the full value an unknown
+    /// address gets. Closing that would mean tracking cooldown state for addresses
+    /// that have no account, which is its own data problem; the rate limiter makes
+    /// exploiting the timing difference expensive in the meantime.
+    /// </remarks>
+    private static BaseResponse<int> ResendAccepted() =>
+        new((int)ResendVerificationCooldown.TotalSeconds, true, string.Empty,
+            "Email verification link sent successfully.");
+
+    /// <summary>
+    /// Tells an existing account holder that someone tried to register with their
+    /// address, or that it is already verified. Swallows failures so the caller's
+    /// response never varies.
+    /// </summary>
+    private async Task SafeSendExistingAccountNoticeAsync(Customer existing)
+    {
+        try
+        {
+            await _emailService.SendRegistrationAttemptOnExistingAccountAsync(
+                existing.Email, existing.FirstName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not send existing-account notice to {CustomerId}", existing.Id);
         }
     }
 
@@ -663,20 +721,23 @@ public class AuthService : IAuthService
         {
             var customer = await _unitOfWork.CustomerQueries.GetByEmailAsync(email);
 
-            // An unknown address gets the same shape as a successful send — including
-            // the cooldown value, so the client's countdown behaves identically — rather
-            // than "customer not found", which turned this into a registration oracle.
-            //
-            // Note: the "already verified" branch below still reveals that an address is
-            // registered. That is a deliberate trade: it is genuinely useful to tell
-            // someone they can just log in, registration necessarily leaks the same fact
-            // anyway, and this endpoint is now rate limited.
+            // Unknown address: same response as a successful send, including the
+            // cooldown value so the client countdown behaves identically. Anything
+            // else turns this into a registration oracle.
             if (customer == null)
-                return new BaseResponse<int>((int)ResendVerificationCooldown.TotalSeconds, true, string.Empty,
-                    "Email verification link sent successfully.");
+                return ResendAccepted();
 
+            // Already verified: also the same response. Telling the caller "already
+            // verified" confirmed both that the address is registered and that it is
+            // usable, which is precisely what an attacker enumerating addresses wants.
+            //
+            // The real account holder is not left confused — they are emailed to say
+            // the address is already verified and they can simply sign in.
             if (customer.EmailVerified)
-                return new BaseResponse<int>(0, false, string.Empty, ResponseMessages.EmailAlreadyVerified);
+            {
+                await SafeSendExistingAccountNoticeAsync(customer);
+                return ResendAccepted();
+            }
 
             if (customer.LastVerificationEmailSentAt is { } lastSent)
             {
@@ -698,8 +759,7 @@ public class AuthService : IAuthService
 
             await _emailService.SendEmailVerificationAsync(customer.Email, customer.FirstName, customer.EmailVerificationToken!);
 
-            return new BaseResponse<int>((int)ResendVerificationCooldown.TotalSeconds, true, string.Empty,
-                "Email verification link sent successfully.");
+            return ResendAccepted();
         }
         catch (Exception ex)
         {
