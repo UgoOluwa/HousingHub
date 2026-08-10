@@ -264,12 +264,31 @@ public class AuthController : ControllerBase
             return Ok(payload);
         }
 
-        var separator = returnUrl.Contains('?') ? "&" : "?";
-        var query = error != null
-            ? $"error={Uri.EscapeDataString(error)}"
-            : $"token={Uri.EscapeDataString(token ?? string.Empty)}";
+        if (error != null)
+        {
+            var separator = returnUrl.Contains('?') ? "&" : "?";
+            return Redirect($"{returnUrl}{separator}error={Uri.EscapeDataString(error)}");
+        }
 
-        return Redirect($"{returnUrl}{separator}{query}");
+        // The token goes in the fragment, not the query string.
+        //
+        // Everything after '#' is stripped by the browser before the request is sent,
+        // so a fragment never reaches a server and never appears in an access log. It
+        // is also excluded from the Referer header of whatever the page loads next.
+        // A query parameter has neither property: `?token=eyJ...` would be written in
+        // plaintext into API Gateway and CloudFront logs, and handed to any third-party
+        // origin the landing page happens to talk to — both of which outlive the
+        // token's own 30-minute lifetime by a wide margin.
+        //
+        // What this does not fix: the fragment is still in browser history. Closing
+        // that needs a single-use exchange code redeemed over POST, which means server
+        // state with a TTL. Worth doing, and noted in the sweep document — but the
+        // token is currently persisted to localStorage on arrival anyway (see
+        // docs/deferred-cookie-migration.md), so history is not the binding constraint
+        // on a shared machine until that changes.
+        var fragment = $"token={Uri.EscapeDataString(token ?? string.Empty)}";
+
+        return Redirect($"{returnUrl}#{fragment}");
     }
 
     /// <summary>
