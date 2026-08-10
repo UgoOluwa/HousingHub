@@ -28,6 +28,7 @@
     <ProjectReference Include="..\HousingHub.Service\HousingHub.Service.csproj" />
     <ProjectReference Include="..\HousingHub.Model\HousingHub.Model.csproj" />
     <ProjectReference Include="..\HousingHub.Data\HousingHub.Data.csproj" />
+    <ProjectReference Include="..\HousingHub.Repository\HousingHub.Repository.csproj" />
     <ProjectReference Include="..\HousingHub.Core\HousingHub.Core.csproj" />
   </ItemGroup>
 

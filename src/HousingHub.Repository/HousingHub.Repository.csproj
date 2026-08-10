@@ -7,6 +7,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- DynamoIndexMap and EqualityPredicateExtractor are internal but are the
+         correctness-critical part of query narrowing, so they are unit tested.
+         Same arrangement HousingHub.Service already uses. -->
+    <InternalsVisibleTo Include="HousingHub.Test" />
+  </ItemGroup>
+
+  <ItemGroup>
 <PackageReference Include="AWSSDK.DynamoDBv2" Version="4.0.17.8" />
     <PackageReference Include="SonarAnalyzer.CSharp" Version="10.23.0.137933">
       <PrivateAssets>all</PrivateAssets>

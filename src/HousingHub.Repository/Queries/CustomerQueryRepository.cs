@@ -31,21 +31,24 @@ public class CustomerQueryRepository : GenericQueryRepository<Customer>, ICustom
     }
 
     /// <summary>
-    /// Queries the index for the key, then loads the item by its primary key.
-    ///
-    /// The second read is deliberate: a GSI only returns the attributes it
-    /// projects, and auth needs fields such as PasswordHash that a KEYS_ONLY or
-    /// INCLUDE projection would omit. Hydrating keeps this correct whatever the
-    /// index projection is, and is still vastly cheaper than scanning. If the
-    /// indexes are confirmed as projecting ALL, the load can be dropped.
+    /// Queries the index for the key.
     /// </summary>
+    /// <remarks>
+    /// This used to follow up with a GetItem to hydrate the row, guarding against a
+    /// KEYS_ONLY or INCLUDE projection omitting fields auth needs such as
+    /// PasswordHash. Every GSI is created with <c>ProjectionType.ALL</c>
+    /// (see <c>DynamoDbTableInitializer.CreateGsi</c>), so the query already returns
+    /// the complete item and the second read was pure overhead — on the login path,
+    /// which is the hottest read in the system.
+    ///
+    /// If a future index is ever created with a narrower projection, restore the
+    /// hydrating load for it.
+    /// </remarks>
     private async Task<Customer?> FindByIndexAsync(string indexName, string hashKeyValue)
     {
         if (string.IsNullOrWhiteSpace(hashKeyValue)) return null;
 
         var matches = await QueryByIndexAsync(indexName, hashKeyValue);
-        var match = matches.FirstOrDefault();
-
-        return match == null ? null : await GetByIdAsync(match.Id);
+        return matches.FirstOrDefault();
     }
 }

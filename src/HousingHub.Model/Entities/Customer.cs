@@ -24,6 +24,16 @@ public class Customer : BaseEntity
     /// </summary>
     public DateTime? LastPasswordResetRequestedAt { get; set; }
 
+    /// <summary>
+    /// Google subject id for a linked Google identity, null otherwise.
+    /// </summary>
+    /// <remarks>
+    /// GoogleId-index is created on the Customers table but the attribute was never
+    /// declared here, so lookups by GoogleId fell back to a full table scan. DynamoDB
+    /// GSIs are sparse, so only the rows that actually have a Google identity are
+    /// indexed.
+    /// </remarks>
+    [DynamoDBGlobalSecondaryIndexHashKey("GoogleId-index")]
     public string? GoogleId { get; set; }
     public AuthProvider AuthProvider { get; set; } = AuthProvider.Local;
 
