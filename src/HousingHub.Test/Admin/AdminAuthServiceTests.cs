@@ -385,6 +385,120 @@ public class AdminAuthServiceTests
         Assert.Null(result);
     }
 
+    // ── LogoutAsync ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task LogoutAsync_ValidToken_RevokesIt()
+    {
+        var admin = MakeAdmin();
+        var existing = new AdminRefreshTokenEntity
+        {
+            Id = Guid.NewGuid(),
+            AdminId = admin.Id,
+            TokenHash = "hash",
+            ExpiresAt = DateTime.UtcNow.AddDays(10),
+            IsRevoked = false
+        };
+        SetupQueryRefreshToken("TokenHash-index", new[] { existing });
+
+        await _sut.LogoutAsync("some-admin-refresh-token");
+
+        Assert.True(existing.IsRevoked);
+        _dynamoDbMock.Verify(d => d.SaveAsync(existing, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task LogoutAsync_UnknownToken_DoesNotThrowOrSave()
+    {
+        await _sut.LogoutAsync("never-issued");
+
+        _dynamoDbMock.Verify(d => d.SaveAsync(It.IsAny<AdminRefreshTokenEntity>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task LogoutAsync_AlreadyRevokedToken_DoesNotSaveAgain()
+    {
+        var admin = MakeAdmin();
+        var existing = new AdminRefreshTokenEntity
+        {
+            Id = Guid.NewGuid(),
+            AdminId = admin.Id,
+            TokenHash = "hash",
+            ExpiresAt = DateTime.UtcNow.AddDays(10),
+            IsRevoked = true
+        };
+        SetupQueryRefreshToken("TokenHash-index", new[] { existing });
+
+        await _sut.LogoutAsync("already-revoked-token");
+
+        _dynamoDbMock.Verify(d => d.SaveAsync(It.IsAny<AdminRefreshTokenEntity>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task LogoutAsync_AllSessions_RevokesEveryActiveTokenForTheAdmin()
+    {
+        var admin = MakeAdmin();
+        var presented = new AdminRefreshTokenEntity
+        {
+            Id = Guid.NewGuid(),
+            AdminId = admin.Id,
+            TokenHash = "hash",
+            ExpiresAt = DateTime.UtcNow.AddDays(10),
+            IsRevoked = false
+        };
+        var otherActiveToken = new AdminRefreshTokenEntity
+        {
+            Id = Guid.NewGuid(),
+            AdminId = admin.Id,
+            TokenHash = "other-hash",
+            ExpiresAt = DateTime.UtcNow.AddDays(10),
+            IsRevoked = false
+        };
+        SetupQueryRefreshToken("TokenHash-index", new[] { presented });
+        SetupQueryRefreshToken("AdminId-index", new[] { otherActiveToken });
+
+        await _sut.LogoutAsync("some-admin-refresh-token", allSessions: true);
+
+        Assert.True(otherActiveToken.IsRevoked);
+        _dynamoDbMock.Verify(d => d.SaveAsync(otherActiveToken, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task LogoutAsync_EmptyOrWhitespaceToken_DoesNothing(string? refreshToken)
+    {
+        await _sut.LogoutAsync(refreshToken!);
+
+        _dynamoDbMock.Verify(d => d.QueryAsync<AdminRefreshTokenEntity>(It.IsAny<object>(), It.IsAny<DynamoDBOperationConfig>()), Times.Never);
+    }
+
+    // ── DeactivateAdminAsync — session revocation ──────────────────────────────
+
+    [Fact]
+    public async Task DeactivateAdmin_ExistingAdmin_RevokesAllRefreshTokens()
+    {
+        // Deactivation previously only flipped IsActive; the already-issued refresh
+        // token stayed valid, letting a deactivated admin keep minting access tokens.
+        var admin = MakeAdmin(isActive: true);
+        SetupLoad(admin);
+        var activeToken = new AdminRefreshTokenEntity
+        {
+            Id = Guid.NewGuid(),
+            AdminId = admin.Id,
+            TokenHash = "hash",
+            ExpiresAt = DateTime.UtcNow.AddDays(10),
+            IsRevoked = false
+        };
+        SetupQueryRefreshToken("AdminId-index", new[] { activeToken });
+
+        await _sut.DeactivateAdminAsync(admin.Id);
+
+        Assert.True(activeToken.IsRevoked);
+        _dynamoDbMock.Verify(d => d.SaveAsync(activeToken, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     // ── CreateAdminAsync ──────────────────────────────────────────────────────
 
     [Fact]

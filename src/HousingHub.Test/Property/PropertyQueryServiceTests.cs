@@ -579,7 +579,9 @@ public class PropertyQueryServiceTests
 
         Assert.False(result.IsSuccessful);
         Assert.Null(result.Data);
-        Assert.Contains("Connection failed", result.Message);
+        // The raw exception text is no longer returned to callers — it is logged
+        // server-side and the client gets a generic message instead.
+        Assert.Equal(ResponseMessages.UnexpectedError, result.Message);
     }
 
     [Fact]
@@ -594,7 +596,9 @@ public class PropertyQueryServiceTests
         Assert.False(result.IsSuccessful);
         Assert.NotNull(result.Data);
         Assert.Empty(result.Data);
-        Assert.Contains("Timeout", result.Message);
+        // The raw exception text is no longer returned to callers — it is logged
+        // server-side and the client gets a generic message instead.
+        Assert.Equal(ResponseMessages.UnexpectedError, result.Message);
     }
 
     [Fact]
@@ -610,7 +614,9 @@ public class PropertyQueryServiceTests
         Assert.False(result.IsSuccessful);
         Assert.NotNull(result.Data);
         Assert.Empty(result.Data);
-        Assert.Contains("Network error", result.Message);
+        // The raw exception text is no longer returned to callers — it is logged
+        // server-side and the client gets a generic message instead.
+        Assert.Equal(ResponseMessages.UnexpectedError, result.Message);
     }
 
     // ??? GetPropertiesByOwnerPaginatedAsync ? InspectionCount ??????????

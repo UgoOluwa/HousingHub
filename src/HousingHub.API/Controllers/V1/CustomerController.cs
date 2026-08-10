@@ -10,7 +10,9 @@ using HousingHub.Application.Customer.Commands.UploadKycDocument;
 using HousingHub.Application.Customer.Commands.VerifyKyc;
 using HousingHub.Application.Customer.Queries.GetAll;
 using HousingHub.Application.Customer.Queries.GetById;
+using HousingHub.Core.CustomResponses;
 using HousingHub.Model.Enums;
+using HousingHub.Service.Commons.FileStorage;
 using HousingHub.Service.Dtos.Customer;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -24,13 +26,21 @@ namespace HousingHub.API.Controllers.V1
     [Route("api/v{version:apiVersion}/[Controller]")]
     public class CustomerController : ControllerBase
     {
+        /// <summary>How long a KYC document viewing link stays valid.</summary>
+        private static readonly TimeSpan KycDocumentLinkLifetime = TimeSpan.FromMinutes(10);
+
         private readonly ILogger<CustomerController> _logger;
         private readonly IMediator _mediator;
+        private readonly IFileStorageService _fileStorageService;
 
-        public CustomerController(ILogger<CustomerController> logger, IMediator mediator)
+        public CustomerController(
+            ILogger<CustomerController> logger,
+            IMediator mediator,
+            IFileStorageService fileStorageService)
         {
             _logger = logger;
             _mediator = mediator;
+            _fileStorageService = fileStorageService;
         }
 
         // ─── Read / Delete ────────────────────────────────────────────────
@@ -111,6 +121,44 @@ namespace HousingHub.API.Controllers.V1
             var enrichedCommand = command with { CustomerId = userId.Value };
             var response = await _mediator.Send(enrichedCommand);
             return Ok(response);
+        }
+
+        /// <summary>
+        /// Short-lived viewing link for the caller's own KYC identity document.
+        /// </summary>
+        /// <remarks>
+        /// KYC documents live behind a private bucket prefix, so the stored value is an
+        /// object key rather than a URL and cannot be rendered directly. The profile
+        /// page's "View KYC Document" button uses this.
+        ///
+        /// Self only — admins have their own equivalent on the admin API, and a
+        /// customer should never be able to fetch someone else's identity document.
+        /// </remarks>
+        [Authorize]
+        [HttpGet("me/kyc/document-url")]
+        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetMyKycDocumentUrl()
+        {
+            var userId = GetAuthenticatedUserId();
+            if (userId is null) return Unauthorized();
+
+            var customer = await _mediator.Send(new GetCustomerByIdQuery(userId.Value));
+
+            var stored = customer?.Data?.IdDocumentUrl;
+            if (string.IsNullOrWhiteSpace(stored))
+                return NotFound(new BaseResponse<string?>(null, false, string.Empty, "No KYC document on file."));
+
+            // Documents submitted before KYC moved to the private prefix are stored as
+            // full public URLs. Those objects are no longer anonymously readable once
+            // the bucket policy is tightened, so they need migrating — see
+            // docs/data-backfill-required.md. Returned as-is meanwhile.
+            if (stored.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                return Ok(new BaseResponse<string>(stored, true, string.Empty, ResponseMessages.Successful));
+
+            var url = await _fileStorageService.GetPresignedUrlAsync(stored, KycDocumentLinkLifetime);
+
+            return Ok(new BaseResponse<string>(url, true, string.Empty, "Link valid for 10 minutes."));
         }
 
         [Authorize]

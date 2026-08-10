@@ -720,8 +720,11 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task Login_WithGoogleAccountThatHasNoPassword_TellsUserHowToSignIn()
+    public async Task Login_WithGoogleAccountThatHasNoPassword_ReturnsGenericInvalidCredentials()
     {
+        // Deliberately indistinguishable from a wrong-password failure — telling an
+        // unauthenticated caller "this account has no password, it's Google-only"
+        // would confirm the address is registered and leak its auth method.
         var customer = CreateCustomer(authProvider: AuthProvider.Google);
         customer.PasswordHash = string.Empty;
         customer.GoogleId = "google123";
@@ -730,6 +733,6 @@ public class AuthServiceTests
         var result = await _sut.Login(new LoginCustomerDto("test@test.com", "Password123!"));
 
         Assert.False(result.IsSuccessful);
-        Assert.Equal(ResponseMessages.AccountHasNoPassword, result.Message);
+        Assert.Equal(ResponseMessages.InvalidCredentials, result.Message);
     }
 }
