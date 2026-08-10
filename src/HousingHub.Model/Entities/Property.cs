@@ -46,6 +46,43 @@ public class Property : BaseEntity
 
     // Admin moderation
     public bool IsPublished { get; set; } = false;
+
+    /// <summary>Attribute value written for a published listing. Absent otherwise.</summary>
+    public const string PublishedMarker = "PUBLISHED";
+
+    /// <summary>
+    /// Index key mirroring <see cref="IsPublished"/>, so "every published listing" is a
+    /// Query rather than a scan of the whole table.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A bool cannot be a DynamoDB key, and even if it could, an index on one would put
+    /// every published row under a single partition key. This projects the flag to a
+    /// string that is <i>absent</i> when false — DynamoDB global secondary indexes are
+    /// sparse, so unpublished listings never enter the index at all and a query against
+    /// it reads only rows it is going to return.
+    /// </para>
+    /// <para>
+    /// <b>The setter deliberately discards its argument.</b> The value is derived from
+    /// <see cref="IsPublished"/>, which is the single source of truth; a setter exists
+    /// only because the DynamoDB object mapper requires one to deserialize. Storing what
+    /// comes back from the table would make the two fields capable of disagreeing, and
+    /// worse, would depend on the order the mapper happens to assign properties in —
+    /// which is not specified. Ignoring it means the pair cannot drift.
+    /// </para>
+    /// <para>
+    /// Rows written before this existed have no marker and are therefore invisible to
+    /// the index until they are re-saved. See docs/data-backfill-required.md; the read
+    /// path stays on the old scan until <c>Dynamo:UsePublishedIndex</c> is switched on.
+    /// </para>
+    /// </remarks>
+    [DynamoDBGlobalSecondaryIndexHashKey("PublishedStatus-index")]
+    public string? PublishedStatus
+    {
+        get => IsPublished ? PublishedMarker : null;
+        set { /* derived from IsPublished — see remarks */ }
+    }
+
     public DateTime? PublishedAt { get; set; }
     public bool IsVerified { get; set; } = false;
     public DateTime? VerifiedAt { get; set; }

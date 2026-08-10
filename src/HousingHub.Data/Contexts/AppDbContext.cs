@@ -25,6 +25,9 @@ public class DynamoDbTableInitializer
         {
             CreateGsi("OwnerId-index", "OwnerId"),
             CreateGsi("PropertyId-index", "PropertyId"),
+            // Sparse by design — only published listings carry the attribute, so this
+            // index contains exactly the rows the public site asks for.
+            CreateGsi("PublishedStatus-index", "PublishedStatus"),
         }),
         ["PropertyFiles"] = ("Id", new List<GlobalSecondaryIndex>
         {

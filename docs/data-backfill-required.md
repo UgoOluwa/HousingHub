@@ -99,3 +99,67 @@ Then confirm nothing outside `private/` remains under the old `kyc/` prefix.
 The bucket policy must deny anonymous `s3:GetObject` on `private/*`. Nothing in the
 application can enforce this — without it, the private prefix is private in name
 only and the whole change achieves nothing.
+
+---
+
+## 3. `Property.PublishedStatus` is absent on every existing row
+
+**Severity: blocks a performance fix. Empties the homepage if enabled early.**
+
+The public site's hottest query — the homepage, the listing page, "new", "trending"
+and "nearby" — was `GetAllAsync(x => x.IsPublished)`. A bool cannot be a DynamoDB
+key, so that predicate has nothing to narrow against and every one of those calls
+scanned the entire `Properties` table.
+
+`Property.PublishedStatus` fixes it: a string attribute, derived from `IsPublished`,
+written only when the listing is published, and indexed by `PublishedStatus-index`.
+DynamoDB GSIs are sparse, so unpublished listings never enter the index and a query
+against it reads only rows it will actually return.
+
+The catch is what "sparse" means for rows written before the attribute existed:
+**they carry no marker, so they are not in the index.** A listing published last
+month is invisible to the new query until it is written again.
+
+### Read the failure mode carefully
+
+This is not a case where enabling the change early makes things slower. Querying an
+index that does not yet contain your data returns *zero rows*, successfully. The
+homepage would render an empty state, no error would be logged, and nothing would
+look broken from the outside.
+
+The read path is therefore behind `Dynamo:UsePublishedIndex`, which ships **false**.
+Until you flip it, every one of those queries still does the old scan — correct, and
+no worse than before.
+
+### Backfill needed
+
+1. Create the `PublishedStatus-index` GSI on the `Properties` table if it does not
+   already exist. `DynamoDbTableInitializer` will not do this for you: it only
+   creates tables that are entirely absent, so an index added to an existing table
+   has to be created directly. Adding a GSI is an online operation — the table stays
+   readable and writable while it backfills.
+
+2. Re-save every property whose `IsPublished` is true. A read-then-write with no
+   changes is enough; `PublishedStatus` is derived on serialization, so the marker is
+   written automatically. Unpublished rows need nothing.
+
+3. Confirm the counts line up before switching over:
+
+   ```
+   published rows in the table  ==  item count of PublishedStatus-index
+   ```
+
+   GSI item counts are updated roughly every six hours, so allow for lag rather than
+   concluding the backfill failed.
+
+4. Set `Dynamo:UsePublishedIndex` to `true` and deploy.
+
+5. Load the homepage. If listings are there, it worked. If it is empty, set the flag
+   back to false — that is a complete rollback, since nothing else depends on the
+   index.
+
+### Note on the two APIs
+
+Both read the same table, but only the consumer API queries published listings, so
+only its flag matters for step 4. The admin API filters on `IsPublished` in memory
+after loading, which is unchanged.
