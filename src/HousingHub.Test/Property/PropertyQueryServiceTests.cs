@@ -34,8 +34,18 @@ public class PropertyQueryServiceTests
         _unitOfWorkMock.Setup(u => u.SaveAsync()).Returns(Task.CompletedTask);
 
         // Every read path now attaches PropertyFiles before mapping; default to none.
+        // Single-property reads still go through the predicate overload...
         _unitOfWorkMock
             .Setup(u => u.PropertyFileQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, bool>>>()))
+            .ReturnsAsync(new List<HousingHub.Model.Entities.PropertyFile>());
+
+        // ...while the bulk path uses GetManyByAsync, so that an index can be used
+        // instead of scanning PropertyFiles. Without this setup Moq hands back a null
+        // task result and the ToLookup in AttachFilesAsync throws.
+        _unitOfWorkMock
+            .Setup(u => u.PropertyFileQueries.GetManyByAsync(
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, Guid>>>(),
+                It.IsAny<IEnumerable<Guid>>()))
             .ReturnsAsync(new List<HousingHub.Model.Entities.PropertyFile>());
 
         _sut = new PropertyQueryService(_unitOfWorkMock.Object, _mapper, logger);

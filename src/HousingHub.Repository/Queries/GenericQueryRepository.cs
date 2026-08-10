@@ -102,6 +102,70 @@ public partial class GenericQueryRepository<T> : IGenericQueryRepository<T> wher
         return (pagedItems, totalCount);
     }
 
+    public async Task<IReadOnlyList<T>> GetManyByAsync<TKey>(
+        Expression<Func<T, TKey>> keySelector,
+        IEnumerable<TKey> values)
+    {
+        var distinct = values?.Distinct().Where(v => DynamoIndexMap<T>.IsQueryableKeyValue(v)).ToList() ?? [];
+        if (distinct.Count == 0) return [];
+
+        var propertyName = PropertyNameOf(keySelector);
+
+        if (propertyName is not null)
+        {
+            if (DynamoIndexMap<T>.HashKey?.Name == propertyName)
+            {
+                // Cast to object explicitly: LoadAsync has both a
+                // LoadAsync&lt;TEntity&gt;(object hashKey) and a
+                // LoadAsync&lt;TEntity&gt;(TEntity keyObject) overload, and leaving the
+                // choice to inference on an unconstrained TKey invites the wrong one.
+                var loads = distinct.Select(v => _context.LoadAsync<T>((object)v!));
+                var items = await Task.WhenAll(loads);
+                return items.Where(i => i is not null).ToList()!;
+            }
+
+            if (DynamoIndexMap<T>.GlobalIndexes.TryGetValue(propertyName, out var indexName)
+                && !IndexKnownMissing(indexName))
+            {
+                try
+                {
+                    var queries = distinct.Select(v => QueryByIndexAsync(indexName, (object)v!));
+                    var results = await Task.WhenAll(queries);
+                    return results.SelectMany(r => r).ToList();
+                }
+                catch (Exception ex) when (IsMissingIndex(ex))
+                {
+                    RememberMissingIndex(indexName);
+                }
+            }
+        }
+
+        // Not indexable — one scan, filtered here. Identical to what
+        // GetAllAsync(x => values.Contains(x.Key)) did, just without pretending
+        // otherwise at the call site.
+        var wanted = distinct.ToHashSet();
+        var compiled = keySelector.Compile();
+        var all = await ScanAllAsync();
+        return all.Where(item => wanted.Contains(compiled(item))).ToList();
+    }
+
+    /// <summary>
+    /// Name of the property a selector reads, or null if the selector is anything
+    /// more involved than <c>x =&gt; x.Property</c>.
+    /// </summary>
+    private static string? PropertyNameOf<TKey>(Expression<Func<T, TKey>> keySelector)
+    {
+        // Value types get wrapped in a Convert to object by the compiler in some
+        // call shapes; unwrap before looking for the member access.
+        var body = keySelector.Body;
+        if (body is UnaryExpression { NodeType: ExpressionType.Convert } unary)
+            body = unary.Operand;
+
+        return body is MemberExpression { Expression: ParameterExpression } member
+            ? member.Member.Name
+            : null;
+    }
+
     /// <summary>
     /// Returns the smallest set of rows guaranteed to contain every match for the
     /// predicate. Callers must still apply the predicate themselves.

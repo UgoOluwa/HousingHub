@@ -1,5 +1,13 @@
 using HousingHub.Model.Entities;
 using HousingHub.Repository.Queries;
+// Several sibling namespaces under HousingHub.Test share a simple name with an
+// entity class (HousingHub.Test.PropertyFile, .PropertyAddress, .CustomerAddress,
+// .Admin) — C#'s sibling-namespace lookup resolves the bare identifier to the
+// namespace instead of the HousingHub.Model.Entities type, so these need aliasing.
+using PropertyFileEntity = HousingHub.Model.Entities.PropertyFile;
+using PropertyAddressEntity = HousingHub.Model.Entities.PropertyAddress;
+using CustomerAddressEntity = HousingHub.Model.Entities.CustomerAddress;
+using AdminEntity = HousingHub.Model.Entities.Admin;
 
 namespace HousingHub.Test.Repository;
 
@@ -30,11 +38,11 @@ public class DynamoIndexMapTests
         Assert.Equal("Id", DynamoIndexMap<Property>.HashKey?.Name);
         Assert.Equal("Id", DynamoIndexMap<Notification>.HashKey?.Name);
         Assert.Equal("Id", DynamoIndexMap<ChatMessage>.HashKey?.Name);
-        Assert.Equal("Id", DynamoIndexMap<PropertyFile>.HashKey?.Name);
-        Assert.Equal("Id", DynamoIndexMap<PropertyAddress>.HashKey?.Name);
-        Assert.Equal("Id", DynamoIndexMap<CustomerAddress>.HashKey?.Name);
+        Assert.Equal("Id", DynamoIndexMap<PropertyFileEntity>.HashKey?.Name);
+        Assert.Equal("Id", DynamoIndexMap<PropertyAddressEntity>.HashKey?.Name);
+        Assert.Equal("Id", DynamoIndexMap<CustomerAddressEntity>.HashKey?.Name);
         Assert.Equal("Id", DynamoIndexMap<RefreshToken>.HashKey?.Name);
-        Assert.Equal("Id", DynamoIndexMap<Admin>.HashKey?.Name);
+        Assert.Equal("Id", DynamoIndexMap<AdminEntity>.HashKey?.Name);
     }
 
     [Fact]

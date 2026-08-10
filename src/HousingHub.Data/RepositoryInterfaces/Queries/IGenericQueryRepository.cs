@@ -43,4 +43,28 @@ public interface IGenericQueryRepository<T> where T : class
 
     /// <inheritdoc cref="GetByAsync" />
     Task<int> CountAsync(Expression<Func<T, bool>> predicate);
+
+    /// <summary>
+    /// Loads every row whose <paramref name="keySelector"/> property equals one of
+    /// <paramref name="values"/>. Use this instead of
+    /// <c>GetAllAsync(x =&gt; values.Contains(x.Key))</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>Contains</c> reads as the efficient choice — one call instead of N — but it
+    /// is a method call, so the predicate cannot be narrowed to an index and the
+    /// repository falls through to a full table scan. Twenty targeted reads get
+    /// replaced by one read of everything, which looks like an optimisation right up
+    /// until the table is large enough for it to matter.
+    /// </para>
+    /// <para>
+    /// This issues one GetItem (primary key) or one Query (GSI hash key) per distinct
+    /// value, in parallel, so the wall-clock cost is roughly a single round trip and
+    /// the read cost is proportional to what is actually returned. If the property is
+    /// neither, it falls back to the scan — same result, no worse than before.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<T>> GetManyByAsync<TKey>(
+        Expression<Func<T, TKey>> keySelector,
+        IEnumerable<TKey> values);
 }
