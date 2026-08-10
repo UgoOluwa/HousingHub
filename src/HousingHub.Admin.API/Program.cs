@@ -38,7 +38,14 @@ public static class Program
         RequiredSecrets.Validate(
             builder.Configuration,
             signingKeys: ["AdminJwt:Secret"],
-            otherRequired: ["Internal:WorkerSecret", "Email:ResendApiKey"]);
+            otherRequired:
+            [
+                "Internal:WorkerSecret",
+                "Email:ResendApiKey",
+                "AdminJwt:Issuer",
+                "AdminJwt:Audience",
+            ],
+            requiredArrays: ["Cors:AllowedOrigins"]);
 
         var isLambda = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME"));
 
@@ -208,8 +215,12 @@ public static class Program
             }).AllowAnonymous();
         }
 
-        using (var scope = app.Services.CreateScope())
+        // Off unless Dynamo:AutoCreateTables is true — see the consumer API's
+        // MigrationExtensions for why this should not run on every cold start.
+        // Both APIs share the same tables, so whichever one has it enabled creates them.
+        if (builder.Configuration.GetValue<bool>("Dynamo:AutoCreateTables"))
         {
+            using var scope = app.Services.CreateScope();
             var initializer = scope.ServiceProvider.GetRequiredService<DynamoDbTableInitializer>();
             await initializer.InitializeAsync();
         }
@@ -220,9 +231,13 @@ public static class Program
         }
 
         app.UseCors();
+        // Ahead of authentication deliberately — see the note in the consumer API's
+        // Program.cs. It also matters more here: the internal worker endpoints are
+        // anonymous and secret-gated, so the limiter is their only brute-force defence
+        // and must run whether or not a token is present.
+        app.UseRateLimiter();
         app.UseAuthentication();
         app.UseAuthorization();
-        app.UseRateLimiter();
         // Root redirect only makes sense where the docs are actually served.
         if (app.Environment.IsDevelopment())
         {

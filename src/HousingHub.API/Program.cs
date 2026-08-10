@@ -47,7 +47,19 @@ namespace HousingHub.API
             RequiredSecrets.Validate(
                 builder.Configuration,
                 signingKeys: ["Jwt:Secret"],
-                otherRequired: ["Email:ResendApiKey", "Google:ClientSecret"]);
+                // Issuer and audience are validated on every incoming token. Left unset
+                // they don't loosen validation — they break it, since ValidateIssuer
+                // defaults to true and has nothing to compare against. Every request
+                // then 401s with no explanation.
+                otherRequired:
+                [
+                    "Email:ResendApiKey",
+                    "Google:ClientSecret",
+                    "Google:ClientId",
+                    "Jwt:Issuer",
+                    "Jwt:Audience",
+                ],
+                requiredArrays: ["Cors:AllowedOrigins"]);
 
             var isLambda = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME"));
 
@@ -259,7 +271,7 @@ namespace HousingHub.API
                 app.UseDocWithUi();
             }
 
-            await app.InitializeDynamoDbAsync();
+            await app.InitializeDynamoDbAsync(builder.Configuration);
 
             // Must stay anonymous: the deny-by-default FallbackPolicy applies to every
             // routed endpoint, including this one. Without the opt-out, load balancer
@@ -277,10 +289,15 @@ namespace HousingHub.API
 
             app.UseCors();
 
+            // Ahead of authentication deliberately. Validating a JWT signature is real
+            // CPU work, and doing it before deciding whether to throttle means a flood
+            // of forged tokens is paid for in full before being rejected. The limiter
+            // partitions on IP, not identity, so it has everything it needs this early.
+            app.UseRateLimiter();
+
             app.UseAuthentication();
 
             app.UseAuthorization();
-            app.UseRateLimiter();
             
 
             app.MapControllers();
