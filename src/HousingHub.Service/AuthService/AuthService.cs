@@ -175,6 +175,24 @@ public class AuthService : IAuthService
             if (!_passwordHasher.Verify(request.Password, customer.PasswordHash))
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidCredentials);
 
+            // Sign-in is the only moment we legitimately hold the plaintext, so it is
+            // the only moment a stored hash can be migrated to current parameters.
+            // Best-effort: a failure here must not cost the user their session, since
+            // the password they supplied is correct either way.
+            if (_passwordHasher.NeedsRehash(customer.PasswordHash))
+            {
+                try
+                {
+                    customer.PasswordHash = _passwordHasher.Hash(request.Password);
+                    await _unitOfWork.CustomerCommands.UpdateAsync(customer);
+                    await _unitOfWork.SaveAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not upgrade password hash for customer {CustomerId}", customer.Id);
+                }
+            }
+
             if (!customer.EmailVerified)
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.EmailNotVerified);
 
