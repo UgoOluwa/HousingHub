@@ -60,7 +60,7 @@ namespace HousingHub.API.Controllers.V1
 
         [Authorize]
         [HttpGet("{id:guid}")]
-        [ProducesResponseType(typeof(BaseResponse<CustomerWithDetailsDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<CustomerWithDetailsDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> Get(Guid id)
         {
             // Returns National ID number and KYC document URL — self or admin only.
@@ -97,7 +97,7 @@ namespace HousingHub.API.Controllers.V1
 
         [Authorize]
         [HttpPut("profile")]
-        [ProducesResponseType(typeof(BaseResponse<CustomerDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<CustomerDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> UpdateProfile(UpdateProfileCommand command)
         {
             var userId = GetAuthenticatedUserId();
@@ -112,7 +112,7 @@ namespace HousingHub.API.Controllers.V1
 
         [Authorize]
         [HttpPost("kyc")]
-        [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<bool>), StatusCodes.Status200OK)]
         public async Task<IActionResult> SubmitKyc(SubmitKycCommand command)
         {
             var userId = GetAuthenticatedUserId();
@@ -136,7 +136,7 @@ namespace HousingHub.API.Controllers.V1
         /// </remarks>
         [Authorize]
         [HttpGet("me/kyc/document-url")]
-        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(Core.CustomResponses.BaseResponse<string>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetMyKycDocumentUrl()
         {
@@ -147,25 +147,25 @@ namespace HousingHub.API.Controllers.V1
 
             var stored = customer?.Data?.IdDocumentUrl;
             if (string.IsNullOrWhiteSpace(stored))
-                return NotFound(new BaseResponse<string?>(null, false, string.Empty, "No KYC document on file."));
+                return NotFound(new Core.CustomResponses.BaseResponse<string?>(null, false, string.Empty, "No KYC document on file."));
 
             // Documents submitted before KYC moved to the private prefix are stored as
             // full public URLs. Those objects are no longer anonymously readable once
             // the bucket policy is tightened, so they need migrating — see
             // docs/data-backfill-required.md. Returned as-is meanwhile.
             if (stored.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                return Ok(new BaseResponse<string>(stored, true, string.Empty, ResponseMessages.Successful));
+                return Ok(new Core.CustomResponses.BaseResponse<string>(stored, true, string.Empty, ResponseMessages.Successful));
 
             var url = await _fileStorageService.GetPresignedUrlAsync(stored, KycDocumentLinkLifetime);
 
-            return Ok(new BaseResponse<string>(url, true, string.Empty, "Link valid for 10 minutes."));
+            return Ok(new Core.CustomResponses.BaseResponse<string>(url, true, string.Empty, "Link valid for 10 minutes."));
         }
 
         [Authorize]
         [HttpPost("kyc/document")]
         [Consumes("multipart/form-data")]
-        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<string>), StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> UploadKycDocument([FromForm] UploadKycDocumentRequest request)
         {
             var userId = GetAuthenticatedUserId();
@@ -180,7 +180,7 @@ namespace HousingHub.API.Controllers.V1
                        ?? Request.Form.Files.FirstOrDefault();
 
             if (file == null || file.Length == 0)
-                return BadRequest(new BaseResponse<string>(false, null,
+                return BadRequest(new HousingHub.Application.Commons.Bases.BaseResponse<string>(false, null,
                     Core.CustomResponses.ResponseMessages.NoFileProvided, null));
 
             var response = await _mediator.Send(new UploadKycDocumentCommand(userId.Value, file));
@@ -190,8 +190,8 @@ namespace HousingHub.API.Controllers.V1
         [Authorize]
         [HttpPost("profile/photo")]
         [Consumes("multipart/form-data")]
-        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<string>), StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> UpdateProfilePhoto([FromForm] UpdateProfilePhotoRequest request)
         {
             var userId = GetAuthenticatedUserId();
@@ -199,7 +199,7 @@ namespace HousingHub.API.Controllers.V1
 
             var file = request.File ?? Request.Form.Files.GetFile("File") ?? Request.Form.Files.FirstOrDefault();
             if (file == null || file.Length == 0)
-                return BadRequest(new BaseResponse<string>(false, null,
+                return BadRequest(new HousingHub.Application.Commons.Bases.BaseResponse<string>(false, null,
                     Core.CustomResponses.ResponseMessages.NoFileProvided, null));
 
             var response = await _mediator.Send(new UpdateProfilePhotoCommand(userId.Value, file));
@@ -208,7 +208,7 @@ namespace HousingHub.API.Controllers.V1
 
         [Authorize]
         [HttpDelete("profile/photo")]
-        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<string>), StatusCodes.Status200OK)]
         public async Task<IActionResult> RemoveProfilePhoto()
         {
             var userId = GetAuthenticatedUserId();
@@ -225,7 +225,7 @@ namespace HousingHub.API.Controllers.V1
         /// </summary>
         [Authorize(Policy = "AdminOnly")]
         [HttpPut("{id:guid}/kyc/verify")]
-        [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<bool>), StatusCodes.Status200OK)]
         public async Task<IActionResult> VerifyKyc(Guid id, [FromQuery] bool approve)
         {
             var response = await _mediator.Send(new VerifyKycCommand(id, approve));
