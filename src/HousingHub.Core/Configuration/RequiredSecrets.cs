@@ -45,6 +45,13 @@ public static class RequiredSecrets
     /// Keys that are used as HMAC signing material and are additionally length-checked.
     /// </param>
     /// <param name="otherRequired">Keys that must simply be present and non-placeholder.</param>
+    /// <param name="requiredArrays">
+    /// Configuration sections that must bind to a non-empty array. Unlike a missing
+    /// secret, an empty array here fails silently and confusingly rather than loudly:
+    /// an empty <c>Cors:AllowedOrigins</c> boots fine, then rejects every browser
+    /// request and every Google sign-in (the returnUrl allow-list is derived from it)
+    /// with no indication of why.
+    /// </param>
     /// <exception cref="InvalidOperationException">
     /// Lists every offending key at once, so a misconfigured deployment is fixed in
     /// one pass rather than one restart per missing value.
@@ -52,7 +59,8 @@ public static class RequiredSecrets
     public static void Validate(
         IConfiguration configuration,
         IEnumerable<string> signingKeys,
-        IEnumerable<string> otherRequired)
+        IEnumerable<string> otherRequired,
+        IEnumerable<string>? requiredArrays = null)
     {
         var problems = new List<string>();
 
@@ -77,6 +85,22 @@ public static class RequiredSecrets
             if (IsMissingOrPlaceholder(configuration[key]))
             {
                 problems.Add($"{key} is missing or is still a placeholder.");
+            }
+        }
+
+        foreach (var key in requiredArrays ?? [])
+        {
+            // GetChildren rather than Get<string[]>(): this project references only
+            // Configuration.Abstractions, and the generic binder lives in a separate
+            // package. Enumerating children needs nothing extra and reads an array
+            // section identically — the entries are just numerically-keyed children.
+            var values = configuration.GetSection(key).GetChildren()
+                .Select(child => child.Value)
+                .ToList();
+
+            if (values.Count == 0 || values.All(string.IsNullOrWhiteSpace))
+            {
+                problems.Add($"{key} is empty; at least one entry is required.");
             }
         }
 

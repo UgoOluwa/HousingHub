@@ -1084,6 +1084,13 @@ public class PropertyCommandServiceTests
             Id = Guid.NewGuid()
         };
         _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByIdAsync(matchingCustomer.Id)).ReturnsAsync(matchingCustomer);
+        // Notification recipients are now resolved via one batched read instead of
+        // one GetByIdAsync per match.
+        _unitOfWorkMock
+            .Setup(u => u.CustomerQueries.GetManyByAsync(
+                It.IsAny<Expression<Func<Customer, Guid>>>(),
+                It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(new List<Customer> { matchingCustomer });
 
         // All filter fields null == "any" per PropertyAlertPreference.Matches, so this always matches.
         var preference = new PropertyAlertPreference(matchingCustomer.Id, null, null, null, null, null, null);

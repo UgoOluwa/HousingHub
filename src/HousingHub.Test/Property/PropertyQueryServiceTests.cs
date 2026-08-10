@@ -34,8 +34,18 @@ public class PropertyQueryServiceTests
         _unitOfWorkMock.Setup(u => u.SaveAsync()).Returns(Task.CompletedTask);
 
         // Every read path now attaches PropertyFiles before mapping; default to none.
+        // Single-property reads still go through the predicate overload...
         _unitOfWorkMock
             .Setup(u => u.PropertyFileQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, bool>>>()))
+            .ReturnsAsync(new List<HousingHub.Model.Entities.PropertyFile>());
+
+        // ...while the bulk path uses GetManyByAsync, so that an index can be used
+        // instead of scanning PropertyFiles. Without this setup Moq hands back a null
+        // task result and the ToLookup in AttachFilesAsync throws.
+        _unitOfWorkMock
+            .Setup(u => u.PropertyFileQueries.GetManyByAsync(
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, Guid>>>(),
+                It.IsAny<IEnumerable<Guid>>()))
             .ReturnsAsync(new List<HousingHub.Model.Entities.PropertyFile>());
 
         _sut = new PropertyQueryService(_unitOfWorkMock.Object, _mapper, logger);
@@ -335,19 +345,20 @@ public class PropertyQueryServiceTests
     [Fact]
     public async Task GetAllPropertiesAsync_IncludeUnpublished_ReturnsUnpublishedToo()
     {
-        Expression<Func<HousingHub.Model.Entities.Property, bool>>? capturedPredicate = null;
-        _unitOfWorkMock
-            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
-            .Callback<Expression<Func<HousingHub.Model.Entities.Property, bool>>>(p => capturedPredicate = p)
-            .ReturnsAsync(new List<HousingHub.Model.Entities.Property>());
-
-        await _sut.GetAllPropertiesAsync(includeUnpublished: true);
-
+        // includeUnpublished bypasses the published-only predicate entirely (an OR
+        // can't be narrowed to an index) and reads everything via the parameterless
+        // GetAllAsync() instead.
         var unpublished = CreateSampleProperty();
         unpublished.IsPublished = false;
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetAllAsync())
+            .ReturnsAsync(new List<HousingHub.Model.Entities.Property> { unpublished });
 
-        var predicate = capturedPredicate!.Compile();
-        Assert.True(predicate(unpublished));
+        var result = await _sut.GetAllPropertiesAsync(includeUnpublished: true);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Single(result.Data!);
+        Assert.Equal(unpublished.Id, result.Data![0].Id);
     }
 
     // ??? GetPropertiesByOwnerAsync ????????????????????????????????????
@@ -645,8 +656,9 @@ public class PropertyQueryServiceTests
             CreateInspection(property.Id, InspectionStatus.Rescheduled),
         };
         _unitOfWorkMock
-            .Setup(u => u.PropertyInspectionQueries.GetAllAsync(
-                It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .Setup(u => u.PropertyInspectionQueries.GetManyByAsync(
+                It.IsAny<Expression<Func<PropertyInspection, Guid>>>(),
+                It.IsAny<IEnumerable<Guid>>()))
             .ReturnsAsync(openInspections);
 
         var result = await _sut.GetPropertiesByOwnerPaginatedAsync(OwnerId, new GetMyPropertiesFilterDto { PageNumber = 1, PageSize = 10 });
@@ -664,8 +676,9 @@ public class PropertyQueryServiceTests
             .Setup(u => u.PropertyQueries.GetPagedAsync(1, 10, It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
             .ReturnsAsync((new List<HousingHub.Model.Entities.Property> { property }, 1));
         _unitOfWorkMock
-            .Setup(u => u.PropertyInspectionQueries.GetAllAsync(
-                It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .Setup(u => u.PropertyInspectionQueries.GetManyByAsync(
+                It.IsAny<Expression<Func<PropertyInspection, Guid>>>(),
+                It.IsAny<IEnumerable<Guid>>()))
             .ReturnsAsync(new List<PropertyInspection>());
 
         var result = await _sut.GetPropertiesByOwnerPaginatedAsync(OwnerId, new GetMyPropertiesFilterDto { PageNumber = 1, PageSize = 10 });

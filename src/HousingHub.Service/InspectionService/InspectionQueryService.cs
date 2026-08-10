@@ -178,11 +178,15 @@ public class InspectionQueryService : IInspectionQueryService
                     new PaginatedResult<OwnerInspectionDto>(new List<OwnerInspectionDto>(), 0, pageNumber, pageSize),
                     true, string.Empty, ResponseMessages.Successful);
 
+            // One indexed read per property, in parallel, then filter by status here.
+            // Status has no index, so folding it into the query would have forced the
+            // whole thing back to a table scan.
+            var byProperty = await _unitOfWOrk.PropertyInspectionQueries.GetManyByAsync(
+                i => i.PropertyId, propertyIds);
+
             var inspections = status.HasValue
-                ? await _unitOfWOrk.PropertyInspectionQueries.GetAllAsync(
-                    i => propertyIds.Contains(i.PropertyId) && i.Status == status.Value)
-                : await _unitOfWOrk.PropertyInspectionQueries.GetAllAsync(
-                    i => propertyIds.Contains(i.PropertyId));
+                ? byProperty.Where(i => i.Status == status.Value)
+                : byProperty;
 
             var ordered = inspections.OrderByDescending(i => i.DateCreated).ToList();
             var totalCount = ordered.Count;
@@ -331,15 +335,21 @@ public class InspectionQueryService : IInspectionQueryService
             var propertyIds = paged.Select(i => i.PropertyId).Distinct().ToList();
             var customerIds = paged.Select(i => i.CustomerId).Distinct().ToList();
 
-            var propertiesTask = _unitOfWOrk.PropertyQueries.GetAllAsync(p => propertyIds.Contains(p.Id));
-            var customersTask = _unitOfWOrk.CustomerQueries.GetAllAsync(c => customerIds.Contains(c.Id));
-            var addressesTask = _unitOfWOrk.PropertyAddressQueries.GetAllAsync(a => propertyIds.Contains(a.PropertyId));
+            var propertiesTask = _unitOfWOrk.PropertyQueries.GetManyByAsync(p => p.Id, propertyIds);
+            var customersTask = _unitOfWOrk.CustomerQueries.GetManyByAsync(c => c.Id, customerIds);
+            var addressesTask = _unitOfWOrk.PropertyAddressQueries.GetManyByAsync(a => a.PropertyId, propertyIds);
 
             await Task.WhenAll(propertiesTask, customersTask, addressesTask);
 
             var propertyMap = propertiesTask.Result.ToDictionary(p => p.Id);
             var customerMap = customersTask.Result.ToDictionary(c => c.Id);
-            var addressMap = addressesTask.Result.ToDictionary(a => a.PropertyId);
+            // Nothing enforces one address row per property, and a straight ToDictionary
+            // throws on the second one — turning a stray duplicate row into a 500 on the
+            // admin inspection list. Group and take the first instead. (This was equally
+            // true before; the read changed, the latent fragility did not.)
+            var addressMap = addressesTask.Result
+                .GroupBy(a => a.PropertyId)
+                .ToDictionary(g => g.Key, g => g.First());
 
             var items = paged.Select(i =>
             {
@@ -387,7 +397,7 @@ public class InspectionQueryService : IInspectionQueryService
         if (ids.Count == 0)
             return new Dictionary<Guid, string?>();
 
-        var files = await _unitOfWOrk.PropertyFileQueries.GetAllAsync(f => ids.Contains(f.PropertyId));
+        var files = await _unitOfWOrk.PropertyFileQueries.GetManyByAsync(f => f.PropertyId, ids);
         return files
             .GroupBy(f => f.PropertyId)
             .ToDictionary(g => g.Key, g => (string?)g.OrderBy(f => f.DateUploaded).First().FileUrl);

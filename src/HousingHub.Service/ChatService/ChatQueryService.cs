@@ -38,8 +38,8 @@ public class ChatQueryService : IChatQueryService
                 .ToList();
 
             // Fetch participant details in bulk
-            var participants = await _unitOfWOrk.CustomerQueries.GetAllAsync(
-                c => otherParticipantIds.Contains(c.Id));
+            var participants = await _unitOfWOrk.CustomerQueries.GetManyByAsync(
+                c => c.Id, otherParticipantIds);
             var participantMap = participants.ToDictionary(c => c.Id, c => $"{c.FirstName} {c.LastName}");
 
             // Any participant not found among customers may be an admin (e.g. a message
@@ -109,7 +109,7 @@ public class ChatQueryService : IChatQueryService
 
             // Fetch sender names
             var senderIds = pagedMessages.Select(m => m.SenderId).Distinct().ToList();
-            var senders = await _unitOfWOrk.CustomerQueries.GetAllAsync(c => senderIds.Contains(c.Id));
+            var senders = await _unitOfWOrk.CustomerQueries.GetManyByAsync(c => c.Id, senderIds);
             var senderMap = senders.ToDictionary(c => c.Id, c => $"{c.FirstName} {c.LastName}");
 
             // Any sender not found among customers may be an admin (e.g. a message

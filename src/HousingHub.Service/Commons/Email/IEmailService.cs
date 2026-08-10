@@ -4,6 +4,15 @@ public interface IEmailService
 {
     Task<bool> SendEmailVerificationAsync(string toEmail, string firstName, string verificationToken);
     Task<bool> SendPasswordResetAsync(string toEmail, string firstName, string resetToken);
+
+    /// <summary>
+    /// Sent when someone attempts to register with an address that already has an
+    /// account. Registration returns the same response either way so it cannot be
+    /// used to test whether an address is registered; this email is how the real
+    /// account holder finds out, and how a legitimate user who forgot they had an
+    /// account gets back in.
+    /// </summary>
+    Task<bool> SendRegistrationAttemptOnExistingAccountAsync(string toEmail, string firstName);
     /// <summary>Security notice sent after a password is successfully changed/reset.</summary>
     Task<bool> SendPasswordChangedAsync(string toEmail, string firstName);
     Task<bool> SendInspectionScheduledAsync(string ownerEmail, string ownerName, string customerName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime, string? note);

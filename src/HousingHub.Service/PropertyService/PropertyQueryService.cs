@@ -1,4 +1,4 @@
-﻿using HousingHub.Service.Commons.Mappings;
+using HousingHub.Service.Commons.Mappings;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
@@ -6,6 +6,7 @@ using HousingHub.Model.Enums;
 using HousingHub.Service.Dtos.Property;
 using HousingHub.Service.Dtos.PropertyAddress;
 using HousingHub.Service.PropertyService.Interfaces;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace HousingHub.Service.PropertyService;
@@ -15,14 +16,45 @@ public class PropertyQueryService : IPropertyQueryService
     private readonly IUnitOfWOrk _unitOfWOrk;
     private readonly IMapper _mapper;
     private readonly ILogger<PropertyQueryService> _logger;
+    private readonly bool _usePublishedIndex;
     private const string ClassName = "property";
 
-    public PropertyQueryService(IUnitOfWOrk unitOfWOrk, IMapper mapper, ILogger<PropertyQueryService> logger)
+    public PropertyQueryService(
+        IUnitOfWOrk unitOfWOrk,
+        IMapper mapper,
+        ILogger<PropertyQueryService> logger,
+        IConfiguration? configuration = null)
     {
         _unitOfWOrk = unitOfWOrk;
         _mapper = mapper;
         _logger = logger;
+        _usePublishedIndex = configuration?.GetValue<bool>("Dynamo:UsePublishedIndex") ?? false;
     }
+
+    /// <summary>
+    /// Every published listing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the hottest read in the product — the homepage, the listing page, "new",
+    /// "trending" and "nearby" all start here — and until now every one of them scanned
+    /// the entire Properties table, because <c>IsPublished</c> is a plain bool with
+    /// nothing to index against.
+    /// </para>
+    /// <para>
+    /// <b>Behind a flag, and it must stay off until the backfill has run.</b>
+    /// <c>PublishedStatus-index</c> is sparse: a row only appears in it once it has been
+    /// written since the attribute was introduced. Listings that predate it are absent,
+    /// so switching the read over early does not degrade the homepage — it empties it.
+    /// Backfill first (a no-op re-save of every published property is enough), confirm
+    /// the index count matches the published count, then set
+    /// <c>Dynamo:UsePublishedIndex</c>. See docs/data-backfill-required.md.
+    /// </para>
+    /// </remarks>
+    private Task<IEnumerable<Property>> GetPublishedPropertiesAsync() =>
+        _usePublishedIndex
+            ? _unitOfWOrk.PropertyQueries.GetAllAsync(x => x.PublishedStatus == Property.PublishedMarker)
+            : _unitOfWOrk.PropertyQueries.GetAllAsync(x => x.IsPublished);
 
     public async Task<BaseResponse<PropertyDto?>> GetPropertyAsync(Guid id, Guid? requesterId = null, bool includeUnpublished = false)
     {
@@ -89,7 +121,12 @@ public class PropertyQueryService : IPropertyQueryService
     {
         try
         {
-            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(x => includeUnpublished || x.IsPublished);
+            // Split rather than `includeUnpublished || x.IsPublished` in one predicate:
+            // an OR can never be narrowed to an index, so the common case paid for the
+            // rare one.
+            var properties = includeUnpublished
+                ? await _unitOfWOrk.PropertyQueries.GetAllAsync()
+                : await GetPublishedPropertiesAsync();
 
             await AttachFilesAsync(properties);
 
@@ -107,7 +144,7 @@ public class PropertyQueryService : IPropertyQueryService
     {
         try
         {
-            var allProperties = await _unitOfWOrk.PropertyQueries.GetAllAsync(x => x.IsPublished);
+            var allProperties = await GetPublishedPropertiesAsync();
             var properties = allProperties.AsEnumerable();
 
             // Text search
@@ -149,8 +186,8 @@ public class PropertyQueryService : IPropertyQueryService
             if (!string.IsNullOrWhiteSpace(filter.City) || !string.IsNullOrWhiteSpace(filter.State))
             {
                 var propertyIds = properties.Select(p => p.Id).ToList();
-                var addresses = await _unitOfWOrk.PropertyAddressQueries.GetAllAsync(
-                    a => propertyIds.Contains(a.PropertyId));
+                var addresses = await _unitOfWOrk.PropertyAddressQueries.GetManyByAsync(
+                    a => a.PropertyId, propertyIds);
 
                 var filteredAddresses = addresses.AsEnumerable();
                 if (!string.IsNullOrWhiteSpace(filter.City))
@@ -220,9 +257,13 @@ public class PropertyQueryService : IPropertyQueryService
             await AttachFilesAsync(properties);
 
             var propertyIds = properties.Select(p => p.Id).ToHashSet();
-            var openInspections = await _unitOfWOrk.PropertyInspectionQueries.GetAllAsync(
-                i => propertyIds.Contains(i.PropertyId) && (i.Status == InspectionStatus.Pending || i.Status == InspectionStatus.Rescheduled));
-            var inspectionCountByProperty = openInspections
+            // Status is not indexed, so it is filtered after the indexed read rather
+            // than being folded into it. The index still does the work that matters —
+            // bounding the read to this page's properties instead of the whole table.
+            var inspections = await _unitOfWOrk.PropertyInspectionQueries.GetManyByAsync(
+                i => i.PropertyId, propertyIds);
+            var inspectionCountByProperty = inspections
+                .Where(i => i.Status is InspectionStatus.Pending or InspectionStatus.Rescheduled)
                 .GroupBy(i => i.PropertyId)
                 .ToDictionary(g => g.Key, g => g.Count());
 
@@ -244,7 +285,7 @@ public class PropertyQueryService : IPropertyQueryService
     {
         try
         {
-            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(x => x.IsPublished);
+            var properties = await GetPublishedPropertiesAsync();
 
             var newProperties = properties
                 .OrderByDescending(p => p.DateCreated)
@@ -267,7 +308,7 @@ public class PropertyQueryService : IPropertyQueryService
     {
         try
         {
-            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(x => x.IsPublished);
+            var properties = await GetPublishedPropertiesAsync();
 
             var trending = properties
                 .OrderByDescending(p => p.ViewCount)
@@ -291,8 +332,8 @@ public class PropertyQueryService : IPropertyQueryService
     {
         try
         {
-            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(
-                p => p.IsPublished && p.Latitude.HasValue && p.Longitude.HasValue);
+            var published = await GetPublishedPropertiesAsync();
+            var properties = published.Where(p => p.Latitude.HasValue && p.Longitude.HasValue);
 
             var nearby = properties
                 .Select(p => new
@@ -349,7 +390,7 @@ public class PropertyQueryService : IPropertyQueryService
             return;
 
         var propertyIds = propertyList.Select(p => p.Id).ToHashSet();
-        var files = await _unitOfWOrk.PropertyFileQueries.GetAllAsync(f => propertyIds.Contains(f.PropertyId));
+        var files = await _unitOfWOrk.PropertyFileQueries.GetManyByAsync(f => f.PropertyId, propertyIds);
         var filesByProperty = files.ToLookup(f => f.PropertyId);
 
         foreach (var property in propertyList)
@@ -372,8 +413,8 @@ public class PropertyQueryService : IPropertyQueryService
 
             if (propertyIds.Count > 0)
             {
-                var inspections = await _unitOfWOrk.PropertyInspectionQueries.GetAllAsync(
-                    i => propertyIds.Contains(i.PropertyId));
+                var inspections = await _unitOfWOrk.PropertyInspectionQueries.GetManyByAsync(
+                    i => i.PropertyId, propertyIds);
 
                 var inspectionList = inspections.ToList();
                 pendingInspections = inspectionList.Count(i => i.Status == InspectionStatus.Pending);

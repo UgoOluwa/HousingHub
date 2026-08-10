@@ -58,6 +58,27 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(toEmail, "Reset your Housing Hub password", text, html);
     }
 
+    public async Task<bool> SendRegistrationAttemptOnExistingAccountAsync(string toEmail, string firstName)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        string body = $"""
+            {P($"Hi {firstName},")}
+            {P("Someone just tried to create a Housing Hub account using this email address. You already have one, so we did not create a second.")}
+            {P("If that was you — perhaps you forgot you had signed up — you can sign in below, or reset your password if you do not remember it.")}
+            {Button("Sign In", $"{baseUrl}/login")}
+            <p style="margin:20px 0 0 0;font-size:13px;color:#9AA3AE;line-height:1.6;font-family:{Font};">
+              Forgotten your password? <a href="{baseUrl}/reset-password" style="color:{Navy};font-weight:700;">Reset it here</a>.
+            </p>
+            {Callout("Wasn't you?", "No action is needed — your account is unchanged and nobody gained access to it. If you keep receiving these, contact us at info@housinghub.ng.")}
+            """;
+
+        string html = WrapInLayout("You already have a Housing Hub account", body, Hero("&#128100;", "You already have an account"));
+        string text = $"Hi {firstName}, someone tried to register a Housing Hub account with this email. You already have one — sign in at {baseUrl}/login, or reset your password at {baseUrl}/reset-password. If this wasn't you, no action is needed.";
+
+        return await SendAsync(toEmail, "You already have a Housing Hub account", text, html);
+    }
+
     public async Task<bool> SendPasswordChangedAsync(string toEmail, string firstName)
     {
         string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";

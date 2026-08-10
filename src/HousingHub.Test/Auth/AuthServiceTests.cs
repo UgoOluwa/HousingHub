@@ -106,20 +106,57 @@ public class AuthServiceTests
         var result = await _sut.Register(dto);
 
         Assert.True(result.IsSuccessful);
-        Assert.NotNull(result.Data);
-        Assert.Equal("John", result.Data.FirstName);
+
+        // No customer data is returned on purpose — echoing the created record here
+        // while the duplicate path returns null would make the two distinguishable.
+        Assert.Null(result.Data);
     }
 
     [Fact]
-    public async Task Register_WithExistingEmail_ReturnsFailure()
+    public async Task Register_WithExistingEmail_IsIndistinguishableFromSuccess()
+    {
+        SetupCustomerLookup(null);
+        var freshResult = await _sut.Register(
+            new RegisterCustomerDto("John", "Doe", "new@test.com", "08012345678", "Password123!", CustomerType.Customer));
+
+        SetupCustomerLookup(CreateCustomer());
+        var duplicateResult = await _sut.Register(
+            new RegisterCustomerDto("John", "Doe", "existing@test.com", "08012345678", "Password123!", CustomerType.Customer));
+
+        // The whole point: an attacker must not be able to tell these apart.
+        Assert.Equal(freshResult.IsSuccessful, duplicateResult.IsSuccessful);
+        Assert.Equal(freshResult.Message, duplicateResult.Message);
+        Assert.Equal(freshResult.Data, duplicateResult.Data);
+    }
+
+    [Fact]
+    public async Task Register_WithExistingEmail_DoesNotCreateASecondAccount()
     {
         SetupCustomerLookup(CreateCustomer());
 
         var dto = new RegisterCustomerDto("John", "Doe", "existing@test.com", "08012345678", "Password123!", CustomerType.Customer);
-        var result = await _sut.Register(dto);
+        await _sut.Register(dto);
 
-        Assert.False(result.IsSuccessful);
-        Assert.Equal(ResponseMessages.CustomerAlreadyExists, result.Message);
+        _unitOfWorkMock.Verify(u => u.CustomerCommands.InsertAsync(It.IsAny<Customer>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Register_WithExistingEmail_NotifiesTheRealAccountHolder()
+    {
+        var existing = CreateCustomer();
+        SetupCustomerLookup(existing);
+
+        var dto = new RegisterCustomerDto("Someone", "Else", "existing@test.com", "08012345678", "Password123!", CustomerType.Customer);
+        await _sut.Register(dto);
+
+        _emailServiceMock.Verify(
+            e => e.SendRegistrationAttemptOnExistingAccountAsync(existing.Email, existing.FirstName),
+            Times.Once);
+
+        // And no verification email to the person who attempted it.
+        _emailServiceMock.Verify(
+            e => e.SendEmailVerificationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
+            Times.Never);
     }
 
     [Fact]
@@ -397,6 +434,50 @@ public class AuthServiceTests
 
         Assert.True(result.IsSuccessful);
         Assert.Equal(ResponseMessages.EmailVerificationSuccess, result.Message);
+    }
+
+    // ── ResendEmailVerificationToken ─────────────────────────────
+
+    [Fact]
+    public async Task ResendVerification_UnknownAddressAndAlreadyVerified_AreIndistinguishable()
+    {
+        SetupCustomerLookup(null);
+        var unknown = await _sut.ResendEmailVerificationToken("nobody@test.com");
+
+        SetupCustomerLookup(CreateCustomer(emailVerified: true));
+        var verified = await _sut.ResendEmailVerificationToken("verified@test.com");
+
+        // Reporting "already verified" confirmed both that the address is registered
+        // and that it is usable — exactly what an enumeration attack is looking for.
+        Assert.Equal(unknown.IsSuccessful, verified.IsSuccessful);
+        Assert.Equal(unknown.Message, verified.Message);
+        Assert.Equal(unknown.Data, verified.Data);
+    }
+
+    [Fact]
+    public async Task ResendVerification_WhenAlreadyVerified_TellsTheAccountHolderInstead()
+    {
+        var customer = CreateCustomer(emailVerified: true);
+        SetupCustomerLookup(customer);
+
+        await _sut.ResendEmailVerificationToken(customer.Email);
+
+        // The real user is not left waiting for an email that will never arrive.
+        _emailServiceMock.Verify(
+            e => e.SendRegistrationAttemptOnExistingAccountAsync(customer.Email, customer.FirstName),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ResendVerification_UnknownAddress_SendsNothing()
+    {
+        SetupCustomerLookup(null);
+
+        await _sut.ResendEmailVerificationToken("nobody@test.com");
+
+        _emailServiceMock.Verify(
+            e => e.SendEmailVerificationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
+            Times.Never);
     }
 
     [Fact]

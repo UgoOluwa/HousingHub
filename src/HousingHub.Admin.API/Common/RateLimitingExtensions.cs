@@ -21,6 +21,11 @@ public static class RateLimitingExtensions
     public const string OtpRequestPolicy = "admin-otp-request";
     public const string OtpVerifyPolicy = "admin-otp-verify";
 
+    /// <summary>
+    /// Endpoints authenticated by the shared worker secret rather than a JWT.
+    /// </summary>
+    public const string InternalWorkerPolicy = "internal-worker";
+
     public static IServiceCollection AddAdminRateLimiting(this IServiceCollection services)
     {
         services.AddRateLimiter(options =>
@@ -62,6 +67,21 @@ public static class RateLimitingExtensions
                     {
                         PermitLimit = 10,
                         Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                    }));
+
+            // The worker secret is a static, long-lived credential with no lockout and
+            // no second factor, and one of the endpoints behind it grants SuperAdmin.
+            // A scheduler calls these on the order of once every fifteen minutes, so a
+            // limit this tight costs legitimate callers nothing while removing the
+            // ability to guess the secret at speed.
+            options.AddPolicy(InternalWorkerPolicy, http =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: PartitionKey(http),
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 10,
+                        Window = TimeSpan.FromMinutes(5),
                         QueueLimit = 0,
                     }));
         });

@@ -1,8 +1,11 @@
+using HousingHub.Admin.API.Common;
 using HousingHub.Core.CustomResponses;
+using HousingHub.Core.Security;
 using HousingHub.Service.AdminService;
 using HousingHub.Service.InspectionService.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace HousingHub.Admin.API.Controllers;
 
@@ -12,10 +15,19 @@ namespace HousingHub.Admin.API.Controllers;
 /// endpoint here authenticates via a shared secret header instead of the
 /// Admin JWT, since a scheduler has no user session to authenticate with.
 /// </summary>
+/// <remarks>
+/// A static shared secret is a weak credential: it never expires, it has no
+/// second factor, and it is the same for every caller. Two things compensate.
+/// The secret is compared in constant time, so a wrong guess reveals nothing
+/// about how close it was. And the whole controller is rate limited, so it
+/// cannot be guessed at speed — which matters far more than the constant-time
+/// comparison does, and was the actual gap.
+/// </remarks>
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
 [AllowAnonymous]
+[EnableRateLimiting(RateLimitingExtensions.InternalWorkerPolicy)]
 public class InternalController(
     IInspectionCommandService inspectionCommandService,
     IAdminAuthService adminAuthService,
@@ -34,8 +46,7 @@ public class InternalController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> RunInspectionReminders([FromHeader(Name = "X-Worker-Secret")] string? secret)
     {
-        var expectedSecret = configuration["Internal:WorkerSecret"];
-        if (string.IsNullOrEmpty(expectedSecret) || secret != expectedSecret)
+        if (!IsAuthorisedWorker(secret))
             return Unauthorized();
 
         var result = await inspectionCommandService.SendDueInspectionRemindersAsync();
@@ -47,6 +58,25 @@ public class InternalController(
     /// the very first SuperAdmin can't grant themselves the role through the normal
     /// (SuperAdmin-only) staff management endpoints — someone has to be first.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Disabled unless explicitly switched on.</b> This endpoint grants the highest
+    /// privilege in the system, and it was reachable in every environment, permanently,
+    /// behind nothing but a header — for a bootstrap step that by definition runs once.
+    /// </para>
+    /// <para>
+    /// It is now gated on <c>Internal:EnableSuperAdminBootstrap</c>, which defaults to
+    /// false. To use it: set the flag true, deploy, promote the account, set it back to
+    /// false, deploy again. Deleting the endpoint outright would have been cleaner, but
+    /// it risks locking you out permanently if no SuperAdmin exists yet — a flag is
+    /// reversible and a deletion is not.
+    /// </para>
+    /// <para>
+    /// When disabled this returns 404 rather than 403. A 403 would confirm the route
+    /// exists and is merely switched off, which tells an attacker exactly what to watch
+    /// for; a 404 is indistinguishable from the endpoint never having been written.
+    /// </para>
+    /// </remarks>
     /// <param name="secret">Must match the configured Internal:WorkerSecret.</param>
     /// <param name="email">Email of the admin to promote.</param>
     [HttpPut("admins/promote")]
@@ -55,12 +85,31 @@ public class InternalController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> PromoteToSuperAdmin([FromHeader(Name = "X-Worker-Secret")] string? secret, [FromQuery] string email)
     {
-        var expectedSecret = configuration["Internal:WorkerSecret"];
-        if (string.IsNullOrEmpty(expectedSecret) || secret != expectedSecret)
+        if (!configuration.GetValue<bool>("Internal:EnableSuperAdminBootstrap"))
+            return NotFound();
+
+        if (!IsAuthorisedWorker(secret))
             return Unauthorized();
 
         var success = await adminAuthService.PromoteToSuperAdminAsync(email);
         if (!success) return NotFound(new BaseResponse<bool>(false, false, string.Empty, "Admin not found."));
         return Ok(new BaseResponse<bool>(true, true, string.Empty, "Admin promoted to SuperAdmin."));
+    }
+
+    /// <summary>
+    /// True when the caller presented the configured worker secret.
+    /// </summary>
+    /// <remarks>
+    /// An unset or empty <c>Internal:WorkerSecret</c> denies everything rather than
+    /// allowing everything. Startup validation should already have refused to boot in
+    /// that state (see <c>RequiredSecrets</c>), so this is a second line of defence
+    /// against a configuration path that bypasses it.
+    /// </remarks>
+    private bool IsAuthorisedWorker(string? presented)
+    {
+        var expected = configuration["Internal:WorkerSecret"];
+        if (string.IsNullOrEmpty(expected)) return false;
+
+        return SecretComparer.FixedTimeEquals(presented, expected);
     }
 }
