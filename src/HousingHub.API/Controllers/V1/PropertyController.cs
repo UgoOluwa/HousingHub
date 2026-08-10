@@ -37,6 +37,8 @@ public class PropertyController : ControllerBase
         _mediator = mediator;
     }
 
+    [AllowAnonymous]
+
     [HttpGet("all")]
     [ProducesResponseType(typeof(BaseResponsePagination<HousingHub.Core.CustomResponses.PaginatedResult<PropertyDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll([FromQuery] GetAllPropertiesFilterDto filter)
@@ -44,6 +46,8 @@ public class PropertyController : ControllerBase
         var response = await _mediator.Send(new GetAllPropertiesQuery(filter));
         return Ok(response);
     }
+
+    [AllowAnonymous]
 
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(BaseResponse<PropertyDto?>), StatusCodes.Status200OK)]
@@ -137,6 +141,8 @@ public class PropertyController : ControllerBase
 
     // ─── Discovery Endpoints ──────────────────────────────────────────
 
+    [AllowAnonymous]
+
     [HttpGet("new")]
     [ProducesResponseType(typeof(BaseResponse<List<PropertyDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetNewProperties([FromQuery] int count = 10)
@@ -145,6 +151,8 @@ public class PropertyController : ControllerBase
         return Ok(response);
     }
 
+    [AllowAnonymous]
+
     [HttpGet("trending")]
     [ProducesResponseType(typeof(BaseResponse<List<PropertyDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetTrendingProperties([FromQuery] int count = 10, [FromQuery] int skip = 0)
@@ -152,6 +160,8 @@ public class PropertyController : ControllerBase
         var response = await _mediator.Send(new GetTrendingPropertiesQuery(count, skip));
         return Ok(response);
     }
+
+    [AllowAnonymous]
 
     [HttpGet("nearby")]
     [ProducesResponseType(typeof(BaseResponse<List<PropertyDto>>), StatusCodes.Status200OK)]
@@ -168,11 +178,16 @@ public class PropertyController : ControllerBase
 
     // ─── Property Files ──────────────────────────────────────────────
 
+    [AllowAnonymous]
+
+    /// <summary>
+    /// Photos for a listing. Public once published; before that, owner only.
+    /// </summary>
     [HttpGet("{id:guid}/files")]
     [ProducesResponseType(typeof(BaseResponse<List<PropertyFileDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetFiles(Guid id)
     {
-        var response = await _mediator.Send(new GetPropertyFilesQuery(id));
+        var response = await _mediator.Send(new GetPropertyFilesQuery(id, GetAuthenticatedUserId()));
         return Ok(response);
     }
 

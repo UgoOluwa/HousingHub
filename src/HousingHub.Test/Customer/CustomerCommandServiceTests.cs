@@ -200,7 +200,9 @@ public class CustomerCommandServiceTests
         var customer = new HousingHub.Model.Entities.Customer("John", "Doe", "john@test.com", "08012345678", CustomerType.Customer, TestPasswordHash) { Id = Guid.NewGuid() };
         _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
 
-        var dto = new SubmitKycDto(new DateTime(1990, 1, 1), "12345678901", HousingHub.Model.Enums.IDType.NIN, "https://s3.example.com/doc.jpg", "Dev", "ACME", "Tech");
+        // Must be a key the upload endpoint would have produced for this customer —
+        // SubmitKyc rejects references scoped to anyone else.
+        var dto = new SubmitKycDto(new DateTime(1990, 1, 1), "12345678901", HousingHub.Model.Enums.IDType.NIN, $"private/kyc/{customer.Id}/doc.jpg", "Dev", "ACME", "Tech");
         var result = await _sut.SubmitKyc(customer.Id, dto);
 
         Assert.True(result.IsSuccessful);
@@ -212,11 +214,25 @@ public class CustomerCommandServiceTests
         var customer = new HousingHub.Model.Entities.Customer("John", "Doe", "john@test.com", "08012345678", CustomerType.Customer, TestPasswordHash) { Id = Guid.NewGuid() };
         _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
 
-        var dto = new SubmitKycDto(new DateTime(1990, 1, 1), "NIN12345", HousingHub.Model.Enums.IDType.NIN, "https://s3.example.com/doc.jpg", null, null, null);
+        var dto = new SubmitKycDto(new DateTime(1990, 1, 1), "NIN12345", HousingHub.Model.Enums.IDType.NIN, $"private/kyc/{customer.Id}/doc.jpg", null, null, null);
         await _sut.SubmitKyc(customer.Id, dto);
 
         Assert.Equal("NIN12345", customer.NationalIdNumber);
         Assert.NotNull(customer.KycSubmittedAt);
+    }
+
+    [Fact]
+    public async Task SubmitKyc_WhenDocumentBelongsToAnotherCustomer_ReturnsFailure()
+    {
+        var customer = new HousingHub.Model.Entities.Customer("John", "Doe", "john@test.com", "08012345678", CustomerType.Customer, TestPasswordHash) { Id = Guid.NewGuid() };
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, bool>>>())).ReturnsAsync(customer);
+
+        // Points at someone else's already-uploaded document.
+        var dto = new SubmitKycDto(new DateTime(1990, 1, 1), "NIN12345", HousingHub.Model.Enums.IDType.NIN, $"private/kyc/{Guid.NewGuid()}/doc.jpg", null, null, null);
+        var result = await _sut.SubmitKyc(customer.Id, dto);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Null(customer.KycSubmittedAt);
     }
 
     [Fact]

@@ -34,6 +34,18 @@ public class PropertyReportCommandService : IPropertyReportCommandService
             if (property.OwnerId == request.ReporterId)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.CannotReportOwnProperty);
 
+            // One report per person per listing. Without this a single user could file
+            // unlimited reports against the same property and bury the moderation queue,
+            // or make a legitimate listing look widely-reported.
+            bool alreadyReported = await _unitOfWOrk.PropertyReportQueries.AnyAsync(
+                x => x.PropertyId == request.PropertyId && x.ReporterId == request.ReporterId);
+
+            if (alreadyReported)
+            {
+                return new BaseResponse<bool>(
+                    true, true, string.Empty, ResponseMessages.PropertyReportSubmitted);
+            }
+
             var report = new PropertyReport(request.PropertyId, request.ReporterId, request.Reason, request.Note);
 
             bool isSuccessful = await _unitOfWOrk.PropertyReportCommands.InsertAsync(report);
@@ -47,7 +59,7 @@ public class PropertyReportCommandService : IPropertyReportCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in CreateReportAsync: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

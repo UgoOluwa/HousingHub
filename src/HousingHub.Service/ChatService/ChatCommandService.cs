@@ -126,7 +126,7 @@ public class ChatCommandService : IChatCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in SendMessageAsync: {Message}", ex.Message);
-            return new BaseResponse<ChatMessageDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<ChatMessageDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -161,7 +161,7 @@ public class ChatCommandService : IChatCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in MarkConversationAsReadAsync: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 

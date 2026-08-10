@@ -37,7 +37,7 @@ public class CustomerQueryService : ICustomerQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetCustomerAsync: {Message}", ex.Message);
-            return new BaseResponse<CustomerWithDetailsDto?>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CustomerWithDetailsDto?>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -54,7 +54,7 @@ public class CustomerQueryService : ICustomerQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetAllCustomersAsync: {Message}", ex.Message);
-            return new BaseResponse<List<CustomerDto>>(new List<CustomerDto>(), false, string.Empty, ex.Message);
+            return new BaseResponse<List<CustomerDto>>(new List<CustomerDto>(), false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -71,7 +71,7 @@ public class CustomerQueryService : ICustomerQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetAllCustomersPaginatedAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<CustomerDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<CustomerDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -143,7 +143,7 @@ public class CustomerQueryService : ICustomerQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetCustomersFilteredAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<AdminCustomerListDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<AdminCustomerListDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

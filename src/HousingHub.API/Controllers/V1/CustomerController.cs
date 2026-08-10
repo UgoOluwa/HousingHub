@@ -10,7 +10,9 @@ using HousingHub.Application.Customer.Commands.UploadKycDocument;
 using HousingHub.Application.Customer.Commands.VerifyKyc;
 using HousingHub.Application.Customer.Queries.GetAll;
 using HousingHub.Application.Customer.Queries.GetById;
+using HousingHub.Core.CustomResponses;
 using HousingHub.Model.Enums;
+using HousingHub.Service.Commons.FileStorage;
 using HousingHub.Service.Dtos.Customer;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -24,35 +26,53 @@ namespace HousingHub.API.Controllers.V1
     [Route("api/v{version:apiVersion}/[Controller]")]
     public class CustomerController : ControllerBase
     {
+        /// <summary>How long a KYC document viewing link stays valid.</summary>
+        private static readonly TimeSpan KycDocumentLinkLifetime = TimeSpan.FromMinutes(10);
+
         private readonly ILogger<CustomerController> _logger;
         private readonly IMediator _mediator;
+        private readonly IFileStorageService _fileStorageService;
 
-        public CustomerController(ILogger<CustomerController> logger, IMediator mediator)
+        public CustomerController(
+            ILogger<CustomerController> logger,
+            IMediator mediator,
+            IFileStorageService fileStorageService)
         {
             _logger = logger;
             _mediator = mediator;
+            _fileStorageService = fileStorageService;
         }
 
-        // ─── Admin: Create / Read / Delete ────────────────────────────────
-
-        [HttpPost]
-        [ProducesResponseType(typeof(BaseResponse<CustomerDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> Create(CreateCustomerCommand command)
-        {
-            var response = await _mediator.Send(command);
-            return Ok(response);
-        }
+        // ─── Read / Delete ────────────────────────────────────────────────
+        //
+        // POST /api/v1/Customer was removed. It was anonymous and bound CustomerType
+        // straight from the request body, making it a second route to creating an
+        // Admin account alongside /Auth/register.
+        //
+        // It was also dead: Customer is the same entity AuthService creates on
+        // registration and on Google sign-in, so every authenticated caller already
+        // has a row. CreateCustomer rejects on a duplicate email or phone, so the
+        // endpoint could only ever return "customer already exists".
+        //
+        // CreateCustomerCommand, its handler and CustomerCommandService.CreateCustomer
+        // remain (unexposed and still covered by tests) in case an admin-side
+        // "create customer" feature wants them later.
 
         [Authorize]
         [HttpGet("{id:guid}")]
-        [ProducesResponseType(typeof(BaseResponse<CustomerWithDetailsDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<CustomerWithDetailsDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> Get(Guid id)
         {
+            // Returns National ID number and KYC document URL — self or admin only.
+            if (!CanActOnCustomer(id))
+                return NotFound();
+
             var response = await _mediator.Send(new GetCustomerByIdQuery(id));
             return Ok(response);
         }
 
-        [Authorize]
+        /// <summary>Enumerates every customer. Administrative — not for consumer sessions.</summary>
+        [Authorize(Policy = "AdminOnly")]
         [HttpGet("all")]
         [ProducesResponseType(typeof(BaseResponsePagination<HousingHub.Core.CustomResponses.PaginatedResult<CustomerDto>>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
@@ -66,6 +86,9 @@ namespace HousingHub.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         public async Task<IActionResult> Delete(Guid id)
         {
+            if (!CanActOnCustomer(id))
+                return NotFound();
+
             await _mediator.Send(new DeleteCustomerCommand(id));
             return NoContent();
         }
@@ -74,7 +97,7 @@ namespace HousingHub.API.Controllers.V1
 
         [Authorize]
         [HttpPut("profile")]
-        [ProducesResponseType(typeof(BaseResponse<CustomerDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<CustomerDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> UpdateProfile(UpdateProfileCommand command)
         {
             var userId = GetAuthenticatedUserId();
@@ -89,7 +112,7 @@ namespace HousingHub.API.Controllers.V1
 
         [Authorize]
         [HttpPost("kyc")]
-        [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<bool>), StatusCodes.Status200OK)]
         public async Task<IActionResult> SubmitKyc(SubmitKycCommand command)
         {
             var userId = GetAuthenticatedUserId();
@@ -100,11 +123,49 @@ namespace HousingHub.API.Controllers.V1
             return Ok(response);
         }
 
+        /// <summary>
+        /// Short-lived viewing link for the caller's own KYC identity document.
+        /// </summary>
+        /// <remarks>
+        /// KYC documents live behind a private bucket prefix, so the stored value is an
+        /// object key rather than a URL and cannot be rendered directly. The profile
+        /// page's "View KYC Document" button uses this.
+        ///
+        /// Self only — admins have their own equivalent on the admin API, and a
+        /// customer should never be able to fetch someone else's identity document.
+        /// </remarks>
+        [Authorize]
+        [HttpGet("me/kyc/document-url")]
+        [ProducesResponseType(typeof(Core.CustomResponses.BaseResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetMyKycDocumentUrl()
+        {
+            var userId = GetAuthenticatedUserId();
+            if (userId is null) return Unauthorized();
+
+            var customer = await _mediator.Send(new GetCustomerByIdQuery(userId.Value));
+
+            var stored = customer?.Data?.IdDocumentUrl;
+            if (string.IsNullOrWhiteSpace(stored))
+                return NotFound(new Core.CustomResponses.BaseResponse<string?>(null, false, string.Empty, "No KYC document on file."));
+
+            // Documents submitted before KYC moved to the private prefix are stored as
+            // full public URLs. Those objects are no longer anonymously readable once
+            // the bucket policy is tightened, so they need migrating — see
+            // docs/data-backfill-required.md. Returned as-is meanwhile.
+            if (stored.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                return Ok(new Core.CustomResponses.BaseResponse<string>(stored, true, string.Empty, ResponseMessages.Successful));
+
+            var url = await _fileStorageService.GetPresignedUrlAsync(stored, KycDocumentLinkLifetime);
+
+            return Ok(new Core.CustomResponses.BaseResponse<string>(url, true, string.Empty, "Link valid for 10 minutes."));
+        }
+
         [Authorize]
         [HttpPost("kyc/document")]
         [Consumes("multipart/form-data")]
-        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<string>), StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> UploadKycDocument([FromForm] UploadKycDocumentRequest request)
         {
             var userId = GetAuthenticatedUserId();
@@ -119,7 +180,7 @@ namespace HousingHub.API.Controllers.V1
                        ?? Request.Form.Files.FirstOrDefault();
 
             if (file == null || file.Length == 0)
-                return BadRequest(new BaseResponse<string>(false, null,
+                return BadRequest(new HousingHub.Application.Commons.Bases.BaseResponse<string>(false, null,
                     Core.CustomResponses.ResponseMessages.NoFileProvided, null));
 
             var response = await _mediator.Send(new UploadKycDocumentCommand(userId.Value, file));
@@ -129,8 +190,8 @@ namespace HousingHub.API.Controllers.V1
         [Authorize]
         [HttpPost("profile/photo")]
         [Consumes("multipart/form-data")]
-        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<string>), StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> UpdateProfilePhoto([FromForm] UpdateProfilePhotoRequest request)
         {
             var userId = GetAuthenticatedUserId();
@@ -138,7 +199,7 @@ namespace HousingHub.API.Controllers.V1
 
             var file = request.File ?? Request.Form.Files.GetFile("File") ?? Request.Form.Files.FirstOrDefault();
             if (file == null || file.Length == 0)
-                return BadRequest(new BaseResponse<string>(false, null,
+                return BadRequest(new HousingHub.Application.Commons.Bases.BaseResponse<string>(false, null,
                     Core.CustomResponses.ResponseMessages.NoFileProvided, null));
 
             var response = await _mediator.Send(new UpdateProfilePhotoCommand(userId.Value, file));
@@ -147,7 +208,7 @@ namespace HousingHub.API.Controllers.V1
 
         [Authorize]
         [HttpDelete("profile/photo")]
-        [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<string>), StatusCodes.Status200OK)]
         public async Task<IActionResult> RemoveProfilePhoto()
         {
             var userId = GetAuthenticatedUserId();
@@ -164,7 +225,7 @@ namespace HousingHub.API.Controllers.V1
         /// </summary>
         [Authorize(Policy = "AdminOnly")]
         [HttpPut("{id:guid}/kyc/verify")]
-        [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<bool>), StatusCodes.Status200OK)]
         public async Task<IActionResult> VerifyKyc(Guid id, [FromQuery] bool approve)
         {
             var response = await _mediator.Send(new VerifyKycCommand(id, approve));
@@ -182,6 +243,33 @@ namespace HousingHub.API.Controllers.V1
                 return userId;
 
             return null;
+        }
+
+        private CustomerType? GetAuthenticatedCustomerType()
+        {
+            var claim = User.FindFirst("customer_type")?.Value;
+
+            return Enum.TryParse<CustomerType>(claim, ignoreCase: true, out var customerType)
+                ? customerType
+                : null;
+        }
+
+        /// <summary>
+        /// True when the caller may read or mutate the given customer record — that is,
+        /// when it is their own record, or they are an admin.
+        /// </summary>
+        /// <remarks>
+        /// Callers should return <c>404</c> rather than <c>403</c> on failure. A 403
+        /// confirms the record exists, which turns GUID enumeration into a user-existence
+        /// oracle.
+        /// </remarks>
+        private bool CanActOnCustomer(Guid customerId)
+        {
+            var callerId = GetAuthenticatedUserId();
+            if (callerId is null) return false;
+
+            return callerId == customerId
+                || GetAuthenticatedCustomerType() == CustomerType.Admin;
         }
     }
 

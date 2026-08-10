@@ -15,13 +15,26 @@ public class UploadKycDocumentCommandHandler : IRequestHandler<UploadKycDocument
 
     public async Task<BaseResponse<string>> Handle(UploadKycDocumentCommand request, CancellationToken cancellationToken)
     {
-        if (request.File == null || request.File.Length == 0)
-            return new BaseResponse<string>(false, null, "No file was provided. Please select a valid document to upload.", null);
-
         if (request.CustomerId == Guid.Empty)
             return new BaseResponse<string>(false, null, "Invalid customer ID.", null);
 
-        var url = await _fileStorageService.UploadFileAsync(request.File, $"kyc/{request.CustomerId}");
-        return new BaseResponse<string>(true, url, "Document uploaded successfully.", null);
+        // Government identity documents. Previously this path had no validation at
+        // all and wrote to the same public bucket prefix as property photos, so the
+        // documents were world-readable at a predictable URL shape.
+        var validation = UploadedFileValidator.Validate(
+            request.File,
+            UploadedFileValidator.DocumentExtensions,
+            UploadedFileValidator.DocumentMaxBytes);
+
+        if (!validation.IsValid)
+            return new BaseResponse<string>(false, null, validation.Error!, null);
+
+        // Returns an object key, not a URL. The object lives under the private prefix
+        // and is only ever reachable through a short-lived presigned URL minted for an
+        // authorised reader.
+        var key = await _fileStorageService.UploadPrivateFileAsync(
+            request.File!, $"kyc/{request.CustomerId}", validation.ContentType);
+
+        return new BaseResponse<string>(true, key, "Document uploaded successfully.", null);
     }
 }

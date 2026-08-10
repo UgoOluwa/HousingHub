@@ -37,11 +37,25 @@ public class CustomerAddressController : ControllerBase
         return Ok(response);
     }
 
+    /// <summary>Fetches a stored address by its id. Callers may only read their own.</summary>
+    /// <remarks>
+    /// Previously unguarded, so enumerating address GUIDs returned other users'
+    /// residential addresses. Returns 404 rather than 403 on a mismatch so the
+    /// endpoint doesn't confirm which ids exist.
+    /// </remarks>
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(BaseResponse<CustomerAddressDto?>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id)
     {
+        var userId = GetAuthenticatedUserId();
+        if (userId is null) return Unauthorized();
+
         var response = await _queryService.GetAddressAsync(id);
+
+        if (response?.Data is null || response.Data.CustomerId != userId.Value)
+            return NotFound();
+
         return Ok(response);
     }
 

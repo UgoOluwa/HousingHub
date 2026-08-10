@@ -22,11 +22,28 @@ public class PropertyAddressCommandService : IPropertyAddressCommandService
         _mapper = mapper;
     }
 
-    public async Task<BaseResponse<PropertyAddressDto>> CreatePropertyAddress(CreatePropertyAddressDto request)
+    /// <summary>
+    /// Attaches an address to a property.
+    /// </summary>
+    /// <param name="requestingUserId">
+    /// The caller, taken from their token. Must own the target property — PropertyId
+    /// arrives in the request body, so without this check any owner or agent could
+    /// attach a fabricated address to someone else's listing.
+    /// </param>
+    public async Task<BaseResponse<PropertyAddressDto>> CreatePropertyAddress(CreatePropertyAddressDto request, Guid requestingUserId)
     {
         try
         {
-            // Check for existing property address could be added here
+            var property = await _unitOfWOrk.PropertyQueries.GetByIdAsync(request.PropertyId);
+            if (property is null || property.OwnerId != requestingUserId)
+            {
+                _logger.LogWarning(
+                    "Rejected address creation on property {PropertyId} by user {UserId}",
+                    request.PropertyId, requestingUserId);
+                return new BaseResponse<PropertyAddressDto>(
+                    null, false, string.Empty, ResponseMessages.SetNotFoundMessage("property"));
+            }
+
             var existingAddress = await _unitOfWOrk.PropertyAddressQueries.AnyAsync(x => x.PropertyId == request.PropertyId);
             if (existingAddress)
             {
@@ -47,7 +64,7 @@ public class PropertyAddressCommandService : IPropertyAddressCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in CreatePropertyAddress: {Message}", ex.Message);
-            return new BaseResponse<PropertyAddressDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PropertyAddressDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

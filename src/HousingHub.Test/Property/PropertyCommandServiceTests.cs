@@ -199,11 +199,19 @@ public class PropertyCommandServiceTests
         Assert.Equal("smith@agency.com", result.Data.Property.ContactPersonEmail);
     }
 
+    /// <summary>
+    /// A mock upload carrying real JPEG magic bytes. UploadedFileValidator reads the
+    /// file signature, so a mock without a readable stream no longer passes validation.
+    /// </summary>
     private static Mock<IFormFile> CreateFormFile(string fileName = "photo.jpg", long length = 1024)
     {
+        // SOI + APP0, enough for the JPEG signature check.
+        byte[] jpegHeader = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00];
+
         var fileMock = new Mock<IFormFile>();
         fileMock.Setup(f => f.FileName).Returns(fileName);
         fileMock.Setup(f => f.Length).Returns(length);
+        fileMock.Setup(f => f.OpenReadStream()).Returns(() => new MemoryStream(jpegHeader));
         return fileMock;
     }
 
@@ -213,7 +221,7 @@ public class PropertyCommandServiceTests
         SetupOwnerLookup(CreateOwner(CustomerType.HouseOwner));
         SetupInsertSuccess();
         _fileStorageServiceMock
-            .Setup(f => f.UploadFileAsync(It.IsAny<IFormFile>(), It.IsAny<string>()))
+            .Setup(f => f.UploadFileAsync(It.IsAny<IFormFile>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync("https://s3.example.com/properties/photo.jpg");
 
         var dto = CreateValidDto() with { Files = new List<IFormFile> { CreateFormFile().Object } };
@@ -806,7 +814,9 @@ public class PropertyCommandServiceTests
         var result = await _sut.CreateProperty(CreateValidDto(), OwnerId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("DB error", result.Message);
+        // The raw exception text is no longer returned to callers — it is logged
+        // server-side and the client gets a generic message instead.
+        Assert.Equal(ResponseMessages.UnexpectedError, result.Message);
     }
 
     [Fact]
@@ -820,7 +830,9 @@ public class PropertyCommandServiceTests
         var result = await _sut.UpdateProperty(dto, OwnerId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("DB error", result.Message);
+        // The raw exception text is no longer returned to callers — it is logged
+        // server-side and the client gets a generic message instead.
+        Assert.Equal(ResponseMessages.UnexpectedError, result.Message);
     }
 
     [Fact]
@@ -833,7 +845,9 @@ public class PropertyCommandServiceTests
         var result = await _sut.DeleteProperty(PropertyId, OwnerId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("DB error", result.Message);
+        // The raw exception text is no longer returned to callers — it is logged
+        // server-side and the client gets a generic message instead.
+        Assert.Equal(ResponseMessages.UnexpectedError, result.Message);
     }
 
     [Fact]

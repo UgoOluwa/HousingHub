@@ -1,7 +1,9 @@
+using HousingHub.Admin.API.Common;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Service.AdminService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace HousingHub.Admin.API.Controllers;
 
@@ -17,6 +19,7 @@ public class AdminAuthController(IAdminAuthService adminAuthService) : Controlle
     /// without the response needing to reveal anything account-specific.
     /// </summary>
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitingExtensions.OtpRequestPolicy)]
     [HttpPost("otp/request")]
     public async Task<IActionResult> RequestOtp([FromBody] AdminOtpRequest request)
     {
@@ -26,6 +29,7 @@ public class AdminAuthController(IAdminAuthService adminAuthService) : Controlle
 
     /// <summary>Verifies a one-time login code and, on success, issues a JWT. Locks out the code after too many wrong attempts.</summary>
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitingExtensions.OtpVerifyPolicy)]
     [HttpPost("otp/verify")]
     public async Task<IActionResult> VerifyOtp([FromBody] AdminOtpVerifyRequest request)
     {
@@ -42,6 +46,20 @@ public class AdminAuthController(IAdminAuthService adminAuthService) : Controlle
         var result = await adminAuthService.RefreshTokenAsync(request.RefreshToken);
         if (result == null) return Unauthorized(new { message = ResponseMessages.InvalidRefreshToken });
         return Ok(result);
+    }
+
+    /// <summary>Ends the current admin session by revoking its refresh token.</summary>
+    /// <remarks>
+    /// Anonymous by design: an admin whose access token has already expired must still
+    /// be able to sign out, and the refresh token in the body is itself the proof of
+    /// possession. Always returns 200 — the client is discarding its state regardless.
+    /// </remarks>
+    [AllowAnonymous]
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout([FromBody] AdminLogoutRequest request)
+    {
+        await adminAuthService.LogoutAsync(request.RefreshToken, request.AllSessions);
+        return Ok(new { message = "Signed out." });
     }
 
     // Seeding endpoint — restrict in production via env var or remove after first use
@@ -61,4 +79,7 @@ public class AdminAuthController(IAdminAuthService adminAuthService) : Controlle
 public record AdminOtpRequest(string Email);
 public record AdminOtpVerifyRequest(string Email, string Code);
 public record AdminRefreshTokenRequest(string RefreshToken);
+
+/// <param name="AllSessions">Revoke every active session for this admin, not just this one.</param>
+public record AdminLogoutRequest(string RefreshToken, bool AllSessions = false);
 public record CreateAdminRequest(string SeedKey, string Email, string Password, string FirstName, string LastName);

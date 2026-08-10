@@ -26,8 +26,11 @@ public static class ApplicationBuilderExtensions
             }
         );
 
-        app.MapSwagger("/openapi/{documentName}.json");
-        app.MapScalarApiReference();
+        // These are routed endpoints, so the deny-by-default FallbackPolicy would
+        // otherwise require a token to read the API docs. Only reachable in
+        // Development — the caller gates this whole block on IsDevelopment().
+        app.MapSwagger("/openapi/{documentName}.json").AllowAnonymous();
+        app.MapScalarApiReference().AllowAnonymous();
 
         return app;
     }

@@ -4,14 +4,17 @@ using Amazon;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.Runtime;
+using HousingHub.Admin.API.Common;
 using HousingHub.Admin.API.Realtime;
 using HousingHub.Application;
+using HousingHub.Core.Configuration;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.Contexts;
 using HousingHub.Repository;
 using HousingHub.Service;
 using HousingHub.Service.AdminService;
 using HousingHub.Service.ChatService.Interfaces;
+using HousingHub.Service.Commons.Web;
 using HousingHub.Service.Commons.Authentication;
 using HousingHub.Service.NotificationService.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -28,6 +31,14 @@ public static class Program
     public static async Task Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
+
+        // Fail fast on missing or placeholder secrets. Internal:WorkerSecret is the
+        // only gate on PUT /api/Internal/admins/promote, which grants SuperAdmin — a
+        // committed placeholder there is effectively a published password.
+        RequiredSecrets.Validate(
+            builder.Configuration,
+            signingKeys: ["AdminJwt:Secret"],
+            otherRequired: ["Internal:WorkerSecret", "Email:ResendApiKey"]);
 
         var isLambda = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME"));
 
@@ -54,7 +65,14 @@ public static class Program
             .Enrich.FromLogContext()
             .WriteTo.Console());
 
-        builder.Services.AddControllers();
+        builder.Services.AddAdminRateLimiting();
+
+        builder.Services.AddControllers(options =>
+        {
+            // Bounds page size everywhere at once — see the filter for why this is
+            // global rather than per-endpoint.
+            options.Filters.Add<PaginationClampFilter>();
+        });
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen(c =>
         {
@@ -171,17 +189,24 @@ public static class Program
             });
         });
 
-        app.UseSwagger(c => c.RouteTemplate = "openapi/{documentName}.json");
-        app.UseSwaggerUI(c =>
+        // Development only. These were previously served in production with
+        // .AllowAnonymous(), publishing the entire admin surface — every DTO shape and
+        // the SuperAdmin-only routes — to unauthenticated callers. The consumer API
+        // already gates its docs this way.
+        if (app.Environment.IsDevelopment())
         {
-            c.SwaggerEndpoint("/admin/openapi/v1.json", "HousingHub Admin API v1");
-            c.RoutePrefix = "swagger";
-        });
-        app.MapScalarApiReference("/scalar", options =>
-        {
-            options.WithTitle("HousingHub Admin API")
-                   .WithOpenApiRoutePattern("/admin/openapi/v1.json");
-        }).AllowAnonymous();
+            app.UseSwagger(c => c.RouteTemplate = "openapi/{documentName}.json");
+            app.UseSwaggerUI(c =>
+            {
+                c.SwaggerEndpoint("/admin/openapi/v1.json", "HousingHub Admin API v1");
+                c.RoutePrefix = "swagger";
+            });
+            app.MapScalarApiReference("/scalar", options =>
+            {
+                options.WithTitle("HousingHub Admin API")
+                       .WithOpenApiRoutePattern("/admin/openapi/v1.json");
+            }).AllowAnonymous();
+        }
 
         using (var scope = app.Services.CreateScope())
         {
@@ -197,7 +222,13 @@ public static class Program
         app.UseCors();
         app.UseAuthentication();
         app.UseAuthorization();
-        app.MapGet("/", () => Results.Redirect("/admin/scalar")).AllowAnonymous();
+        app.UseRateLimiter();
+        // Root redirect only makes sense where the docs are actually served.
+        if (app.Environment.IsDevelopment())
+        {
+            app.MapGet("/", () => Results.Redirect("/admin/scalar")).AllowAnonymous();
+        }
+
         app.MapControllers();
 
         app.Run();

@@ -62,7 +62,7 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetInspectionAsync: {Message}", ex.Message);
-            return new BaseResponse<InspectionDto?>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<InspectionDto?>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -102,14 +102,27 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetInspectionAsync: {Message}", ex.Message);
-            return new BaseResponse<InspectionDto?>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<InspectionDto?>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
-    public async Task<BaseResponse<PaginatedResult<InspectionDto>>> GetInspectionsByPropertyAsync(Guid propertyId, int pageNumber, int pageSize, InspectionStatus? status = null)
+    public async Task<BaseResponse<PaginatedResult<InspectionDto>>> GetInspectionsByPropertyAsync(Guid propertyId, Guid requestingUserId, int pageNumber, int pageSize, InspectionStatus? status = null)
     {
         try
         {
+            // These records expose the booking customer's id, visit times and notes,
+            // so only the property's owner may list them. Report 'not found' rather
+            // than 'forbidden' so the endpoint doesn't confirm which property ids exist.
+            var property = await _unitOfWOrk.PropertyQueries.GetByIdAsync(propertyId);
+            if (property is null || property.OwnerId != requestingUserId)
+            {
+                _logger.LogWarning(
+                    "Rejected inspection listing for property {PropertyId} requested by {UserId}",
+                    propertyId, requestingUserId);
+                return new BaseResponse<PaginatedResult<InspectionDto>>(
+                    null, false, string.Empty, ResponseMessages.SetNotFoundMessage("Property"));
+            }
+
             System.Linq.Expressions.Expression<Func<PropertyInspection, bool>> predicate = status.HasValue
                 ? x => x.PropertyId == propertyId && x.Status == status.Value
                 : x => x.PropertyId == propertyId;
@@ -124,7 +137,7 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetInspectionsByPropertyAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<InspectionDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<InspectionDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -149,7 +162,7 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetInspectionsByCustomerAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<InspectionDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<InspectionDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -193,7 +206,7 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetInspectionsByOwnerAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<OwnerInspectionDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<OwnerInspectionDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -298,7 +311,7 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetAllInspectionsPaginatedAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<AdminInspectionListDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<AdminInspectionListDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -358,7 +371,7 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetTodaysInspectionsPaginatedAsync: {Message}", ex.Message);
-            return new BaseResponse<PaginatedResult<AdminTodayInspectionDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<PaginatedResult<AdminTodayInspectionDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -434,7 +447,7 @@ public class InspectionQueryService : IInspectionQueryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetRecentActivityAsync: {Message}", ex.Message);
-            return new BaseResponse<List<AdminRecentActivityDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<List<AdminRecentActivityDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

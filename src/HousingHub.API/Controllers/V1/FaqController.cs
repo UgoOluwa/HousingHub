@@ -1,8 +1,11 @@
 using Asp.Versioning;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HousingHub.API.Controllers.V1;
 
+// Public FAQ content — no auth required.
+[AllowAnonymous]
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/[Controller]")]
@@ -81,7 +84,7 @@ public class FaqController : ControllerBase
             {
                 Id = 10,
                 Question = "How does Housing Hub protect me from rental fraud?",
-                Answer = "Housing Hub protects users through mandatory KYC for all landlords, agents, and tenants; secure in-platform payment processing; a verified badge system; and an inspection protocol that prevents you from paying rent before physically viewing the property. We never request payment via bank transfer to personal accounts. If anything feels suspicious, report it immediately through the app.",
+                Answer = "Housing Hub protects users through mandatory KYC for landlords, agents and tenants, a verified badge on reviewed listings, and an inspection-first process so you never commit to a property you have not seen. Housing Hub does not currently process payments or hold funds — rent and fees are agreed and paid directly between you and the owner or agent, so treat any request to pay Housing Hub itself as fraudulent. Always inspect the property and verify documents before parting with money, and report anything suspicious through the app.",
                 Category = "Safety & Trust"
             },
             new
@@ -95,7 +98,7 @@ public class FaqController : ControllerBase
             {
                 Id = 12,
                 Question = "How does payment work on Housing Hub?",
-                Answer = "All payments on Housing Hub are made securely through our in-app payment gateway. After agreeing to a rental, you will be presented with a payment breakdown covering rent, agency fee, caution deposit, and service charge where applicable. Funds are held in escrow until the tenancy agreement is signed, protecting both landlord and tenant. Receipts are automatically generated for every transaction.",
+                Answer = "Housing Hub does not process payments at this time. Rent, agency fees, caution deposits and service charges are agreed and paid directly between you and the property owner or agent. Because of that, Housing Hub cannot hold funds in escrow or issue receipts on their behalf. Insist on a written agreement and a receipt from whoever you pay, confirm their identity against their verified profile first, and never send money before inspecting the property. In-app payments are planned, and this answer will be updated when they launch.",
                 Category = "Payments"
             },
         };

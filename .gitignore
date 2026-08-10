@@ -362,3 +362,9 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# local staging for deletions (fs blocks unlink)
+.deleted-scratch/
+
+# Claude Code local settings (personal permission/config, not project source)
+.claude/settings.local.json

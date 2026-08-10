@@ -35,7 +35,7 @@ public class PropertyAlertPreferenceQueryService : IPropertyAlertPreferenceQuery
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in GetByCustomerAsync: {Message}", ex.Message);
-            return new BaseResponse<List<PropertyAlertPreferenceDto>>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<List<PropertyAlertPreferenceDto>>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 

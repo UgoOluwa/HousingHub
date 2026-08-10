@@ -43,7 +43,11 @@ public class AdminAuthService(
         if (admin.OtpRequestedAt.HasValue && DateTime.UtcNow - admin.OtpRequestedAt.Value < OtpResendCooldown)
             return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.OtpSent);
 
-        string code = Random.Shared.Next(0, 1_000_000).ToString("D6");
+        // Must be cryptographically random: admin sign-in is OTP-only, so this six
+        // digits is the entire credential. Random.Shared is a seeded, process-wide
+        // xoshiro256** stream — observing a handful of outputs is enough to recover its
+        // state and predict the codes issued to other admins.
+        string code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
         admin.OtpCode = code;
         admin.OtpExpiresAt = DateTime.UtcNow.Add(OtpValidity);
         admin.OtpRequestedAt = DateTime.UtcNow;
@@ -72,7 +76,7 @@ public class AdminAuthService(
             || admin.OtpExpiresAt < DateTime.UtcNow)
             return new BaseResponse<AdminLoginResultDto>(null, false, string.Empty, ResponseMessages.OtpInvalidOrExpired);
 
-        if (admin.OtpCode != code)
+        if (!FixedTimeEquals(admin.OtpCode, code))
         {
             admin.OtpAttempts++;
 
@@ -167,6 +171,36 @@ public class AdminAuthService(
         return rawToken;
     }
 
+    /// <summary>
+    /// Ends an admin session. Silent on unknown or already-revoked tokens: the session
+    /// is over either way, and distinguishing the cases would confirm whether a token
+    /// value is real.
+    /// </summary>
+    public async Task LogoutAsync(string refreshToken, bool allSessions = false)
+    {
+        if (string.IsNullOrWhiteSpace(refreshToken)) return;
+
+        var matches = await dynamoDb.QueryAsync<AdminRefreshToken>(
+            HashToken(refreshToken),
+            new DynamoDBOperationConfig { IndexName = "TokenHash-index" })
+            .GetRemainingAsync();
+
+        var existing = matches.FirstOrDefault();
+        if (existing is null) return;
+
+        if (allSessions)
+        {
+            await RevokeAllRefreshTokensAsync(existing.AdminId);
+            return;
+        }
+
+        if (existing.IsRevoked) return;
+
+        existing.IsRevoked = true;
+        existing.DateModified = DateTime.UtcNow;
+        await dynamoDb.SaveAsync(existing);
+    }
+
     private async Task RevokeAllRefreshTokensAsync(Guid adminId)
     {
         var tokens = await dynamoDb.QueryAsync<AdminRefreshToken>(
@@ -180,6 +214,23 @@ public class AdminAuthService(
             refreshToken.DateModified = DateTime.UtcNow;
             await dynamoDb.SaveAsync(refreshToken);
         }
+    }
+
+    /// <summary>
+    /// Length-independent, constant-time string comparison for secrets.
+    /// </summary>
+    /// <remarks>
+    /// The practical risk here is low — the OTP has an attempt limit and tokens are
+    /// 256-bit — but ordinary string equality short-circuits on the first differing
+    /// character, which is a timing signal, and the fix is free.
+    /// </remarks>
+    private static bool FixedTimeEquals(string? a, string? b)
+    {
+        if (a is null || b is null) return false;
+
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(a),
+            Encoding.UTF8.GetBytes(b));
     }
 
     private static string HashToken(string rawToken)
@@ -288,6 +339,13 @@ public class AdminAuthService(
         admin.IsActive = false;
         admin.DateModified = DateTime.UtcNow;
         await dynamoDb.SaveAsync(admin);
+
+        // Deactivation previously only flipped a flag. RefreshTokenAsync does check
+        // IsActive, but the already-issued access token stayed valid for its full
+        // lifetime, and the refresh token was never revoked. Revoke the family so the
+        // deactivated admin cannot mint another access token.
+        await RevokeAllRefreshTokensAsync(adminId);
+
         return true;
     }
 
@@ -308,7 +366,10 @@ public class AdminAuthService(
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
-        int expirationInMinutes = int.TryParse(configuration["AdminJwt:ExpirationInMinutes"], out var mins) ? mins : 480;
+        // Fall back to 30 minutes, matching appsettings, rather than the previous 8
+        // hours. Admin tokens are not revocable once issued, so a misconfigured
+        // environment should shorten the blast radius, not widen it.
+        int expirationInMinutes = int.TryParse(configuration["AdminJwt:ExpirationInMinutes"], out var mins) ? mins : 30;
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {

@@ -4,6 +4,16 @@ public static class ResponseMessages
 {
     public const string Successful = "Operation Successful";
     public const string Failed = "Operation Failed";
+
+    /// <summary>
+    /// Client-facing message for an unhandled exception.
+    /// </summary>
+    /// <remarks>
+    /// Services previously returned ex.Message directly, which leaks internals —
+    /// table names, driver errors, stack-adjacent detail — to any caller who can
+    /// trigger a failure. The full exception is still logged server-side.
+    /// </remarks>
+    public const string UnexpectedError = "Something went wrong on our end. Please try again.";
     public const string CustomerAlreadyExists = "Customer with the same email or phone number already exists.";
 
     // Auth messages

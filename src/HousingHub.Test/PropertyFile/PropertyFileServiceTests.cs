@@ -42,7 +42,7 @@ public class PropertyFileServiceTests
         _unitOfWorkMock.Setup(u => u.PropertyFileCommands.InsertRangeAsync(It.IsAny<IEnumerable<HousingHub.Model.Entities.PropertyFile>>())).Returns(Task.CompletedTask);
         _unitOfWorkMock.Setup(u => u.PropertyFileCommands.DeleteAsync(It.IsAny<HousingHub.Model.Entities.PropertyFile>())).Returns(Task.CompletedTask);
         _unitOfWorkMock.Setup(u => u.SaveAsync()).Returns(Task.CompletedTask);
-        _fileStorageMock.Setup(f => f.UploadFileAsync(It.IsAny<IFormFile>(), It.IsAny<string>())).ReturnsAsync(TestFileUrl);
+        _fileStorageMock.Setup(f => f.UploadFileAsync(It.IsAny<IFormFile>(), It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync(TestFileUrl);
         _fileStorageMock.Setup(f => f.DeleteFileAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
 
         _commandSut = new PropertyFileCommandService(commandLogger, _unitOfWorkMock.Object, _mapper, _fileStorageMock.Object);
@@ -62,18 +62,27 @@ public class PropertyFileServiceTests
             Id = id ?? OwnerId
         };
 
-    private static Property CreateProperty(Guid? id = null, Guid? ownerId = null) => new()
+    private static Property CreateProperty(Guid? id = null, Guid? ownerId = null, bool isPublished = false) => new()
     {
         Id = id ?? PropertyId,
         Title = "Test Property",
-        OwnerId = ownerId ?? OwnerId
+        OwnerId = ownerId ?? OwnerId,
+        IsPublished = isPublished
     };
 
+    /// <summary>
+    /// A mock upload carrying real JPEG magic bytes. UploadedFileValidator reads the
+    /// file signature, so a mock without a readable stream no longer passes validation.
+    /// </summary>
     private static Mock<IFormFile> CreateFormFile(string fileName = "test.jpg", long length = 1024)
     {
+        // SOI + APP0, enough for the JPEG signature check.
+        byte[] jpegHeader = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00];
+
         var fileMock = new Mock<IFormFile>();
         fileMock.Setup(f => f.FileName).Returns(fileName);
         fileMock.Setup(f => f.Length).Returns(length);
+        fileMock.Setup(f => f.OpenReadStream()).Returns(() => new MemoryStream(jpegHeader));
         return fileMock;
     }
 
@@ -190,7 +199,33 @@ public class PropertyFileServiceTests
         var result = await _commandSut.UploadPropertyFiles(PropertyId, OwnerId, new List<IFormFile> { badFile.Object });
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains(ResponseMessages.InvalidFileType, result.Message);
+        Assert.Contains("Unsupported file type", result.Message);
+    }
+
+    [Fact]
+    public async Task UploadPropertyFiles_WhenContentsDoNotMatchExtension_ReturnsFailure()
+    {
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(
+            It.IsAny<Expression<Func<Customer, bool>>>()))
+            .ReturnsAsync(CreateOwner());
+
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByAsync(
+            It.IsAny<Expression<Func<Property, bool>>>()))
+            .ReturnsAsync(CreateProperty());
+
+        // Named .jpg but carrying HTML. Extension checks alone would let this through
+        // and it would then be served from the bucket origin as a script.
+        byte[] html = System.Text.Encoding.UTF8.GetBytes("<html><script>alert(1)</script>");
+        var disguised = new Mock<IFormFile>();
+        disguised.Setup(f => f.FileName).Returns("payload.jpg");
+        disguised.Setup(f => f.Length).Returns(html.Length);
+        disguised.Setup(f => f.OpenReadStream()).Returns(() => new MemoryStream(html));
+
+        var result = await _commandSut.UploadPropertyFiles(
+            PropertyId, OwnerId, new List<IFormFile> { disguised.Object });
+
+        Assert.False(result.IsSuccessful);
+        Assert.Contains("do not match a supported format", result.Message);
     }
 
     // ── DeletePropertyFile ───────────────────────────────────────
@@ -285,8 +320,11 @@ public class PropertyFileServiceTests
     // ── GetAllPropertyFilesAsync ─────────────────────────────────
 
     [Fact]
-    public async Task GetAllPropertyFilesAsync_WhenFilesExist_ReturnsSuccess()
+    public async Task GetAllPropertyFilesAsync_WhenPublishedAndFilesExist_ReturnsSuccess()
     {
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId))
+            .ReturnsAsync(CreateProperty(isPublished: true));
+
         var files = new List<HousingHub.Model.Entities.PropertyFile> { CreateFile(), CreateFile() };
         _unitOfWorkMock.Setup(u => u.PropertyFileQueries.GetAllAsync(
             It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, bool>>>()))
@@ -299,8 +337,11 @@ public class PropertyFileServiceTests
     }
 
     [Fact]
-    public async Task GetAllPropertyFilesAsync_WhenNoFiles_ReturnsFailure()
+    public async Task GetAllPropertyFilesAsync_WhenPublishedAndNoFiles_ReturnsFailure()
     {
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId))
+            .ReturnsAsync(CreateProperty(isPublished: true));
+
         _unitOfWorkMock.Setup(u => u.PropertyFileQueries.GetAllAsync(
             It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, bool>>>()))
             .ReturnsAsync(Enumerable.Empty<HousingHub.Model.Entities.PropertyFile>());
@@ -308,5 +349,32 @@ public class PropertyFileServiceTests
         var result = await _querySut.GetAllPropertyFilesAsync(PropertyId);
 
         Assert.False(result.IsSuccessful);
+    }
+
+    [Fact]
+    public async Task GetAllPropertyFilesAsync_WhenUnpublishedAndCallerIsNotOwner_ReturnsNotFound()
+    {
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId))
+            .ReturnsAsync(CreateProperty(isPublished: false));
+
+        var result = await _querySut.GetAllPropertyFilesAsync(PropertyId, Guid.NewGuid());
+
+        Assert.False(result.IsSuccessful);
+        Assert.Empty(result.Data!);
+    }
+
+    [Fact]
+    public async Task GetAllPropertyFilesAsync_WhenUnpublishedAndCallerIsOwner_ReturnsSuccess()
+    {
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyId))
+            .ReturnsAsync(CreateProperty(isPublished: false));
+
+        _unitOfWorkMock.Setup(u => u.PropertyFileQueries.GetAllAsync(
+            It.IsAny<Expression<Func<HousingHub.Model.Entities.PropertyFile, bool>>>()))
+            .ReturnsAsync(new List<HousingHub.Model.Entities.PropertyFile> { CreateFile() });
+
+        var result = await _querySut.GetAllPropertyFilesAsync(PropertyId, OwnerId);
+
+        Assert.True(result.IsSuccessful);
     }
 }

@@ -61,7 +61,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in CreateCustomer: {Message}", ex.Message);
-            return new BaseResponse<CustomerDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -93,7 +93,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in CreateCustomer: {Message}", ex.Message);
-            return new BaseResponse<CustomerDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -118,7 +118,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in LoginCustomer: {Message}", ex.Message);
-            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -152,7 +152,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in UpdateCustomer: {Message}", ex.Message);
-            return new BaseResponse<CustomerDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -180,7 +180,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in UpdateProfile: {Message}", ex.Message);
-            return new BaseResponse<CustomerDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -195,7 +195,21 @@ public class CustomerCommandService : ICustomerCommandService
             // A null file clears the picture; otherwise upload and replace.
             string? newUrl = null;
             if (file is not null)
-                newUrl = await _fileStorageService.UploadFileAsync(file, $"profile-photos/{customerId}");
+            {
+                // This path previously had no validation of any kind — no size cap, no
+                // extension allow-list, no content check — so any authenticated user
+                // could push arbitrary content into the public bucket.
+                var validation = UploadedFileValidator.Validate(
+                    file,
+                    UploadedFileValidator.ImageExtensions,
+                    maxBytes: 5 * 1024 * 1024);
+
+                if (!validation.IsValid)
+                    return new BaseResponse<string?>(null, false, string.Empty, validation.Error!);
+
+                newUrl = await _fileStorageService.UploadFileAsync(
+                    file, $"profile-photos/{customerId}", validation.ContentType);
+            }
 
             // Best-effort cleanup of the previous object so we don't leak storage.
             if (!string.IsNullOrEmpty(customer.ProfileImageUrl))
@@ -213,7 +227,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in UpdateProfilePhoto: {Message}", ex.Message);
-            return new BaseResponse<string?>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<string?>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -224,6 +238,20 @@ public class CustomerCommandService : ICustomerCommandService
             var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == customerId);
             if (customer is null)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage(ClassName));
+
+            // The document reference comes from the request body, so a caller could
+            // otherwise point their KYC record at any object — including another
+            // user's already-approved document. Only accept a key that the upload
+            // endpoint would have produced for this same customer.
+            if (!string.IsNullOrWhiteSpace(request.IdDocumentUrl)
+                && !IsOwnKycDocumentKey(request.IdDocumentUrl, customerId))
+            {
+                _logger.LogWarning(
+                    "Rejected KYC submission for {CustomerId}: document reference is not scoped to this customer",
+                    customerId);
+                return new BaseResponse<bool>(false, false, string.Empty,
+                    "The uploaded document could not be matched to your account. Please upload it again.");
+            }
 
             customer.AddKYCDetails(
                 request.DateOfBirth,
@@ -243,9 +271,34 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in SubmitKyc: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
+
+    /// <summary>
+    /// Revokes every active refresh token for an account. Done here through the unit of
+    /// work rather than by injecting IAuthService, to avoid a dependency cycle between
+    /// the customer and auth services.
+    /// </summary>
+    private async Task RevokeAllSessionsAsync(Guid customerId)
+    {
+        var activeTokens = await _unitOfWOrk.RefreshTokenQueries.GetActiveByCustomerIdAsync(customerId);
+
+        foreach (var token in activeTokens)
+        {
+            token.IsRevoked = true;
+            await _unitOfWOrk.RefreshTokenCommands.UpdateAsync(token);
+        }
+    }
+
+    /// <summary>
+    /// True when the reference is an object key produced by the KYC upload endpoint
+    /// for this specific customer, i.e. <c>private/kyc/{customerId}/...</c>.
+    /// </summary>
+    private static bool IsOwnKycDocumentKey(string reference, Guid customerId) =>
+        reference.StartsWith(
+            $"{S3FileStorageService.PrivatePrefix}/kyc/{customerId}/",
+            StringComparison.OrdinalIgnoreCase);
 
     public async Task<BaseResponse<bool>> VerifyKyc(Guid customerId, bool isApproved, string? rejectionReason = null)
     {
@@ -272,7 +325,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in VerifyKyc: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -293,7 +346,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in DeleteCustomer: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -307,6 +360,12 @@ public class CustomerCommandService : ICustomerCommandService
 
             customer.IsActive = false;
             customer.DateModified = DateTime.UtcNow;
+
+            // Suspension previously only set a flag. The account's refresh tokens stayed
+            // valid, so a suspended user kept working until their token expired — up to
+            // 30 days. Revoke the whole family so the suspension takes effect now.
+            await RevokeAllSessionsAsync(customerId);
+
             await _unitOfWOrk.CustomerCommands.UpdateAsync(customer);
             await _unitOfWOrk.SaveAsync();
 
@@ -315,7 +374,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in SuspendCustomer: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -339,7 +398,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in ReactivateCustomer: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -367,7 +426,7 @@ public class CustomerCommandService : ICustomerCommandService
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred in SetManagedByHousingHubAsync: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 }

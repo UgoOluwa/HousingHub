@@ -16,7 +16,7 @@ public class GetPropertyFilesQueryHandler : IRequestHandler<GetPropertyFilesQuer
 
     public async Task<BaseResponse<List<PropertyFileDto>?>> Handle(GetPropertyFilesQuery request, CancellationToken cancellationToken)
     {
-        var response = await _propertyFileQueryService.GetAllPropertyFilesAsync(request.PropertyId);
+        var response = await _propertyFileQueryService.GetAllPropertyFilesAsync(request.PropertyId, request.RequestingUserId);
         return new BaseResponse<List<PropertyFileDto>?>(response.IsSuccessful, response.Data, response.Message, null);
     }
 }

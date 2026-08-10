@@ -4,4 +4,4 @@ using MediatR;
 
 namespace HousingHub.Application.Property.Queries.GetFiles;
 
-public record GetPropertyFilesQuery(Guid PropertyId) : IRequest<BaseResponse<List<PropertyFileDto>?>>;
+public record GetPropertyFilesQuery(Guid PropertyId, Guid? RequestingUserId = null) : IRequest<BaseResponse<List<PropertyFileDto>?>>;

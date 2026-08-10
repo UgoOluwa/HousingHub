@@ -17,7 +17,7 @@ public class GetInspectionsByPropertyQueryHandler : IRequestHandler<GetInspectio
 
     public async Task<BaseResponsePagination<PaginatedResult<InspectionDto>>> Handle(GetInspectionsByPropertyQuery request, CancellationToken cancellationToken)
     {
-        var response = await _inspectionQueryService.GetInspectionsByPropertyAsync(request.PropertyId, request.PageNumber, request.PageSize, request.Status);
+        var response = await _inspectionQueryService.GetInspectionsByPropertyAsync(request.PropertyId, request.RequestingUserId, request.PageNumber, request.PageSize, request.Status);
         var paginatedResponse = new BaseResponsePagination<PaginatedResult<InspectionDto>>(
             response.IsSuccessful, response.Data, response.Message, null);
 

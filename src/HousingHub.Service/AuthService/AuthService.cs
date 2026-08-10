@@ -88,7 +88,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in Register: {Message}", ex.Message);
-            return new BaseResponse<CustomerDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<CustomerDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -105,11 +105,14 @@ public class AuthService : IAuthService
             // Whether a sign-in method is available is decided by the credentials the
             // account actually holds, not by which provider created it — an account can
             // hold both a password and a linked Google identity.
+            // Deliberately identical to a wrong password. Distinguishing "this account
+            // exists but has no password" confirmed both that the address is registered
+            // and that it is a Google-only account — a useful pair of facts for an
+            // attacker, and not something a legitimate user needs at this point. The
+            // reset flow handles adding a password and says so in its own copy.
             if (string.IsNullOrEmpty(customer.PasswordHash))
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty,
-                    string.IsNullOrEmpty(customer.GoogleId)
-                        ? ResponseMessages.InvalidCredentials
-                        : ResponseMessages.AccountHasNoPassword);
+                    ResponseMessages.InvalidCredentials);
 
             if (!_passwordHasher.Verify(request.Password, customer.PasswordHash))
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidCredentials);
@@ -127,7 +130,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in Login: {Message}", ex.Message);
-            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -137,13 +140,15 @@ public class AuthService : IAuthService
         {
             var customer = await _unitOfWork.CustomerQueries.GetByEmailAsync(request.Email);
 
+            // Same response as a bad token: an unknown address must not be
+            // distinguishable from a wrong code, or this becomes a registration oracle.
             if (customer == null)
-                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.EmailVerificationFailed);
 
             if (customer.EmailVerified)
                 return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.EmailAlreadyVerified);
 
-            if (customer.EmailVerificationToken != request.Token
+            if (!FixedTimeEquals(customer.EmailVerificationToken, request.Token)
                 || customer.EmailVerificationTokenExpiry == null
                 || customer.EmailVerificationTokenExpiry < DateTime.UtcNow)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.EmailVerificationFailed);
@@ -160,7 +165,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in VerifyEmail: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -196,7 +201,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in ForgotPassword: {Message}", ex.Message);
-            return new BaseResponse<string>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<string>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -206,10 +211,12 @@ public class AuthService : IAuthService
         {
             var customer = await _unitOfWork.CustomerQueries.GetByEmailAsync(request.Email);
 
+            // Same response as an invalid token, so this cannot be used to test whether
+            // an address is registered.
             if (customer == null)
-                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.PasswordResetFailed);
 
-            if (customer.PasswordResetToken != request.Token
+            if (!FixedTimeEquals(customer.PasswordResetToken, request.Token)
                 || customer.PasswordResetTokenExpiry == null
                 || customer.PasswordResetTokenExpiry < DateTime.UtcNow)
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.PasswordResetFailed);
@@ -217,6 +224,10 @@ public class AuthService : IAuthService
             customer.PasswordHash = _passwordHasher.Hash(request.NewPassword);
             customer.PasswordResetToken = null;
             customer.PasswordResetTokenExpiry = null;
+
+            // The whole point of a reset is often that someone else has access. Leaving
+            // their refresh token valid means the password change achieves nothing.
+            await RevokeAllRefreshTokensAsync(customer.Id);
 
             await _unitOfWork.CustomerCommands.UpdateAsync(customer);
             await _unitOfWork.SaveAsync();
@@ -230,7 +241,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in ResetPassword: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -253,6 +264,10 @@ public class AuthService : IAuthService
 
             customer.PasswordHash = _passwordHasher.Hash(request.NewPassword);
 
+            // Same reasoning as ResetPassword: end every other session so a compromised
+            // one cannot survive the password change.
+            await RevokeAllRefreshTokensAsync(customer.Id);
+
             await _unitOfWork.CustomerCommands.UpdateAsync(customer);
             await _unitOfWork.SaveAsync();
 
@@ -263,7 +278,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in ChangePassword: {Message}", ex.Message);
-            return new BaseResponse<bool>(false, false, string.Empty, ex.Message);
+            return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -329,7 +344,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in GoogleSignIn: {Message}", ex.Message);
-            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -414,7 +429,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in GoogleSignInFromClaims: {Message}", ex.Message);
-            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -457,7 +472,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in SetAccountType: {Message}", ex.Message);
-            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 
@@ -495,6 +510,19 @@ public class AuthService : IAuthService
             if (customer == null)
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidRefreshToken);
 
+            // NOTE: deliberately does NOT gate on customer.IsActive.
+            //
+            // IsActive defaults to false and was never set at registration, so every
+            // existing customer row has IsActive == false. Refusing to refresh on that
+            // basis would sign out the entire user base within one access-token
+            // lifetime. The constructor now sets it correctly for new accounts, but
+            // existing rows need backfilling first — see docs/data-backfill-required.md.
+            //
+            // Suspension is enforced instead by revoking the token family at the moment
+            // an admin suspends the account (CustomerCommandService.SuspendCustomer),
+            // which achieves the same outcome without depending on this field. Once the
+            // backfill has run, add the IsActive check here as defence in depth.
+
             existing.IsRevoked = true;
             await _unitOfWork.RefreshTokenCommands.UpdateAsync(existing);
 
@@ -509,7 +537,55 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in RefreshToken: {Message}", ex.Message);
-            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ex.Message);
+            return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.UnexpectedError);
+        }
+    }
+
+    /// <summary>
+    /// Ends the presented session by revoking its refresh token.
+    /// </summary>
+    /// <remarks>
+    /// There was previously no server-side logout at all — signing out only cleared
+    /// client state, leaving the refresh token valid for its full 30-day life. Anyone
+    /// who recovered it from a shared machine, a backup or an XSS payload had a working
+    /// session long after the user believed they had left.
+    ///
+    /// Always reports success: whether the token was already revoked, expired or never
+    /// existed, the caller's session is over either way, and distinguishing those cases
+    /// would leak whether a token value is real.
+    /// </remarks>
+    public async Task<BaseResponse<bool>> Logout(string refreshToken, bool allSessions = false)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(refreshToken))
+                return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.Successful);
+
+            var existing = await _unitOfWork.RefreshTokenQueries.GetByTokenHashAsync(HashToken(refreshToken));
+
+            if (existing is not null)
+            {
+                if (allSessions)
+                {
+                    await RevokeAllRefreshTokensAsync(existing.CustomerId);
+                }
+                else if (!existing.IsRevoked)
+                {
+                    existing.IsRevoked = true;
+                    await _unitOfWork.RefreshTokenCommands.UpdateAsync(existing);
+                }
+
+                await _unitOfWork.SaveAsync();
+            }
+
+            return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.Successful);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in Logout: {Message}", ex.Message);
+            // Never surface a logout failure — the client is discarding its state
+            // regardless, and a false error would only encourage a retry loop.
+            return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.Successful);
         }
     }
 
@@ -532,6 +608,16 @@ public class AuthService : IAuthService
         return rawToken;
     }
 
+    /// <summary>
+    /// Public entry point for revoking every session on an account. Used by admin
+    /// suspension, which previously left the suspended user's tokens working.
+    /// </summary>
+    public async Task RevokeAllSessionsAsync(Guid customerId)
+    {
+        await RevokeAllRefreshTokensAsync(customerId);
+        await _unitOfWork.SaveAsync();
+    }
+
     private async Task RevokeAllRefreshTokensAsync(Guid customerId)
     {
         var activeTokens = await _unitOfWork.RefreshTokenQueries.GetActiveByCustomerIdAsync(customerId);
@@ -540,6 +626,23 @@ public class AuthService : IAuthService
             activeToken.IsRevoked = true;
             await _unitOfWork.RefreshTokenCommands.UpdateAsync(activeToken);
         }
+    }
+
+    /// <summary>
+    /// Length-independent, constant-time comparison for secret values.
+    /// </summary>
+    /// <remarks>
+    /// Ordinary string equality short-circuits at the first differing character, which
+    /// leaks how much of a guess was correct. These tokens are 256-bit so the practical
+    /// risk is small, but the correct comparison costs nothing.
+    /// </remarks>
+    private static bool FixedTimeEquals(string? a, string? b)
+    {
+        if (a is null || b is null) return false;
+
+        return CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(a),
+            System.Text.Encoding.UTF8.GetBytes(b));
     }
 
     private static string HashToken(string rawToken)
@@ -560,8 +663,17 @@ public class AuthService : IAuthService
         {
             var customer = await _unitOfWork.CustomerQueries.GetByEmailAsync(email);
 
+            // An unknown address gets the same shape as a successful send — including
+            // the cooldown value, so the client's countdown behaves identically — rather
+            // than "customer not found", which turned this into a registration oracle.
+            //
+            // Note: the "already verified" branch below still reveals that an address is
+            // registered. That is a deliberate trade: it is genuinely useful to tell
+            // someone they can just log in, registration necessarily leaks the same fact
+            // anyway, and this endpoint is now rate limited.
             if (customer == null)
-                return new BaseResponse<int>(0, false, string.Empty, ResponseMessages.SetNotFoundMessage("customer"));
+                return new BaseResponse<int>((int)ResendVerificationCooldown.TotalSeconds, true, string.Empty,
+                    "Email verification link sent successfully.");
 
             if (customer.EmailVerified)
                 return new BaseResponse<int>(0, false, string.Empty, ResponseMessages.EmailAlreadyVerified);
@@ -592,7 +704,7 @@ public class AuthService : IAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in ResendEmailVerificationToken: {Message}", ex.Message);
-            return new BaseResponse<int>(0, false, string.Empty, ex.Message);
+            return new BaseResponse<int>(0, false, string.Empty, ResponseMessages.UnexpectedError);
         }
     }
 

@@ -10,16 +10,19 @@ using HousingHub.API.Common.Extensions;
 using HousingHub.API.Common.Middlewares;
 using HousingHub.API.Hubs;
 using HousingHub.Application;
+using HousingHub.Core.Configuration;
 using HousingHub.Data.Contexts;
 using HousingHub.Model.Enums;
 using HousingHub.Repository;
 using HousingHub.Service;
 using HousingHub.Service.NotificationService.Interfaces;
 using HousingHub.Service.ChatService.Interfaces;
+using HousingHub.Service.Commons.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
@@ -36,6 +39,15 @@ namespace HousingHub.API
         public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            // Refuse to start on a missing or placeholder secret rather than booting
+            // with a value that is committed to source control. Runs before anything
+            // reads configuration, so a misconfigured deploy fails immediately and
+            // loudly instead of silently signing forgeable tokens.
+            RequiredSecrets.Validate(
+                builder.Configuration,
+                signingKeys: ["Jwt:Secret"],
+                otherRequired: ["Email:ResendApiKey", "Google:ClientSecret"]);
 
             var isLambda = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME"));
 
@@ -64,8 +76,14 @@ namespace HousingHub.API
                 });
             });
 
+            builder.Services.AddAppRateLimiting();
             builder.Services.AddHealthChecks();
-            builder.Services.AddControllers();
+            builder.Services.AddControllers(options =>
+            {
+                // Bounds page size everywhere at once — see the filter for why this is
+                // global rather than per-endpoint.
+                options.Filters.Add<PaginationClampFilter>();
+            });
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddTransient<IConfigureOptions<SwaggerGenOptions>, ConfigureSwaggerOptions>();
@@ -97,6 +115,21 @@ namespace HousingHub.API
 
             builder.Services.AddAuthorization(options =>
             {
+                // Deny by default. Every endpoint requires an authenticated user unless it
+                // explicitly opts out with [AllowAnonymous].
+                //
+                // This inverts the previous default of "open unless secured", which is how
+                // GET /Customer/all, GET /Customer/{id} and DELETE /Customer/{id} ended up
+                // reachable by any signed-in user. A missing [Authorize] is now a closed
+                // door rather than an open one.
+                //
+                // The genuinely public surface is: all of AuthController, the public
+                // property reads (all/{id}/new/trending/nearby/{id}/files), the
+                // PropertyAddress reads, FaqController, UtilityController and /health.
+                options.FallbackPolicy = new AuthorizationPolicyBuilder()
+                    .RequireAuthenticatedUser()
+                    .Build();
+
                 // Property owners, agents and developers all manage listings.
                 // Keep in sync with CustomerTypeExtensions.CanManageProperties().
                 options.AddPolicy("PropertyOwnerOrAgent", policy =>
@@ -228,10 +261,13 @@ namespace HousingHub.API
 
             await app.InitializeDynamoDbAsync();
 
-            app.MapHealthChecks("health", new HealthCheckOptions
+            // Must stay anonymous: the deny-by-default FallbackPolicy applies to every
+            // routed endpoint, including this one. Without the opt-out, load balancer
+            // and container health probes receive 401 and mark the target unhealthy.
+            app.MapHealthChecks("/health", new HealthCheckOptions
             {
                 ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
-            });
+            }).AllowAnonymous();
 
             if (!isLambda)
             {
@@ -244,6 +280,7 @@ namespace HousingHub.API
             app.UseAuthentication();
 
             app.UseAuthorization();
+            app.UseRateLimiter();
             
 
             app.MapControllers();

@@ -12,7 +12,11 @@ public interface IInspectionQueryService
 
     /// <summary>Admin: view any inspection, bypassing the participant check.</summary>
     Task<BaseResponse<InspectionDto?>> GetInspectionAsync(Guid id);
-    Task<BaseResponse<PaginatedResult<InspectionDto>>> GetInspectionsByPropertyAsync(Guid propertyId, int pageNumber, int pageSize, InspectionStatus? status = null);
+    /// <summary>
+    /// Inspections booked against a property. <paramref name="requestingUserId"/> must be
+    /// the property's owner; anyone else receives an empty, unsuccessful response.
+    /// </summary>
+    Task<BaseResponse<PaginatedResult<InspectionDto>>> GetInspectionsByPropertyAsync(Guid propertyId, Guid requestingUserId, int pageNumber, int pageSize, InspectionStatus? status = null);
     Task<BaseResponse<PaginatedResult<InspectionDto>>> GetInspectionsByCustomerAsync(Guid customerId, int pageNumber, int pageSize, InspectionStatus? status = null);
     Task<BaseResponse<PaginatedResult<OwnerInspectionDto>>> GetInspectionsByOwnerAsync(Guid ownerId, int pageNumber, int pageSize, InspectionStatus? status = null);
 
