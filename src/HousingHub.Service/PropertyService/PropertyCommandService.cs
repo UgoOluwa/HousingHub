@@ -215,10 +215,26 @@ public class PropertyCommandService : IPropertyCommandService
     /// when coordinates aren't available (geocoding failed), an exact match on the
     /// normalized street/city/state. Returns the matched property, or null.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the most expensive single call in the product and it runs on every
+    /// property creation. "Is there anything within 75 metres of this point" cannot be
+    /// answered by a key-value store without a spatial key, so the scan of Properties
+    /// stands until coordinates are geohashed onto the entity and indexed. That is a
+    /// schema change plus a backfill; see the sweep document.
+    /// </para>
+    /// <para>
+    /// What has been fixed is the part that was gratuitous: the fallback branch used to
+    /// issue one address read per coordinate-less candidate, sequentially, inside the
+    /// request. At a thousand properties with a tenth missing coordinates that was a
+    /// hundred serialised round trips on top of the scan. The reads are now batched and
+    /// issued together, and only when the fallback is actually reached.
+    /// </para>
+    /// </remarks>
     private async Task<Property?> FindPossibleDuplicateAsync(double? lat, double? lng, string place, string city, string state)
     {
         const double DuplicateRadiusMeters = 75;
-        var candidates = await _unitOfWOrk.PropertyQueries.GetAllAsync();
+        var candidates = (await _unitOfWOrk.PropertyQueries.GetAllAsync()).ToList();
 
         if (lat.HasValue && lng.HasValue)
         {
@@ -228,15 +244,28 @@ public class PropertyCommandService : IPropertyCommandService
             if (byDistance != null) return byDistance;
         }
 
+        // AddressId is non-nullable but unset rows read as Guid.Empty, which is not a
+        // key anything can be loaded by.
+        var withoutCoordinates = candidates
+            .Where(p => (!p.Latitude.HasValue || !p.Longitude.HasValue) && p.AddressId != Guid.Empty)
+            .ToList();
+
+        if (withoutCoordinates.Count == 0) return null;
+
         static string NormalizeForComparison(string s) => s.Trim().ToLowerInvariant();
         string normalizedPlace = NormalizeForComparison(place);
         string normalizedCity = NormalizeForComparison(city);
         string normalizedState = NormalizeForComparison(state);
 
-        foreach (var candidate in candidates.Where(p => !p.Latitude.HasValue || !p.Longitude.HasValue))
+        var addresses = await _unitOfWOrk.PropertyAddressQueries.GetManyByAsync(
+            a => a.Id, withoutCoordinates.Select(p => p.AddressId));
+
+        var addressById = addresses.ToDictionary(a => a.Id);
+
+        foreach (var candidate in withoutCoordinates)
         {
-            var candidateAddress = await _unitOfWOrk.PropertyAddressQueries.GetByIdAsync(candidate.AddressId);
-            if (candidateAddress == null) continue;
+            if (!addressById.TryGetValue(candidate.AddressId, out var candidateAddress))
+                continue;
 
             if (NormalizeForComparison(candidateAddress.Place) == normalizedPlace &&
                 NormalizeForComparison(candidateAddress.City) == normalizedCity &&
@@ -496,10 +525,18 @@ public class PropertyCommandService : IPropertyCommandService
 
             string formattedAddress = address != null ? $"{address.Place}, {address.City}, {address.State}" : "N/A";
 
+            // One batched read instead of one per match. A listing in a popular area can
+            // match hundreds of saved searches, and these reads used to happen one after
+            // another inside the publish request — the owner sat waiting for every one.
+            var customers = await _unitOfWOrk.CustomerQueries.GetManyByAsync(
+                c => c.Id, matches.Select(m => m.CustomerId));
+            var customerById = customers.ToDictionary(c => c.Id);
+
+            var recipients = new List<Customer>(matches.Count);
+
             foreach (var preference in matches)
             {
-                var customer = await _unitOfWOrk.CustomerQueries.GetByIdAsync(preference.CustomerId);
-                if (customer == null) continue;
+                if (!customerById.TryGetValue(preference.CustomerId, out var customer)) continue;
 
                 var notification = new Notification(
                     customer.Id, NotificationType.PropertyMatch,
@@ -514,6 +551,52 @@ public class PropertyCommandService : IPropertyCommandService
                     notification.Type, notification.Title, notification.Message, notification.IsRead, notification.PropertyId);
                 await _realtimeNotifier.SendNotificationAsync(customer.Id, notificationDto);
 
+                recipients.Add(customer);
+            }
+
+            await _unitOfWOrk.SaveAsync();
+
+            await SendAlertEmailsAsync(recipients, property, formattedAddress);
+        }
+        catch (Exception ex)
+        {
+            // Best-effort — a failure here shouldn't undo the publish that already succeeded.
+            _logger.LogError(ex, "An error occurred in NotifyMatchingAlertPreferencesAsync: {Message}", ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Maximum alert emails in flight at once.
+    /// </summary>
+    /// <remarks>
+    /// Sequential sends meant the owner's publish request waited on one HTTP round trip
+    /// to Resend per matched saved search. Unbounded parallelism would fix the latency
+    /// and immediately trip Resend's rate limit instead, failing the whole batch. Eight
+    /// is a deliberately unambitious number: it turns a hundred serial calls into
+    /// thirteen rounds, which is enough of a win to matter and slow enough not to be the
+    /// thing that gets us throttled.
+    /// </remarks>
+    private const int AlertEmailConcurrency = 8;
+
+    /// <summary>
+    /// Sends the match email to each recipient, a few at a time. Individual failures are
+    /// logged and skipped — a bounced address must not cost the other recipients theirs.
+    /// </summary>
+    /// <remarks>
+    /// This still runs inside the publish request. The right home for it is a queue, so
+    /// that publishing returns as soon as the listing is live and the fan-out happens on
+    /// its own time with its own retries. That needs infrastructure this codebase does
+    /// not have yet; until then, bounded parallelism keeps the cost sub-linear.
+    /// </remarks>
+    private async Task SendAlertEmailsAsync(
+        IReadOnlyList<Customer> recipients, Property property, string formattedAddress)
+    {
+        for (int offset = 0; offset < recipients.Count; offset += AlertEmailConcurrency)
+        {
+            var batch = recipients.Skip(offset).Take(AlertEmailConcurrency);
+
+            await Task.WhenAll(batch.Select(async customer =>
+            {
                 try
                 {
                     await _emailService.SendPropertyAlertMatchAsync(
@@ -523,14 +606,7 @@ public class PropertyCommandService : IPropertyCommandService
                 {
                     _logger.LogWarning(ex, "Failed to send property-alert-match email to {Email}", customer.Email);
                 }
-            }
-
-            await _unitOfWOrk.SaveAsync();
-        }
-        catch (Exception ex)
-        {
-            // Best-effort — a failure here shouldn't undo the publish that already succeeded.
-            _logger.LogError(ex, "An error occurred in NotifyMatchingAlertPreferencesAsync: {Message}", ex.Message);
+            }));
         }
     }
 
