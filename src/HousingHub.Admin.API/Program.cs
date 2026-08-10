@@ -4,6 +4,7 @@ using Amazon;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.Runtime;
+using HousingHub.Admin.API.Common;
 using HousingHub.Admin.API.Realtime;
 using HousingHub.Application;
 using HousingHub.Core.Configuration;
@@ -62,6 +63,8 @@ public static class Program
             .ReadFrom.Services(services)
             .Enrich.FromLogContext()
             .WriteTo.Console());
+
+        builder.Services.AddAdminRateLimiting();
 
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();
@@ -213,6 +216,7 @@ public static class Program
         app.UseCors();
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseRateLimiter();
         // Root redirect only makes sense where the docs are actually served.
         if (app.Environment.IsDevelopment())
         {

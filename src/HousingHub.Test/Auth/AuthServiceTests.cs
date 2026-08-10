@@ -309,6 +309,61 @@ public class AuthServiceTests
         _unitOfWorkMock.Verify(u => u.RefreshTokenCommands.UpdateAsync(otherActiveToken), Times.Once);
     }
 
+    // ── Logout ───────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Logout_WithValidToken_RevokesIt()
+    {
+        var token = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            CustomerId = Guid.NewGuid(),
+            TokenHash = "hash",
+            ExpiresAt = DateTime.UtcNow.AddDays(10),
+            IsRevoked = false
+        };
+        _unitOfWorkMock.Setup(u => u.RefreshTokenQueries.GetByTokenHashAsync(It.IsAny<string>()))
+            .ReturnsAsync(token);
+
+        var result = await _sut.Logout("some-token");
+
+        Assert.True(result.IsSuccessful);
+        Assert.True(token.IsRevoked);
+        _unitOfWorkMock.Verify(u => u.RefreshTokenCommands.UpdateAsync(token), Times.Once);
+    }
+
+    [Fact]
+    public async Task Logout_WithUnknownToken_StillReportsSuccess()
+    {
+        // Reporting failure would confirm whether a token value is real, and the
+        // caller's session is over either way.
+        _unitOfWorkMock.Setup(u => u.RefreshTokenQueries.GetByTokenHashAsync(It.IsAny<string>()))
+            .ReturnsAsync((RefreshToken?)null);
+
+        var result = await _sut.Logout("never-issued");
+
+        Assert.True(result.IsSuccessful);
+    }
+
+    [Fact]
+    public async Task Logout_WithAllSessions_RevokesEveryActiveToken()
+    {
+        var customerId = Guid.NewGuid();
+        var presented = new RefreshToken { Id = Guid.NewGuid(), CustomerId = customerId, TokenHash = "a", ExpiresAt = DateTime.UtcNow.AddDays(10) };
+        var other = new RefreshToken { Id = Guid.NewGuid(), CustomerId = customerId, TokenHash = "b", ExpiresAt = DateTime.UtcNow.AddDays(10) };
+
+        _unitOfWorkMock.Setup(u => u.RefreshTokenQueries.GetByTokenHashAsync(It.IsAny<string>()))
+            .ReturnsAsync(presented);
+        _unitOfWorkMock.Setup(u => u.RefreshTokenQueries.GetActiveByCustomerIdAsync(customerId))
+            .ReturnsAsync(new List<RefreshToken> { presented, other });
+
+        var result = await _sut.Logout("some-token", allSessions: true);
+
+        Assert.True(result.IsSuccessful);
+        Assert.True(presented.IsRevoked);
+        Assert.True(other.IsRevoked);
+    }
+
     [Fact]
     public async Task RefreshToken_CustomerNotFound_ReturnsFailure()
     {

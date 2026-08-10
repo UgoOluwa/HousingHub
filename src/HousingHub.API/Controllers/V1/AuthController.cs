@@ -11,6 +11,7 @@ using HousingHub.Application.Auth.Commands.ResendOtp;
 using HousingHub.Application.Auth.Commands.ResetPassword;
 using HousingHub.Application.Auth.Commands.SetAccountType;
 using HousingHub.Application.Auth.Commands.VerifyEmail;
+using HousingHub.API.Common.Extensions;
 using HousingHub.Application.Commons.Bases;
 using HousingHub.Service.AuthService.Interfaces;
 using HousingHub.Service.Dtos.Auth;
@@ -20,6 +21,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace HousingHub.API.Controllers.V1;
@@ -42,6 +44,8 @@ public class AuthController : ControllerBase
 
     [AllowAnonymous]
 
+    [EnableRateLimiting(RateLimitingExtensions.AuthPolicy)]
+
     [HttpPost("register")]
     [ProducesResponseType(typeof(BaseResponse<CustomerDto?>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Register(RegisterAuthCommand command)
@@ -51,6 +55,8 @@ public class AuthController : ControllerBase
     }
 
     [AllowAnonymous]
+
+    [EnableRateLimiting(RateLimitingExtensions.AuthPolicy)]
 
     [HttpPost("login")]
     [ProducesResponseType(typeof(BaseResponse<LoginCustomerResponseDto?>), StatusCodes.Status200OK)]
@@ -62,6 +68,7 @@ public class AuthController : ControllerBase
 
     /// <summary>Exchanges a refresh token for a new access token and a rotated refresh token.</summary>
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitingExtensions.AuthPolicy)]
     [HttpPost("refresh-token")]
     [ProducesResponseType(typeof(BaseResponse<LoginCustomerResponseDto?>), StatusCodes.Status200OK)]
     public async Task<IActionResult> RefreshToken(RefreshTokenCommand command)
@@ -87,6 +94,8 @@ public class AuthController : ControllerBase
 
     [AllowAnonymous]
 
+    [EnableRateLimiting(RateLimitingExtensions.AuthPolicy)]
+
     [HttpPost("verify-email")]
     [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
     public async Task<IActionResult> VerifyEmail(VerifyEmailCommand command)
@@ -100,6 +109,7 @@ public class AuthController : ControllerBase
     /// is the number of seconds until another resend is allowed.
     /// </summary>
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitingExtensions.EmailPolicy)]
     [HttpPost("resend-otp")]
     [ProducesResponseType(typeof(BaseResponse<int>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ResendOtp(ResendOtpCommand command)
@@ -110,6 +120,8 @@ public class AuthController : ControllerBase
 
     [AllowAnonymous]
 
+    [EnableRateLimiting(RateLimitingExtensions.EmailPolicy)]
+
     [HttpPost("forgot-password")]
     [ProducesResponseType(typeof(BaseResponse<string?>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordCommand command)
@@ -119,6 +131,8 @@ public class AuthController : ControllerBase
     }
 
     [AllowAnonymous]
+
+    [EnableRateLimiting(RateLimitingExtensions.EmailPolicy)]
 
     [HttpPost("reset-password")]
     [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
@@ -148,6 +162,7 @@ public class AuthController : ControllerBase
     /// Client-side flow: Frontend sends a Google ID token obtained from the Google Sign-In SDK.
     /// </summary>
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitingExtensions.AuthPolicy)]
     [HttpPost("google")]
     [ProducesResponseType(typeof(BaseResponse<LoginCustomerResponseDto?>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GoogleSignIn(GoogleSignInCommand command)

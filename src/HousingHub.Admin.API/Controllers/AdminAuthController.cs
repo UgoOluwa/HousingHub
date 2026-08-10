@@ -1,7 +1,9 @@
+using HousingHub.Admin.API.Common;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Service.AdminService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace HousingHub.Admin.API.Controllers;
 
@@ -17,6 +19,7 @@ public class AdminAuthController(IAdminAuthService adminAuthService) : Controlle
     /// without the response needing to reveal anything account-specific.
     /// </summary>
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitingExtensions.OtpRequestPolicy)]
     [HttpPost("otp/request")]
     public async Task<IActionResult> RequestOtp([FromBody] AdminOtpRequest request)
     {
@@ -26,6 +29,7 @@ public class AdminAuthController(IAdminAuthService adminAuthService) : Controlle
 
     /// <summary>Verifies a one-time login code and, on success, issues a JWT. Locks out the code after too many wrong attempts.</summary>
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitingExtensions.OtpVerifyPolicy)]
     [HttpPost("otp/verify")]
     public async Task<IActionResult> VerifyOtp([FromBody] AdminOtpVerifyRequest request)
     {

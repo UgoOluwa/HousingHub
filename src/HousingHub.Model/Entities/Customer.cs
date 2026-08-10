@@ -97,6 +97,16 @@ public class Customer : BaseEntity
         PhoneNumber = phoneNumber;
         CustomerType = customerType;
         PasswordHash = passwordHash;
+
+        // IsActive on BaseEntity is a plain bool, so it defaulted to false and nothing
+        // in the registration path ever set it. Every customer row written so far is
+        // therefore "inactive" despite not being suspended — SuspendCustomer sets it
+        // false and ReactivateCustomer sets it true, so the field is genuinely meant to
+        // mean "not suspended".
+        //
+        // Anything that treats IsActive as authoritative must not ship until existing
+        // rows are backfilled. See docs/data-backfill-required.md.
+        IsActive = true;
     }
 
     public void UpdateKycStatus(bool isVerified, string? rejectionReason = null)

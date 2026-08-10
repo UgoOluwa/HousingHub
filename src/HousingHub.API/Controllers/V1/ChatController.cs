@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Asp.Versioning;
+using HousingHub.API.Common.Extensions;
 using HousingHub.Application.Chat.Commands.MarkAsRead;
 using HousingHub.Application.Chat.Commands.SendMessage;
 using HousingHub.Application.Chat.Queries.GetConversations;
@@ -10,6 +11,7 @@ using HousingHub.Service.Dtos.Chat;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace HousingHub.API.Controllers.V1;
@@ -26,6 +28,8 @@ public class ChatController : ControllerBase
     {
         _mediator = mediator;
     }
+
+    [EnableRateLimiting(RateLimitingExtensions.MessagingPolicy)]
 
     [HttpPost("send")]
     [ProducesResponseType(typeof(HousingHub.Application.Commons.Bases.BaseResponse<ChatMessageDto>), StatusCodes.Status200OK)]

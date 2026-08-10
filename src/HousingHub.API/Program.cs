@@ -75,6 +75,7 @@ namespace HousingHub.API
                 });
             });
 
+            builder.Services.AddAppRateLimiting();
             builder.Services.AddHealthChecks();
             builder.Services.AddControllers();
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -273,6 +274,7 @@ namespace HousingHub.API
             app.UseAuthentication();
 
             app.UseAuthorization();
+            app.UseRateLimiter();
             
 
             app.MapControllers();

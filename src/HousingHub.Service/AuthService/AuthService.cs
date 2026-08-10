@@ -503,15 +503,18 @@ public class AuthService : IAuthService
             if (customer == null)
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidRefreshToken);
 
-            // A suspended account previously kept refreshing indefinitely: suspension
-            // only set a flag and never touched the token family, so the session
-            // outlived the suspension by up to the refresh token's full lifetime.
-            if (!customer.IsActive)
-            {
-                await RevokeAllRefreshTokensAsync(customer.Id);
-                await _unitOfWork.SaveAsync();
-                return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidRefreshToken);
-            }
+            // NOTE: deliberately does NOT gate on customer.IsActive.
+            //
+            // IsActive defaults to false and was never set at registration, so every
+            // existing customer row has IsActive == false. Refusing to refresh on that
+            // basis would sign out the entire user base within one access-token
+            // lifetime. The constructor now sets it correctly for new accounts, but
+            // existing rows need backfilling first — see docs/data-backfill-required.md.
+            //
+            // Suspension is enforced instead by revoking the token family at the moment
+            // an admin suspends the account (CustomerCommandService.SuspendCustomer),
+            // which achieves the same outcome without depending on this field. Once the
+            // backfill has run, add the IsActive check here as defence in depth.
 
             existing.IsRevoked = true;
             await _unitOfWork.RefreshTokenCommands.UpdateAsync(existing);
