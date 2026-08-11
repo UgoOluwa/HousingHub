@@ -60,6 +60,16 @@ public static class ResponseMessages
     public const string InvalidFileType = "Only image and video files are allowed.";
     public const string OwnerNotManagedByHousingHub = "This owner isn't managed by HousingHub, so an admin can't post a listing on their behalf.";
 
+    /// <summary>
+    /// Shown when an owner tries to publish before their identity has been verified.
+    /// Deliberately explains the state and the way out of it — this is a legitimate
+    /// user doing the right thing slightly early, not an attacker.
+    /// </summary>
+    public const string KycRequiredToPublish = "Your identity is still being verified. You can keep editing this listing, and you'll be able to publish it as soon as verification is complete.";
+
+    /// <summary>Shown when the owner hasn't submitted identity documents at all yet.</summary>
+    public const string KycNotSubmitted = "Please complete identity verification before publishing a listing. You can keep editing it in the meantime.";
+
     // Inspection messages
     public const string InspectionNotPending = "Only pending inspections can be accepted or declined.";
     public const string InspectionNotPendingOrRescheduled = "Only pending or rescheduled inspections can be responded to.";
