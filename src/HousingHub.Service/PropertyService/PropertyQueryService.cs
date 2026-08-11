@@ -56,6 +56,41 @@ public class PropertyQueryService : IPropertyQueryService
             ? _unitOfWOrk.PropertyQueries.GetAllAsync(x => x.PublishedStatus == Property.PublishedMarker)
             : _unitOfWOrk.PropertyQueries.GetAllAsync(x => x.IsPublished);
 
+    /// <summary>
+    /// Maps each listed property's owner to whether that owner is identity-verified.
+    /// </summary>
+    /// <remarks>
+    /// One indexed read per distinct owner, issued together — a page of twenty
+    /// listings by twenty different owners costs twenty parallel GetItems, not a scan
+    /// of Customers. Deliberately not folded into the mapper: Mapster maps a Property,
+    /// and this needs a second entity.
+    /// </remarks>
+    private async Task<Dictionary<Guid, bool>> GetOwnerVerificationAsync(IEnumerable<Property> properties)
+    {
+        var ownerIds = properties.Select(p => p.OwnerId).Distinct().ToList();
+        if (ownerIds.Count == 0) return [];
+
+        var owners = await _unitOfWOrk.CustomerQueries.GetManyByAsync(c => c.Id, ownerIds);
+        return owners.ToDictionary(o => o.Id, o => o.IsKycVerified);
+    }
+
+    /// <summary>
+    /// Maps properties to DTOs and stamps each with its owner's verification state.
+    /// </summary>
+    /// <remarks>
+    /// Every public read path goes through here, so a new listing endpoint cannot
+    /// silently ship without the badge — which is exactly how the flag came to be
+    /// returned by the API and rendered by nothing.
+    /// </remarks>
+    private async Task<List<PropertyDto>> MapWithOwnerVerificationAsync(IReadOnlyCollection<Property> properties)
+    {
+        var verified = await GetOwnerVerificationAsync(properties);
+
+        return _mapper.Map<List<PropertyDto>>(properties)
+            .Select(dto => dto with { IsOwnerVerified = verified.GetValueOrDefault(dto.OwnerId) })
+            .ToList();
+    }
+
     public async Task<BaseResponse<PropertyDto?>> GetPropertyAsync(Guid id, Guid? requesterId = null, bool includeUnpublished = false)
     {
         try
@@ -84,7 +119,8 @@ public class PropertyQueryService : IPropertyQueryService
             var dto = _mapper.Map<PropertyDto>(property) with
             {
                 PropertyAddress = addressTask.Result is { } address ? _mapper.Map<PropertyAddressDto>(address) : null,
-                OwnerName = ownerTask.Result is { } owner ? $"{owner.FirstName} {owner.LastName}" : null
+                OwnerName = ownerTask.Result is { } owner ? $"{owner.FirstName} {owner.LastName}" : null,
+                IsOwnerVerified = ownerTask.Result?.IsKycVerified == true
             };
 
             return new BaseResponse<PropertyDto?>(dto, true, string.Empty, ResponseMessages.Successful);
@@ -108,7 +144,13 @@ public class PropertyQueryService : IPropertyQueryService
 
             await AttachFilesAsync(property);
 
-            return new BaseResponse<PropertyDto?>(_mapper.Map<PropertyDto>(property), true, string.Empty, ResponseMessages.Successful);
+            var owner = await _unitOfWOrk.CustomerQueries.GetByIdAsync(property.OwnerId);
+            var dto = _mapper.Map<PropertyDto>(property) with
+            {
+                IsOwnerVerified = owner?.IsKycVerified == true
+            };
+
+            return new BaseResponse<PropertyDto?>(dto, true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
         {
@@ -124,14 +166,14 @@ public class PropertyQueryService : IPropertyQueryService
             // Split rather than `includeUnpublished || x.IsPublished` in one predicate:
             // an OR can never be narrowed to an index, so the common case paid for the
             // rare one.
-            var properties = includeUnpublished
+            var properties = (includeUnpublished
                 ? await _unitOfWOrk.PropertyQueries.GetAllAsync()
-                : await GetPublishedPropertiesAsync();
+                : await GetPublishedPropertiesAsync()).ToList();
 
             await AttachFilesAsync(properties);
 
             return new BaseResponse<List<PropertyDto>>(
-                _mapper.Map<List<PropertyDto>>(properties), true, string.Empty, ResponseMessages.Successful);
+                await MapWithOwnerVerificationAsync(properties), true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
         {
@@ -215,7 +257,7 @@ public class PropertyQueryService : IPropertyQueryService
 
             await AttachFilesAsync(paginatedProperties);
 
-            var mappedItems = _mapper.Map<List<PropertyDto>>(paginatedProperties);
+            var mappedItems = await MapWithOwnerVerificationAsync(paginatedProperties);
             var paginatedResult = new PaginatedResult<PropertyDto>(mappedItems, totalCount, filter.PageNumber, filter.PageSize);
 
             return new BaseResponse<PaginatedResult<PropertyDto>>(paginatedResult, true, string.Empty, ResponseMessages.Successful);
@@ -231,13 +273,13 @@ public class PropertyQueryService : IPropertyQueryService
     {
         try
         {
-            var properties = await _unitOfWOrk.PropertyQueries.GetAllAsync(
-                x => x.OwnerId == ownerId);
+            var properties = (await _unitOfWOrk.PropertyQueries.GetAllAsync(
+                x => x.OwnerId == ownerId)).ToList();
 
             await AttachFilesAsync(properties);
 
             return new BaseResponse<List<PropertyDto>>(
-                _mapper.Map<List<PropertyDto>>(properties), true, string.Empty, ResponseMessages.Successful);
+                await MapWithOwnerVerificationAsync(properties), true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
         {
@@ -267,7 +309,9 @@ public class PropertyQueryService : IPropertyQueryService
                 .GroupBy(i => i.PropertyId)
                 .ToDictionary(g => g.Key, g => g.Count());
 
-            var mappedItems = _mapper.Map<List<PropertyDto>>(properties)
+            // GetPagedAsync hands back IEnumerable; materialise once rather than
+            // enumerating it again for the mapper.
+            var mappedItems = (await MapWithOwnerVerificationAsync(properties.ToList()))
                 .Select(dto => dto with { InspectionCount = inspectionCountByProperty.GetValueOrDefault(dto.Id, 0) })
                 .ToList();
             var paginatedResult = new PaginatedResult<PropertyDto>(mappedItems, totalCount, filter.PageNumber, filter.PageSize);
@@ -295,7 +339,7 @@ public class PropertyQueryService : IPropertyQueryService
             await AttachFilesAsync(newProperties);
 
             return new BaseResponse<List<PropertyDto>>(
-                _mapper.Map<List<PropertyDto>>(newProperties), true, string.Empty, ResponseMessages.Successful);
+                await MapWithOwnerVerificationAsync(newProperties), true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
         {
@@ -319,7 +363,7 @@ public class PropertyQueryService : IPropertyQueryService
             await AttachFilesAsync(trending);
 
             return new BaseResponse<List<PropertyDto>>(
-                _mapper.Map<List<PropertyDto>>(trending), true, string.Empty, ResponseMessages.Successful);
+                await MapWithOwnerVerificationAsync(trending), true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
         {
@@ -351,7 +395,7 @@ public class PropertyQueryService : IPropertyQueryService
             await AttachFilesAsync(nearby);
 
             return new BaseResponse<List<PropertyDto>>(
-                _mapper.Map<List<PropertyDto>>(nearby), true, string.Empty, ResponseMessages.Successful);
+                await MapWithOwnerVerificationAsync(nearby), true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
         {
