@@ -32,8 +32,18 @@ public class AdminPropertyController(
     [ProducesResponseType(typeof(BaseResponse<PaginatedResult<AdminPropertyListDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll([FromQuery] AdminPropertyFilterDto filter)
     {
-        var allResult = await propertyQueryService.GetAllPropertiesAsync(includeUnpublished: true);
+        // Owners are needed before filtering now, not just for display: the
+        // UnverifiedOwnerOnly filter is a predicate on the owner, not the listing.
+        var allTask = propertyQueryService.GetAllPropertiesAsync(includeUnpublished: true);
+        var ownersTask = customerQueryService.GetAllCustomersAsync();
+        await Task.WhenAll(allTask, ownersTask);
+
+        var allResult = allTask.Result;
         var all = allResult.Data ?? [];
+        var ownerMap = (ownersTask.Result.Data ?? []).ToDictionary(c => c.Id);
+
+        bool OwnerIsVerified(Guid ownerId) =>
+            ownerMap.TryGetValue(ownerId, out var o) && o.IsKycVerified;
 
         IEnumerable<PropertyDto> query = all;
 
@@ -52,6 +62,10 @@ public class AdminPropertyController(
         if (filter.FlaggedDuplicateOnly == true)
             query = query.Where(p => p.IsFlaggedDuplicate);
 
+        // The backlog worklist: live listings that would not be publishable today.
+        if (filter.UnverifiedOwnerOnly == true)
+            query = query.Where(p => p.IsPublished && !OwnerIsVerified(p.OwnerId));
+
         var ordered = query.OrderByDescending(p => p.DateCreated).ToList();
         var totalCount = ordered.Count;
         var paged = ordered
@@ -63,7 +77,6 @@ public class AdminPropertyController(
         var ownerIds = paged.Select(p => p.OwnerId).Distinct().ToList();
         var propertyIds = paged.Select(p => p.Id).Distinct().ToList();
 
-        var ownersTask = customerQueryService.GetAllCustomersAsync();
         var inspCountTask = inspectionQueryService.GetAllInspectionsPaginatedAsync(
             new AdminInspectionFilterDto(1, int.MaxValue));
         var addressTasks = propertyIds.ToDictionary(
@@ -71,9 +84,8 @@ public class AdminPropertyController(
             // Admins moderate unpublished listings, so they see those addresses too.
             id => propertyAddressQueryService.GetPropertyAddressByPropertyIdAsync(id, includeUnpublished: true));
 
-        await Task.WhenAll(addressTasks.Values.Cast<Task>().Append(ownersTask).Append(inspCountTask));
+        await Task.WhenAll(addressTasks.Values.Cast<Task>().Append(inspCountTask));
 
-        var ownerMap = (ownersTask.Result.Data ?? []).ToDictionary(c => c.Id);
         var inspCountByProperty = (inspCountTask.Result.Data?.Items ?? [])
             .GroupBy(i => i.PropertyId)
             .ToDictionary(g => g.Key, g => g.Count());
@@ -82,6 +94,7 @@ public class AdminPropertyController(
         {
             ownerMap.TryGetValue(p.OwnerId, out var owner);
             var ownerName = owner != null ? $"{owner.FirstName} {owner.LastName}" : "N/A";
+            var ownerVerified = owner?.IsKycVerified == true;
 
             var address = addressTasks[p.Id].Result.Data;
             var formattedAddress = address != null
@@ -108,7 +121,9 @@ public class AdminPropertyController(
                 thumbnailUrl,
                 p.IsFlaggedDuplicate,
                 p.PossibleDuplicateOfPropertyId,
-                duplicateOfTitle);
+                duplicateOfTitle,
+                ownerVerified,
+                p.IsPublished && !ownerVerified);
         }).ToList();
 
         // Reflect the real outcome instead of always claiming success — a failure in

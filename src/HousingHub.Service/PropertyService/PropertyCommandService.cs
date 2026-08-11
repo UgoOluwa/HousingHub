@@ -457,6 +457,30 @@ public class PropertyCommandService : IPropertyCommandService
         if (!owner.CustomerType.CanManageProperties())
             return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.UnauthorizedPropertyAction);
 
+        // Identity verification gates publishing, not creating.
+        //
+        // This check previously existed only in the frontend, which redirected an
+        // unverified user away from the add-property page. A redirect is a
+        // convenience, not a control: POSTing directly to the API — the same request
+        // the app itself makes — put a listing live with no identity check at all.
+        // Since the entire proposition is that we know who these people are, the
+        // control has to live here.
+        //
+        // Gating publish rather than creation is deliberate. An owner can draft a
+        // listing, upload photos and set a price while their documents are in review,
+        // and it goes live the moment they are approved. Blocking creation would send
+        // a new agent into a wall on day one.
+        //
+        // Unpublishing is never gated — an owner must always be able to take their own
+        // listing down, verified or not.
+        if (isPublished && !owner.IsKycVerified)
+        {
+            return new BaseResponse<bool>(false, false, string.Empty,
+                owner.KycSubmittedAt.HasValue
+                    ? ResponseMessages.KycRequiredToPublish
+                    : ResponseMessages.KycNotSubmitted);
+        }
+
         return await SetPropertyPublishedInternalAsync(propertyId, isPublished, authenticatedUserId, reason: null);
     }
 
