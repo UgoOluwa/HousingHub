@@ -29,6 +29,10 @@ public interface IUnitOfWOrk : IDisposable
     IRefreshTokenQueryRepository RefreshTokenQueries { get; }
     IPropertyAlertPreferenceCommandRepository PropertyAlertPreferenceCommands { get; }
     IPropertyAlertPreferenceQueryRepository PropertyAlertPreferenceQueries { get; }
+    IVerificationCaseCommandRepository VerificationCaseCommands { get; }
+    IVerificationCaseQueryRepository VerificationCaseQueries { get; }
+    IVerificationDocumentCommandRepository VerificationDocumentCommands { get; }
+    IVerificationDocumentQueryRepository VerificationDocumentQueries { get; }
 
     Task SaveAsync();
 }

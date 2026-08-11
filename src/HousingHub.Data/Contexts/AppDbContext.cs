@@ -78,6 +78,22 @@ public class DynamoDbTableInitializer
         {
             CreateGsi("CustomerId-index", "CustomerId"),
         }),
+        ["VerificationCases"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            // "Everything about this business / this property."
+            CreateGsi("SubjectId-index", "SubjectId"),
+            // "My verification submissions."
+            CreateGsi("SubmittedByCustomerId-index", "SubmittedByCustomerId"),
+            // Sparse: only Submitted and UnderReview cases carry the attribute, so
+            // the admin review queue reads exactly the outstanding work rather than
+            // scanning past every case ever decided. See
+            // VerificationCase.ReviewQueueStatus.
+            CreateGsi("ReviewQueueStatus-index", "ReviewQueueStatus"),
+        }),
+        ["VerificationDocuments"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            CreateGsi("VerificationCaseId-index", "VerificationCaseId"),
+        }),
     };
 
     public DynamoDbTableInitializer(IAmazonDynamoDB client, ILogger<DynamoDbTableInitializer> logger)

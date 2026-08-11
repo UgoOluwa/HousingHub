@@ -23,5 +23,19 @@ public enum NotificationType
     NewMessage = 5,
 
     [Description("Property Match")]
-    PropertyMatch = 6
+    PropertyMatch = 6,
+
+    [Description("Verification Approved")]
+    VerificationApproved = 7,
+
+    [Description("Verification Rejected")]
+    VerificationRejected = 8,
+
+    /// <summary>
+    /// A verification lapsed because one of its documents expired. Distinct from a
+    /// rejection: nothing was wrong with the submission, it simply aged out, and the
+    /// action the user needs to take is different.
+    /// </summary>
+    [Description("Verification Expired")]
+    VerificationExpired = 9
 }

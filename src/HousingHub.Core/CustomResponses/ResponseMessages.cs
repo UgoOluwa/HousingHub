@@ -70,6 +70,21 @@ public static class ResponseMessages
     /// <summary>Shown when the owner hasn't submitted identity documents at all yet.</summary>
     public const string KycNotSubmitted = "Please complete identity verification before publishing a listing. You can keep editing it in the meantime.";
 
+    // ── Verification pipeline ────────────────────────────────────
+
+    public const string VerificationCaseNotFound = "We couldn't find that verification request.";
+    public const string VerificationCaseNotEditable = "This verification request has already been submitted, so its documents can't be changed. Contact support if something needs correcting.";
+    public const string VerificationCaseAlreadySubmitted = "This verification request has already been submitted.";
+    public const string VerificationCaseNotAwaitingReview = "This verification request isn't awaiting a decision.";
+    public const string VerificationDecisionNoteRequired = "A reason is required so the applicant knows what to do next.";
+    public const string VerificationDocumentsNotAllReviewed = "Every document must be reviewed before the case can be approved.";
+    public const string VerificationDocumentRejectionReasonRequired = "A reason is required when rejecting a document.";
+    public const string VerificationSubjectRequired = "A property must be specified for a title verification request.";
+    public const string VerificationPropertyNotOwned = "You can only request verification for your own listing.";
+
+    public static string VerificationDocumentsMissing(IEnumerable<string> documentNames) =>
+        $"Please attach the following before submitting: {string.Join(", ", documentNames)}.";
+
     // Inspection messages
     public const string InspectionNotPending = "Only pending inspections can be accepted or declined.";
     public const string InspectionNotPendingOrRescheduled = "Only pending or rescheduled inspections can be responded to.";

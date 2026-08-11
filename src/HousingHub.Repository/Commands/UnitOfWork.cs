@@ -30,6 +30,10 @@ public class UnitOfWork : IUnitOfWOrk
     public IRefreshTokenQueryRepository RefreshTokenQueries { get; }
     public IPropertyAlertPreferenceCommandRepository PropertyAlertPreferenceCommands { get; }
     public IPropertyAlertPreferenceQueryRepository PropertyAlertPreferenceQueries { get; }
+    public IVerificationCaseCommandRepository VerificationCaseCommands { get; }
+    public IVerificationCaseQueryRepository VerificationCaseQueries { get; }
+    public IVerificationDocumentCommandRepository VerificationDocumentCommands { get; }
+    public IVerificationDocumentQueryRepository VerificationDocumentQueries { get; }
 
     public UnitOfWork(
         ICustomerAddressCommandRepository customerAddressCommands,
@@ -55,7 +59,11 @@ public class UnitOfWork : IUnitOfWOrk
         IRefreshTokenCommandRepository refreshTokenCommands,
         IRefreshTokenQueryRepository refreshTokenQueries,
         IPropertyAlertPreferenceCommandRepository propertyAlertPreferenceCommands,
-        IPropertyAlertPreferenceQueryRepository propertyAlertPreferenceQueries)
+        IPropertyAlertPreferenceQueryRepository propertyAlertPreferenceQueries,
+        IVerificationCaseCommandRepository verificationCaseCommands,
+        IVerificationCaseQueryRepository verificationCaseQueries,
+        IVerificationDocumentCommandRepository verificationDocumentCommands,
+        IVerificationDocumentQueryRepository verificationDocumentQueries)
     {
         CustomerAddressCommands = customerAddressCommands;
         CustomerAddressQueries = customerAddressQueries;
@@ -81,6 +89,10 @@ public class UnitOfWork : IUnitOfWOrk
         RefreshTokenQueries = refreshTokenQueries;
         PropertyAlertPreferenceCommands = propertyAlertPreferenceCommands;
         PropertyAlertPreferenceQueries = propertyAlertPreferenceQueries;
+        VerificationCaseCommands = verificationCaseCommands;
+        VerificationCaseQueries = verificationCaseQueries;
+        VerificationDocumentCommands = verificationDocumentCommands;
+        VerificationDocumentQueries = verificationDocumentQueries;
     }
 
     public Task SaveAsync()

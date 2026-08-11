@@ -27,6 +27,21 @@ public interface IEmailService
     Task<bool> SendAdminOtpAsync(string toEmail, string firstName, string otpCode);
     Task<bool> SendKycApprovedAsync(string toEmail, string firstName);
     Task<bool> SendKycRejectedAsync(string toEmail, string firstName, string reason);
+
+    /// <summary>
+    /// Tells an applicant their business or property verification was approved.
+    /// </summary>
+    /// <param name="subjectDescription">"your agency" or the listing's title.</param>
+    Task<bool> SendVerificationApprovedAsync(string toEmail, string firstName, string subjectDescription);
+
+    /// <summary>
+    /// Tells an applicant their verification was not approved, and why.
+    /// </summary>
+    /// <param name="reason">
+    /// The reviewer's note, shown verbatim. Required by the service layer for exactly
+    /// this reason: a rejection the applicant cannot act on becomes a support ticket.
+    /// </param>
+    Task<bool> SendVerificationRejectedAsync(string toEmail, string firstName, string subjectDescription, string reason);
     Task<bool> SendAccountReactivatedAsync(string toEmail, string firstName);
     /// <summary>Sent to the property owner when an admin marks their listing verified.</summary>
     Task<bool> SendPropertyVerifiedAsync(string ownerEmail, string ownerName, string propertyTitle);

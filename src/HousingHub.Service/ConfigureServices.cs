@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using Amazon.S3;
 using HousingHub.Service.AdminService;
 using HousingHub.Service.AuthService;
@@ -80,6 +80,8 @@ public static class ConfigureServices
         services.AddScoped<IChatQueryService, ChatQueryService>();
         services.AddScoped<IPropertyAlertPreferenceCommandService, PropertyAlertPreferenceCommandService>();
         services.AddScoped<IPropertyAlertPreferenceQueryService, PropertyAlertPreferenceQueryService>();
+        services.AddScoped<VerificationService.Interfaces.IVerificationService,
+                           VerificationService.VerificationService>();
         services.AddSingleton<IUtilityService, UtilityService>();
 
         // AWS S3 File Storage

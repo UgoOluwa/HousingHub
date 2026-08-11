@@ -270,6 +270,46 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(toEmail, "Your Housing Hub KYC Was Not Approved", text, html);
     }
 
+    public async Task<bool> SendVerificationApprovedAsync(
+        string toEmail, string firstName, string subjectDescription)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        string body = $"""
+            {P($"Hi {firstName},")}
+            {P("We've finished reviewing your documents and everything checks out. Your verification badge is now live, and people browsing Housing Hub can see it.")}
+            {DetailRow("Verified", subjectDescription)}
+            {Button("View Your Profile", $"{baseUrl}/profile")}
+            """;
+
+        string html = WrapInLayout("Verification approved", body, Hero("&#10003;", "Verification approved"));
+        string text = $"Hi {firstName}, your Housing Hub verification for {subjectDescription} has been approved.";
+
+        return await SendAsync(toEmail, "Your Housing Hub Verification Has Been Approved", text, html);
+    }
+
+    public async Task<bool> SendVerificationRejectedAsync(
+        string toEmail, string firstName, string subjectDescription, string reason)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        // The reviewer's note is the whole point of this email. Everything else is
+        // packaging — if the applicant cannot tell what to fix, they will email
+        // support instead, which costs more than the review did.
+        string body = $"""
+            {P($"Hi {firstName},")}
+            {P("We reviewed your documents and weren't able to approve them this time. The reason is below &mdash; you can correct it and submit again, and there's no limit on attempts.")}
+            {DetailRow("Submission", subjectDescription)}
+            {DetailRow("What needs fixing", reason)}
+            {Button("Review and Resubmit", $"{baseUrl}/verification")}
+            """;
+
+        string html = WrapInLayout("Verification not approved", body, Hero("&#33;", "Verification not approved"));
+        string text = $"Hi {firstName}, your Housing Hub verification for {subjectDescription} was not approved. Reason: {reason}. You can correct this and resubmit.";
+
+        return await SendAsync(toEmail, "Your Housing Hub Verification Needs Attention", text, html);
+    }
+
     public async Task<bool> SendAccountReactivatedAsync(string toEmail, string firstName)
     {
         string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
