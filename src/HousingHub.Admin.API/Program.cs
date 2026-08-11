@@ -24,6 +24,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using Sentry;
+using Sentry.Extensibility;
 using Serilog;
 
 namespace HousingHub.Admin.API;
