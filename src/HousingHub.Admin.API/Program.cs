@@ -8,6 +8,7 @@ using HousingHub.Admin.API.Common;
 using HousingHub.Admin.API.Realtime;
 using HousingHub.Application;
 using HousingHub.Core.Configuration;
+using HousingHub.Core.Observability;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Data.Contexts;
 using HousingHub.Repository;
@@ -22,6 +23,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
+using Sentry;
 using Serilog;
 
 namespace HousingHub.Admin.API;
@@ -48,6 +50,26 @@ public static class Program
             requiredArrays: ["Cors:AllowedOrigins"]);
 
         var isLambda = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME"));
+
+        // Error monitoring. Inert when Sentry:Dsn is unset. Use a SEPARATE Sentry
+        // project from the consumer API so an admin outage is distinguishable from
+        // a customer-facing one at a glance.
+        builder.WebHost.UseSentry(options =>
+        {
+            SentryOptionsConfigurator.Configure(options, builder.Configuration);
+
+            // Services here catch their own exceptions and return a failed
+            // BaseResponse, so almost nothing reaches the pipeline as an unhandled
+            // exception. Binding the event level to Error makes the existing
+            // `_logger.LogError(ex, ...)` calls the reporting mechanism — without
+            // this, Sentry would look installed and report almost nothing.
+            options.MinimumEventLevel = LogLevel.Error;
+            options.MinimumBreadcrumbLevel = LogLevel.Information;
+
+            // Never attach the request body: it would carry KYC submissions and
+            // login payloads verbatim, straight past the field-level scrubbing.
+            options.MaxRequestBodySize = RequestSize.None;
+        });
 
         builder.Services.AddAWSLambdaHosting(LambdaEventSource.RestApi);
 
@@ -188,6 +210,13 @@ public static class Program
             {
                 var exceptionFeature = context.Features.Get<IExceptionHandlerFeature>();
                 Log.Error(exceptionFeature?.Error, "Unhandled exception in Admin API");
+
+                // UseExceptionHandler swallows the exception rather than rethrowing,
+                // so Sentry's pipeline integration never sees it. Report explicitly.
+                if (exceptionFeature?.Error is { } unhandled)
+                {
+                    SentrySdk.CaptureException(unhandled);
+                }
 
                 context.Response.StatusCode = StatusCodes.Status500InternalServerError;
                 context.Response.ContentType = "application/json";

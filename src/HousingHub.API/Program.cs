@@ -11,6 +11,7 @@ using HousingHub.API.Common.Middlewares;
 using HousingHub.API.Hubs;
 using HousingHub.Application;
 using HousingHub.Core.Configuration;
+using HousingHub.Core.Observability;
 using HousingHub.Data.Contexts;
 using HousingHub.Model.Enums;
 using HousingHub.Repository;
@@ -28,6 +29,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
+using Sentry;
 using Serilog;
 using Microsoft.AspNetCore.Http;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -62,6 +64,37 @@ namespace HousingHub.API
                 requiredArrays: ["Cors:AllowedOrigins"]);
 
             var isLambda = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME"));
+
+            // Error monitoring. Inert when Sentry:Dsn is unset, so this is safe to
+            // ship before the DSN exists. See SentryOptionsConfigurator for what is
+            // scrubbed and why the free plan's quota shapes the filtering.
+            builder.WebHost.UseSentry(options =>
+            {
+                SentryOptionsConfigurator.Configure(options, builder.Configuration);
+
+                // THIS is what makes Sentry see anything at all in this codebase.
+                //
+                // Almost every service here catches its own exceptions, logs them and
+                // returns a failed BaseResponse — so the exception never propagates to
+                // the pipeline and an integration relying only on unhandled exceptions
+                // would report a near-empty stream while the app quietly failed. Wiring
+                // the event level to Error means `_logger.LogError(ex, ...)`, which the
+                // codebase already calls everywhere, becomes the reporting mechanism.
+                //
+                // Set explicitly rather than left to the default so that changing it is
+                // a deliberate act: raising it to Critical would silently switch
+                // monitoring off for the entire application.
+                options.MinimumEventLevel = LogLevel.Error;
+
+                // Information-level logs ride along as breadcrumbs on events that were
+                // being sent anyway. They cost no additional quota and are usually the
+                // difference between a stack trace and an explanation.
+                options.MinimumBreadcrumbLevel = LogLevel.Information;
+
+                // Never attach the request body: it would carry KYC submissions and
+                // login payloads verbatim, straight past the field-level scrubbing.
+                options.MaxRequestBodySize = RequestSize.None;
+            });
 
             builder.Services.AddAWSLambdaHosting(LambdaEventSource.RestApi);
 

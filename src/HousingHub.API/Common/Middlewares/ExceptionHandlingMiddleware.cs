@@ -19,8 +19,19 @@ internal class ExceptionHandlingMiddleware : IMiddleware
         {
             await next(context);
         }
+        catch (ValidationException e)
+        {
+            // A rejected form is the system working, not failing. Logged at Warning so
+            // it stays visible locally without becoming an error report: Sentry's event
+            // threshold is LogError, and on a 5,000-event monthly budget a few users
+            // mistyping an email would consume the quota that real bugs need.
+            _logger.LogWarning(e, "Validation failed for {Path}", context.Request.Path);
+            await HandleExceptionAsync(context, e);
+        }
         catch (Exception e)
         {
+            // Error level is deliberate — this is what causes the event to reach
+            // Sentry. See the UseSentry configuration in Program.cs.
             _logger.LogError(e, e.Message);
             await HandleExceptionAsync(context, e);
         }
