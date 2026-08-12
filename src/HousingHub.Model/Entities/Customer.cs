@@ -85,6 +85,55 @@ public class Customer : BaseEntity
     public bool IsManagedByHousingHub { get; set; } = false;
 
 
+    // ── Business verification ───────────────────────────────────
+    // Set when a VerificationCase of type Business is approved. Written only by
+    // VerificationService, never by a user-facing update path — these fields are
+    // the badge, and letting a profile edit touch them would let anyone grant
+    // themselves one.
+
+    /// <summary>
+    /// How far this account's business credentials have been verified.
+    /// </summary>
+    /// <remarks>
+    /// Separate from KYC. <see cref="IsKycVerified"/> answers "is this the person
+    /// they say they are"; this answers "is the company they claim to represent
+    /// real, and are they part of it". An agent can be identity-verified without
+    /// being business-verified, and that distinction is the whole reason for tiers.
+    /// </remarks>
+    public VerificationTier BusinessVerificationTier { get; set; } = VerificationTier.Unverified;
+
+    public DateTime? BusinessVerifiedAt { get; set; }
+
+    /// <summary>
+    /// When the business verification lapses, or null if nothing in it expires.
+    /// </summary>
+    /// <remarks>
+    /// LASRERA registrations are annual, so a Lagos agent's verification has a
+    /// shelf life. Copied from the approved case's earliest document expiry.
+    /// </remarks>
+    public DateTime? BusinessVerificationExpiresAt { get; set; }
+
+    /// <summary>RC or BN number from the approved CAC certificate.</summary>
+    public string? CacNumber { get; set; }
+
+    /// <summary>LASRERA registration number, for agents operating in Lagos.</summary>
+    public string? LasreraPermitNumber { get; set; }
+
+    /// <summary>
+    /// True when business verification is current — approved and not lapsed.
+    /// </summary>
+    /// <remarks>
+    /// Always ask this rather than reading the tier directly. An expired
+    /// verification still carries <see cref="VerificationTier.BusinessVerified"/>
+    /// until a sweep moves it, and a badge shown on the strength of a lapsed
+    /// LASRERA permit is a claim we cannot support.
+    /// </remarks>
+    [DynamoDBIgnore]
+    public bool IsBusinessVerified =>
+        BusinessVerificationTier >= VerificationTier.BusinessVerified
+        && (BusinessVerificationExpiresAt is null || BusinessVerificationExpiresAt > DateTime.UtcNow);
+
+
     // Relationships (foreign keys only, navigation properties ignored by DynamoDB)
     [DynamoDBIgnore]
     public ICollection<Property> Properties { get; set; } = new List<Property>();

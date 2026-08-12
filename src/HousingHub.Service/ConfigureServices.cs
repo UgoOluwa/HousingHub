@@ -82,6 +82,12 @@ public static class ConfigureServices
         services.AddScoped<IPropertyAlertPreferenceQueryService, PropertyAlertPreferenceQueryService>();
         services.AddScoped<VerificationService.Interfaces.IVerificationService,
                            VerificationService.VerificationService>();
+
+        // No CAC provider account yet, so lookups defer to the human reviewer and
+        // report that they did not run rather than inventing a result. Swapping in
+        // Dojah/QoreID/Mono later is this one line.
+        services.AddScoped<VerificationService.Interfaces.ICacLookupService,
+                           VerificationService.DeferToReviewerCacLookupService>();
         services.AddSingleton<IUtilityService, UtilityService>();
 
         // AWS S3 File Storage

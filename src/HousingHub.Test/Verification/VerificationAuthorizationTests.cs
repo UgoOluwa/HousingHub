@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using PropertyEntity = HousingHub.Model.Entities.Property;
+using HousingHub.Service.VerificationService;
 using VerificationServiceImpl = HousingHub.Service.VerificationService.VerificationService;
 
 namespace HousingHub.Test.Verification;
@@ -70,6 +71,11 @@ public class VerificationAuthorizationTests
             _fileStorage.Object,
             new Mock<IEmailService>().Object,
             new Mock<IRealtimeNotifier>().Object,
+            // The real no-provider implementation rather than a mock: it reports
+            // "not performed" rather than inventing a result, which is exactly the
+            // behaviour these tests should run against.
+            new DeferToReviewerCacLookupService(
+                NullLogger<DeferToReviewerCacLookupService>.Instance),
             NullLogger<VerificationServiceImpl>.Instance);
     }
 

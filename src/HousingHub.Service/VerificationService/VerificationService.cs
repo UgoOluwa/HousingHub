@@ -37,6 +37,7 @@ public class VerificationService : IVerificationService
     private readonly IFileStorageService _fileStorage;
     private readonly IEmailService _emailService;
     private readonly IRealtimeNotifier _realtimeNotifier;
+    private readonly ICacLookupService _cacLookup;
     private readonly ILogger<VerificationService> _logger;
 
     /// <summary>
@@ -55,12 +56,14 @@ public class VerificationService : IVerificationService
         IFileStorageService fileStorage,
         IEmailService emailService,
         IRealtimeNotifier realtimeNotifier,
+        ICacLookupService cacLookup,
         ILogger<VerificationService> logger)
     {
         _unitOfWork = unitOfWork;
         _fileStorage = fileStorage;
         _emailService = emailService;
         _realtimeNotifier = realtimeNotifier;
+        _cacLookup = cacLookup;
         _logger = logger;
     }
 
@@ -483,6 +486,7 @@ public class VerificationService : IVerificationService
             await _unitOfWork.VerificationCaseCommands.UpdateAsync(verificationCase);
             await _unitOfWork.SaveAsync();
 
+            await ApplyOutcomeAsync(verificationCase, documents);
             await NotifyDecisionAsync(verificationCase);
 
             return Ok<bool>(true);
@@ -493,6 +497,118 @@ public class VerificationService : IVerificationService
             return Fail<bool>(ResponseMessages.UnexpectedError);
         }
     }
+
+    /// <summary>
+    /// Writes an approved case's outcome onto the thing that was verified.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without this the pipeline is a filing cabinet: cases get approved and
+    /// nothing anywhere changes. This is the step that turns a decision into a
+    /// badge, and it is the only place the tier fields on Customer and Property are
+    /// written — no user-facing update path touches them, because a profile edit
+    /// that could set your own verification tier is a profile edit that grants
+    /// badges.
+    /// </para>
+    /// <para>
+    /// Approval only. A rejection leaves the subject exactly as it was, rather than
+    /// actively un-verifying it — somebody whose second submission is rejected
+    /// should not lose the badge their first one earned.
+    /// </para>
+    /// <para>
+    /// Best-effort and after the save, for the same reason as the notification: the
+    /// decision is already recorded, and a failure here must not make a completed
+    /// review report as an error. It does mean a failure leaves a decided case
+    /// whose badge did not apply — logged loudly, because that state needs a human.
+    /// </para>
+    /// </remarks>
+    private async Task ApplyOutcomeAsync(
+        VerificationCase verificationCase, IReadOnlyList<VerificationDocument> documents)
+    {
+        if (verificationCase.Status != VerificationCaseStatus.Approved) return;
+
+        try
+        {
+            switch (verificationCase.SubjectType)
+            {
+                case VerificationSubjectType.Business:
+                {
+                    var customer = await _unitOfWork.CustomerQueries.GetByIdAsync(verificationCase.SubjectId);
+                    if (customer is null) return;
+
+                    customer.BusinessVerificationTier = VerificationTier.BusinessVerified;
+                    customer.BusinessVerifiedAt = verificationCase.DecidedAt;
+                    customer.BusinessVerificationExpiresAt = verificationCase.ExpiresAt;
+
+                    // Registration numbers are lifted from the approved documents
+                    // rather than asked for separately, so what appears on the
+                    // profile is what a reviewer actually saw on paper.
+                    customer.CacNumber =
+                        NumberFrom(documents, VerificationDocumentType.CacCertificate) ?? customer.CacNumber;
+                    customer.LasreraPermitNumber =
+                        NumberFrom(documents, VerificationDocumentType.LasreraPermit) ?? customer.LasreraPermitNumber;
+
+                    await _unitOfWork.CustomerCommands.UpdateAsync(customer);
+                    await _unitOfWork.SaveAsync();
+                    break;
+                }
+
+                case VerificationSubjectType.Property:
+                {
+                    var property = await _unitOfWork.PropertyQueries.GetByIdAsync(verificationCase.SubjectId);
+                    if (property is null) return;
+
+                    property.TitleVerificationTier = VerificationTier.TitleVerified;
+                    property.TitleVerifiedAt = verificationCase.DecidedAt;
+
+                    var titleDocument =
+                        documents.FirstOrDefault(d => d.DocumentType == VerificationDocumentType.CertificateOfOccupancy)
+                        ?? documents.FirstOrDefault(d => d.DocumentType == VerificationDocumentType.DeedOfAssignment);
+
+                    property.TitleHolderName = titleDocument?.NameOnDocument ?? property.TitleHolderName;
+
+                    // A Letter of Authority to Let in the pack is the reviewer
+                    // telling us the lister is acting for the owner rather than
+                    // being the owner. The badge must not imply otherwise.
+                    property.ListerIsTitleHolder =
+                        !documents.Any(d => d.DocumentType == VerificationDocumentType.LetterOfAuthorityToLet);
+
+                    await _unitOfWork.PropertyCommands.UpdateAsync(property);
+                    await _unitOfWork.SaveAsync();
+                    break;
+                }
+
+                case VerificationSubjectType.Identity:
+                {
+                    var customer = await _unitOfWork.CustomerQueries.GetByIdAsync(verificationCase.SubjectId);
+                    if (customer is null) return;
+
+                    // Reuses the existing KYC flag deliberately, so the badge already
+                    // rendered across both frontends keeps working when the identity
+                    // flow migrates onto this pipeline.
+                    customer.UpdateKycStatus(isVerified: true);
+
+                    await _unitOfWork.CustomerCommands.UpdateAsync(customer);
+                    await _unitOfWork.SaveAsync();
+                    break;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Case {CaseId} was approved but the outcome could not be applied to subject {SubjectId}. "
+                + "The badge will be missing until this is resolved manually.",
+                verificationCase.Id, verificationCase.SubjectId);
+        }
+    }
+
+    /// <summary>Document number from the first approved document of a given type.</summary>
+    private static string? NumberFrom(
+        IEnumerable<VerificationDocument> documents, VerificationDocumentType type) =>
+        documents
+            .FirstOrDefault(d => d.DocumentType == type && d.Status == DocumentReviewStatus.Approved)
+            ?.DocumentNumber;
 
     /// <summary>
     /// Tells the applicant what was decided, in-app and by email.
@@ -663,6 +779,11 @@ public class VerificationService : IVerificationService
             submittedByName);
     }
 
+    /// <param name="includeLabels">
+    /// Reviewer view. Also gates the name-match context, because those two things
+    /// are needed by exactly the same caller and separating them would invite
+    /// someone to switch on the context for the submitter's own screen.
+    /// </param>
     private async Task<VerificationCaseDetailDto> ToDetailDtoAsync(
         VerificationCase source, bool includeLabels = false)
     {
@@ -671,10 +792,63 @@ public class VerificationService : IVerificationService
         var missing = VerificationRequirements.MissingFrom(
             source.SubjectType, documents.Select(d => d.DocumentType));
 
+        var reviewContext = includeLabels
+            ? await BuildReviewContextAsync(source, documents)
+            : null;
+
         return new VerificationCaseDetailDto(
             await ToDtoAsync(source, documents.Count, includeLabels),
             documents.Select(ToDto).ToList(),
-            missing);
+            missing,
+            reviewContext);
+    }
+
+    /// <summary>
+    /// The reviewer's extra signal: does the name on each document match the person
+    /// who submitted it, and what did the registry say.
+    /// </summary>
+    /// <remarks>
+    /// Reviewer-only, deliberately. Returning this to the submitter would tell a
+    /// would-be impersonator precisely which check flagged them and what to change.
+    ///
+    /// The name comparison is advisory — Nigerian names vary legitimately between
+    /// documents, so this prompts a human rather than deciding anything. See
+    /// <see cref="NameMatcher"/>.
+    /// </remarks>
+    private async Task<List<DocumentReviewContextDto>> BuildReviewContextAsync(
+        VerificationCase source, IReadOnlyList<VerificationDocument> documents)
+    {
+        var submitter = await _unitOfWork.CustomerQueries.GetByIdAsync(source.SubmittedByCustomerId);
+        var accountName = submitter is null ? null : $"{submitter.FirstName} {submitter.LastName}";
+
+        var context = new List<DocumentReviewContextDto>(documents.Count);
+
+        foreach (var document in documents)
+        {
+            var match = NameMatcher.Compare(document.NameOnDocument, accountName);
+
+            var cac = CacLookupResult.NotPerformed();
+
+            // Only the CAC certificate carries a number the registry can resolve,
+            // and only when the applicant supplied one.
+            if (document.DocumentType == VerificationDocumentType.CacCertificate
+                && !string.IsNullOrWhiteSpace(document.DocumentNumber))
+            {
+                cac = await _cacLookup.LookupAsync(document.DocumentNumber!, document.NameOnDocument);
+            }
+
+            context.Add(new DocumentReviewContextDto(
+                document.Id,
+                match.ToString(),
+                NameMatcher.ShouldEscalate(match),
+                accountName,
+                cac.Performed,
+                cac.Performed ? cac.Found : null,
+                cac.RegisteredName,
+                cac.Status));
+        }
+
+        return context;
     }
 
     private static VerificationDocumentDto ToDto(VerificationDocument source) =>

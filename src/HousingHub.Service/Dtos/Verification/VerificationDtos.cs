@@ -83,6 +83,35 @@ public record VerificationDocumentDto(
     bool? AutoCheckPassed,
     string? AutoCheckProvider);
 
+/// <summary>
+/// What the reviewer needs to know about a document beyond the document itself.
+/// </summary>
+/// <remarks>
+/// Assembled for the review screen only, never returned to the submitter — telling
+/// an applicant their name did not match tells a would-be impersonator exactly
+/// which check to defeat next time.
+/// </remarks>
+/// <param name="NameMatch">
+/// How the name on the document compares to the account holder. This is the signal
+/// that catches the fraud that actually happens: a real document belonging to
+/// somebody else.
+/// </param>
+/// <param name="ShouldEscalate">True when the reviewer should consider EscalatedNameMismatch.</param>
+/// <param name="NameOnAccount">The account holder's name, so the reviewer can judge for themselves.</param>
+/// <param name="CacLookupPerformed">
+/// False means no provider ran — which is not the same as a failed check and must
+/// not be rendered as one.
+/// </param>
+public record DocumentReviewContextDto(
+    Guid DocumentId,
+    string NameMatch,
+    bool ShouldEscalate,
+    string? NameOnAccount,
+    bool CacLookupPerformed = false,
+    bool? CacFound = null,
+    string? CacRegisteredName = null,
+    string? CacStatus = null);
+
 /// <summary>A case with its documents.</summary>
 public record VerificationCaseDetailDto(
     VerificationCaseDto Case,
@@ -90,4 +119,7 @@ public record VerificationCaseDetailDto(
     // Document types still required for the requested tier. Drives the submitter's
     // checklist, and is why a refused submit can say what is missing rather than
     // failing generically.
-    List<VerificationDocumentType> MissingRequiredDocuments);
+    List<VerificationDocumentType> MissingRequiredDocuments,
+    // Reviewer-only. Empty on the submitter's own view of their case — see
+    // DocumentReviewContextDto for why.
+    List<DocumentReviewContextDto>? ReviewContext = null);
