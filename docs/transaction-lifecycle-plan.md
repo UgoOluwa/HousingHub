@@ -171,12 +171,26 @@ they claim, and charging for both would be charging for work you did not do.
 
 #### Four things this model leaves open
 
-**a. What triggers ID verification for the supply side?** The trigger you
-described — renting or buying — is a demand-side event. An owner never rents
-anything, so nothing in this model ever asks them to pay. Options: charge at
-first publish, fold it into business or property verification, or leave the
-supply side free and treat renter fees as the revenue line. This needs a decision
-before the payment work starts.
+**a. The supply-side trigger — settled: bundle it into document verification.**
+
+Renting or buying is a demand-side event, so nothing in the original model ever
+charged an owner or agent. The answer is that business and property verification
+are paid too, so ID verification rides along with whichever of them the person
+reaches first.
+
+That gives one rule on both sides of the marketplace:
+
+> **Identity is bundled into the first paid verification you need, and never
+> charged again.**
+
+- Renter → bundled with the affordability check at shortlist
+- Agent or developer → bundled with business verification
+- Owner → bundled with property verification
+
+Same ordering rule applies throughout: identity is checked first, and the rest of
+the bundle is only run and only billed if it passes. And the same reuse rule —
+someone who was ID-verified as a renter and later lists a property pays only for
+the property verification, because the identity is already held.
 
 **b. Refunds when a check fails.** The provider bills you whether the applicant
 passes or not. UK referencing companies treat fees as non-refundable because the
