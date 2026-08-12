@@ -137,23 +137,67 @@ It is also the cheapest thing on the list and unblocks everything downstream:
 verification fees, then agency fees, then eventually the protected first-rent
 payment. Do it first and every subsequent phase gets easier.
 
-### 2.2 Reconsider charging for ID verification at all
+### 2.2 ID verification: charged once, at the transaction moment
 
-Worth thinking about rather than assuming.
+**Settled model, and a better one than my first suggestion.**
 
-Charging for it is defensible — it is a real cost, and a fee filters out
-low-intent signups. But in Phase 1 you are verifying manually, so your marginal
-cost is your own time, and a fee on the **supply** side is friction where you can
-least afford it. Twenty owners is a small number to lose anyone from.
+I originally argued for making ID verification free on the supply side, reasoning
+that manual review costs only your own time. That reasoning was wrong because it
+was temporary — manual review is a stopgap until QoreID is integrated, and after
+that every check carries a real per-call fee that somebody has to cover.
 
-I would suggest: **free for owners, agents and developers; charged for renters at
-the point they are shortlisted**, bundled with the affordability check rather than
-billed separately. That way the money arrives at the moment the renter has the
-strongest reason to pay — someone has picked them — and your supply side never
-hits a paywall.
+The model:
 
-If you do charge everyone, keep it genuinely one-off and make the badge
-permanent, exactly as you described.
+- **ID verification is one-off per person.** Identity does not change, so it is
+  bought once and the badge is permanent.
+- **The charge lands at the point of renting or buying**, bundled with the
+  affordability check — not at signup, and not as a standalone paywall.
+- **First property:** the shortlisted renter pays for ID verification *and*
+  affordability.
+- **Every property after that:** ID is already held, so they pay for affordability
+  only. Subsequent owners get the identity assurance for free, off the back of the
+  first transaction.
+
+This is right for three reasons. Nobody is charged before somebody is seriously
+interested in them, so there is no signup friction. The per-check cost is
+recovered at the moment the user has the strongest reason to pay. And the one-off
+element gets cheaper for the renter with each property, which rewards staying on
+the platform rather than penalising it.
+
+**Run ID first, and only bill for affordability if ID passes.** They are one
+purchase to the user but two provider calls to you. If the identity check fails
+there is no point running an affordability check on a person who may not be who
+they claim, and charging for both would be charging for work you did not do.
+
+#### Four things this model leaves open
+
+**a. What triggers ID verification for the supply side?** The trigger you
+described — renting or buying — is a demand-side event. An owner never rents
+anything, so nothing in this model ever asks them to pay. Options: charge at
+first publish, fold it into business or property verification, or leave the
+supply side free and treat renter fees as the revenue line. This needs a decision
+before the payment work starts.
+
+**b. Refunds when a check fails.** The provider bills you whether the applicant
+passes or not. UK referencing companies treat fees as non-refundable because the
+work was performed. Whatever you choose, it must be stated before payment, in
+plain words — otherwise you will get chargebacks, and chargebacks on a young
+merchant account are expensive out of proportion to the amount.
+
+**c. "One-off" needs a freshness rule, not an expiry.** Verifying against NIN or
+BVN is verifying against something that does not lapse, so permanent is
+defensible. But an owner in 2029 looking at a badge earned in 2026 should be able
+to see *when* it was done. Show the date on the badge and let the owner decide
+whether it is recent enough. Do not silently expire it — that would re-charge
+people for something you told them was one-off.
+
+**d. Both purchase paths must cost the same.** You mentioned people should also be
+able to buy ID verification directly. Fine — but if the standalone price differs
+from the bundled price, that difference is the only thing anyone will notice.
+
+If the owner elects to cover the cost, they should cover the whole bundle
+including the ID portion. A part-paid bundle is a support conversation waiting to
+happen.
 
 ### 2.3 The affordability report should be a verdict, not a data dump
 
@@ -245,25 +289,32 @@ The flow you described, which I think is the strongest idea in your plan:
 1. Owner sees completed inspections for a property
 2. Owner shortlists a candidate → candidate is notified, in-app and by email
 3. Candidate consents and connects their bank via Mono, or uploads statements
-4. Payment taken — **renter pays by default, owner can choose to cover it**, with
-   your margin on top and disclosed
-5. Check runs against **this property's rent**, not in general
-6. Owner sees the verdict report from §2.3
-7. Owner accepts or declines
-8. On accept: listing marked unavailable, candidate notified with next steps
-9. On decline: candidate told clearly and kindly that the owner did not proceed
-   on affordability grounds, in-app and by email; owner returns to the shortlist
+4. Price assembled: affordability always, **plus ID verification only if this
+   person does not already hold it** — so a repeat renter sees a smaller bill and
+   can see why
+5. Payment taken — **renter pays by default, owner can choose to cover the whole
+   bundle**, with your margin on top and disclosed
+6. ID check runs first where required; affordability only runs, and is only
+   billed, if identity passes
+7. Affordability assessed against **this property's rent**, not in general
+8. Owner sees the verdict report from §2.3
+9. Owner accepts or declines
+10. On accept: listing marked unavailable, candidate notified with next steps
+11. On decline: candidate told clearly and kindly that the owner did not proceed
+    on affordability grounds, in-app and by email; owner returns to the shortlist
 
-Two things to be careful about in step 9. Be precise about *what* was declined —
+Two things to be careful about in step 11. Be precise about *what* was declined —
 "the owner did not proceed" rather than "you failed" — because the same person
 may be perfect for the next property. And do not reveal the owner's threshold, or
 applicants will reverse-engineer it.
 
-One design point worth stating: the check is **per property**, so a candidate
-shortlisted for three properties pays three times. That is defensible because the
-answer genuinely differs per rent — but consider a discounted re-check within, say,
-30 days, reusing the same bank connection. It costs you almost nothing and removes
-the obvious complaint.
+One design point worth stating: **affordability** is per property, so a candidate
+shortlisted for three properties pays for three checks. That is defensible because
+the answer genuinely differs per rent. **Identity** is not — it is bought once and
+reused for every owner after the first, which is what stops the total from feeling
+punitive. Consider also a discounted affordability re-check within, say, 30 days,
+reusing the same bank connection: it costs you almost nothing and removes the
+obvious complaint.
 
 ### Phase 5 — Documentation and signing *(~6–8 weeks)*
 
