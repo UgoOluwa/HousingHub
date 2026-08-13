@@ -27,6 +27,39 @@ public interface IEmailService
     Task<bool> SendAdminOtpAsync(string toEmail, string firstName, string otpCode);
     Task<bool> SendKycApprovedAsync(string toEmail, string firstName);
     Task<bool> SendKycRejectedAsync(string toEmail, string firstName, string reason);
+
+    /// <summary>
+    /// Tells an applicant their business or property verification was approved.
+    /// </summary>
+    /// <param name="subjectDescription">"your agency" or the listing's title.</param>
+    Task<bool> SendVerificationApprovedAsync(string toEmail, string firstName, string subjectDescription);
+
+    /// <summary>
+    /// Tells an applicant their verification was not approved, and why.
+    /// </summary>
+    /// <param name="reason">
+    /// The reviewer's note, shown verbatim. Required by the service layer for exactly
+    /// this reason: a rejection the applicant cannot act on becomes a support ticket.
+    /// </param>
+    Task<bool> SendVerificationRejectedAsync(string toEmail, string firstName, string subjectDescription, string reason);
+
+    /// <summary>
+    /// Tells someone their verification lapsed because a document expired.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately distinct from the rejection email. Nothing was wrong with the
+    /// submission — it aged out — and somebody who reads this as a rejection goes
+    /// looking for a mistake they did not make.
+    /// </remarks>
+    Task<bool> SendVerificationExpiredAsync(string toEmail, string firstName, string subjectDescription);
+
+    /// <summary>
+    /// Warns that a verification is about to lapse, while there is still time to act.
+    /// </summary>
+    /// <param name="daysRemaining">Days until it lapses. Shown, so it must be accurate.</param>
+    /// <param name="expiresAt">The date itself, so the reader can diarise it.</param>
+    Task<bool> SendVerificationExpiringSoonAsync(
+        string toEmail, string firstName, string subjectDescription, int daysRemaining, DateTime expiresAt);
     Task<bool> SendAccountReactivatedAsync(string toEmail, string firstName);
     /// <summary>Sent to the property owner when an admin marks their listing verified.</summary>
     Task<bool> SendPropertyVerifiedAsync(string ownerEmail, string ownerName, string propertyTitle);

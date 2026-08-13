@@ -270,6 +270,91 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(toEmail, "Your Housing Hub KYC Was Not Approved", text, html);
     }
 
+    public async Task<bool> SendVerificationApprovedAsync(
+        string toEmail, string firstName, string subjectDescription)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        string body = $"""
+            {P($"Hi {firstName},")}
+            {P("We've finished reviewing your documents and everything checks out. Your verification badge is now live, and people browsing Housing Hub can see it.")}
+            {DetailRow("Verified", subjectDescription)}
+            {Button("View Your Profile", $"{baseUrl}/profile")}
+            """;
+
+        string html = WrapInLayout("Verification approved", body, Hero("&#10003;", "Verification approved"));
+        string text = $"Hi {firstName}, your Housing Hub verification for {subjectDescription} has been approved.";
+
+        return await SendAsync(toEmail, "Your Housing Hub Verification Has Been Approved", text, html);
+    }
+
+    public async Task<bool> SendVerificationRejectedAsync(
+        string toEmail, string firstName, string subjectDescription, string reason)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        // The reviewer's note is the whole point of this email. Everything else is
+        // packaging — if the applicant cannot tell what to fix, they will email
+        // support instead, which costs more than the review did.
+        string body = $"""
+            {P($"Hi {firstName},")}
+            {P("We reviewed your documents and weren't able to approve them this time. The reason is below &mdash; you can correct it and submit again, and there's no limit on attempts.")}
+            {DetailRow("Submission", subjectDescription)}
+            {DetailRow("What needs fixing", reason)}
+            {Button("Review and Resubmit", $"{baseUrl}/verification")}
+            """;
+
+        string html = WrapInLayout("Verification not approved", body, Hero("&#33;", "Verification not approved"));
+        string text = $"Hi {firstName}, your Housing Hub verification for {subjectDescription} was not approved. Reason: {reason}. You can correct this and resubmit.";
+
+        return await SendAsync(toEmail, "Your Housing Hub Verification Needs Attention", text, html);
+    }
+
+    public async Task<bool> SendVerificationExpiredAsync(
+        string toEmail, string firstName, string subjectDescription)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        // Careful not to sound like a rejection. Nothing was wrong with what they
+        // sent; a date passed. The instruction is "upload a current one", not
+        // "correct your mistake".
+        string body = $"""
+            {P($"Hi {firstName},")}
+            {P("One of the documents behind your Housing Hub verification has reached its expiry date, so the badge has come down for now. Nothing was wrong with your submission &mdash; documents like LASRERA registrations simply need renewing each year.")}
+            {DetailRow("Affected", subjectDescription)}
+            {P("Upload a current document and we&rsquo;ll review it and put the badge back.")}
+            {Button("Renew Verification", $"{baseUrl}/verification")}
+            """;
+
+        string html = WrapInLayout("Your verification has expired", body, Hero("&#8635;", "Verification expired"));
+        string text = $"Hi {firstName}, your Housing Hub verification for {subjectDescription} has expired because a document reached its expiry date. Upload a current document to restore it.";
+
+        return await SendAsync(toEmail, "Your Housing Hub Verification Has Expired", text, html);
+    }
+
+    public async Task<bool> SendVerificationExpiringSoonAsync(
+        string toEmail, string firstName, string subjectDescription, int daysRemaining, DateTime expiresAt)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string dayWord = daysRemaining == 1 ? "day" : "days";
+
+        // Concrete and actionable. The date is spelled out as well as the countdown,
+        // because "in 30 days" is easy to defer and a date is easy to diarise.
+        string body = $"""
+            {P($"Hi {firstName},")}
+            {P($"One of the documents behind your Housing Hub verification expires in {daysRemaining} {dayWord}. Renewals can take a while &mdash; LASRERA registrations especially &mdash; so this is a good moment to start.")}
+            {DetailRow("Verification", subjectDescription)}
+            {DetailRow("Expires", expiresAt.ToString("d MMMM yyyy"))}
+            {P("Upload a current document before then and your badge stays up without a gap.")}
+            {Button("Renew Now", $"{baseUrl}/verification")}
+            """;
+
+        string html = WrapInLayout("Your verification expires soon", body, Hero("&#9203;", "Expiring soon"));
+        string text = $"Hi {firstName}, your Housing Hub verification for {subjectDescription} expires in {daysRemaining} {dayWord}, on {expiresAt:d MMMM yyyy}. Upload a current document to keep your badge.";
+
+        return await SendAsync(toEmail, $"Your Housing Hub verification expires in {daysRemaining} {dayWord}", text, html);
+    }
+
     public async Task<bool> SendAccountReactivatedAsync(string toEmail, string firstName)
     {
         string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";

@@ -23,5 +23,27 @@ public enum NotificationType
     NewMessage = 5,
 
     [Description("Property Match")]
-    PropertyMatch = 6
+    PropertyMatch = 6,
+
+    [Description("Verification Approved")]
+    VerificationApproved = 7,
+
+    [Description("Verification Rejected")]
+    VerificationRejected = 8,
+
+    /// <summary>
+    /// A verification lapsed because one of its documents expired. Distinct from a
+    /// rejection: nothing was wrong with the submission, it simply aged out, and the
+    /// action the user needs to take is different.
+    /// </summary>
+    [Description("Verification Expired")]
+    VerificationExpired = 9,
+
+    /// <summary>
+    /// A verification will lapse soon. Sent while the holder can still act on it —
+    /// renewing a LASRERA registration takes weeks, so telling somebody on the day
+    /// it drops is telling them too late.
+    /// </summary>
+    [Description("Verification Expiring Soon")]
+    VerificationExpiringSoon = 10
 }

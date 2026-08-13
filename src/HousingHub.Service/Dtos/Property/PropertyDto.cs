@@ -52,6 +52,48 @@ public record PropertyDto(
     /// flag set by an admin against the listing rather than the person.
     /// </remarks>
     bool IsOwnerVerified = false,
+
+    /// <summary>
+    /// The highest verification the person behind this listing currently holds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A single tier rather than a flag per check, and the UI renders one badge from
+    /// it. Two badges side by side invite a reader to average them into a general
+    /// impression of safety, which is exactly the reasoning we are trying to prevent
+    /// — the whole point of tiers is that each level makes a claim that is precisely
+    /// true.
+    /// </para>
+    /// <para>
+    /// <b>Current, not historical.</b> Computed through
+    /// <c>Customer.IsBusinessVerified</c>, so a lapsed LASRERA permit drops the tier
+    /// back to identity immediately rather than waiting for the nightly sweep. The
+    /// sweep clears the stored tier; this makes sure nothing is displayed in the gap.
+    /// </para>
+    /// </remarks>
+    Model.Enums.VerificationTier OwnerVerificationTier = Model.Enums.VerificationTier.Unverified,
+
+    /// <summary>
+    /// The strongest verification that applies to this listing — the owner's tier,
+    /// raised to <c>TitleVerified</c> when the property's own title has been checked.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is what the badge renders. Distinct from
+    /// <see cref="OwnerVerificationTier"/> because title verification attaches to the
+    /// <i>property</i>, not the person: an agent can be business-verified across ten
+    /// listings while only one of them has had its title checked.
+    /// </para>
+    /// <para>
+    /// <b>Capped below TitleVerified unless Verification:ShowTitleBadge is on.</b>
+    /// "Title Verified" is the strongest claim the platform can make and the one a
+    /// defrauded buyer's lawyer will point at. The flag exists so the data can flow
+    /// and the code can ship while the wording is still with a lawyer — see
+    /// docs/transaction-lifecycle-plan.md. Turning it on is a legal decision, not a
+    /// deployment one.
+    /// </para>
+    /// </remarks>
+    Model.Enums.VerificationTier ListingVerificationTier = Model.Enums.VerificationTier.Unverified,
     string? UnpublishReason = null,
     bool IsFlaggedDuplicate = false,
     Guid? PossibleDuplicateOfPropertyId = null);

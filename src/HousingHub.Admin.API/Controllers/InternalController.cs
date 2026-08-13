@@ -3,6 +3,7 @@ using HousingHub.Core.CustomResponses;
 using HousingHub.Core.Security;
 using HousingHub.Service.AdminService;
 using HousingHub.Service.InspectionService.Interfaces;
+using HousingHub.Service.VerificationService.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -31,6 +32,7 @@ namespace HousingHub.Admin.API.Controllers;
 public class InternalController(
     IInspectionCommandService inspectionCommandService,
     IAdminAuthService adminAuthService,
+    IVerificationExpiryService verificationExpiryService,
     IConfiguration configuration) : ControllerBase
 {
     /// <summary>
@@ -51,6 +53,60 @@ public class InternalController(
 
         var result = await inspectionCommandService.SendDueInspectionRemindersAsync();
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Daily verification maintenance: expire what has lapsed, warn what is about to.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Intended to run once a day. Verification is a claim with a shelf life —
+    /// LASRERA registrations are annual — and without something that actively expires
+    /// them, a badge granted once is granted forever. That is the same failure as not
+    /// verifying at all, just slower and more convincing to whoever relies on it.
+    /// </para>
+    /// <para>
+    /// Idempotent: a case already moved to Expired is skipped, so running it more
+    /// often than daily is harmless. Daily is enough — a badge lingering for a few
+    /// hours past its expiry is not the risk; lingering for months is.
+    /// </para>
+    /// <para>
+    /// Both halves run in one call because they read the same index and belong to the
+    /// same job. Expiring runs first, so a case that lapsed overnight is expired
+    /// rather than warned that it expires in seven days.
+    /// </para>
+    /// <para>
+    /// The response reports failures separately. A non-zero <c>failed</c> on the
+    /// expiry side means somebody is still showing a badge they are no longer
+    /// entitled to; on the reminder side it means a warning did not reach someone
+    /// whose badge is about to drop. Both are worth alerting on rather than leaving
+    /// in a log.
+    /// </para>
+    /// </remarks>
+    /// <param name="secret">Must match the configured Internal:WorkerSecret.</param>
+    [HttpPost("verification-expiry/run")]
+    [ProducesResponseType(typeof(BaseResponse<VerificationMaintenanceSummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> RunVerificationExpiry(
+        [FromHeader(Name = "X-Worker-Secret")] string? secret)
+    {
+        if (!IsAuthorisedWorker(secret))
+            return Unauthorized();
+
+        var now = DateTime.UtcNow;
+
+        // Expire first, remind second. Both read the same index, and doing them in
+        // this order means a case that lapsed overnight is expired rather than sent
+        // a "expires in 7 days" warning it has already outlived.
+        var expiry = await verificationExpiryService.ExpireLapsedAsync(now);
+        var reminders = await verificationExpiryService.SendExpiryRemindersAsync(now);
+
+        var result = new VerificationMaintenanceSummary(expiry, reminders);
+
+        return Ok(new BaseResponse<VerificationMaintenanceSummary>(
+            result, true, string.Empty,
+            $"Expired {expiry.Expired} (revoked {expiry.TiersRevoked}, failed {expiry.Failed}); "
+            + $"reminded {reminders.Sent} (failed {reminders.Failed})."));
     }
 
     /// <summary>
@@ -113,3 +169,12 @@ public class InternalController(
         return SecretComparer.FixedTimeEquals(presented, expected);
     }
 }
+
+/// <summary>
+/// Combined result of one daily verification maintenance run.
+/// </summary>
+/// <param name="Expiry">Badges taken away because their evidence lapsed.</param>
+/// <param name="Reminders">Warnings sent to people whose evidence lapses soon.</param>
+public record VerificationMaintenanceSummary(
+    VerificationExpirySummary Expiry,
+    VerificationReminderSummary Reminders);

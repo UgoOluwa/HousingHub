@@ -1,0 +1,118 @@
+name: Scheduled workers
+
+# Triggers the internal worker endpoints on the Admin API.
+#
+# WHY THIS EXISTS
+#
+# The worker endpoints have been in the codebase for a while and nothing has ever
+# called them. Inspection reminders have never been sent; the verification expiry
+# sweep would never have run. An endpoint that nothing invokes is dead code that
+# looks like a feature, which is worse than a missing feature because nobody goes
+# looking for it.
+#
+# WHY GITHUB ACTIONS RATHER THAN EVENTBRIDGE
+#
+# EventBridge Scheduler is the better long-term home — it lives beside the Lambda,
+# it retries, and it does not depend on this repository staying active. But it
+# needs an API Destination plus a Connection to hold the secret, which is
+# infrastructure that has to be created by hand in the console and is not captured
+# anywhere in this repo.
+#
+# This runs today, costs nothing, and is version-controlled. See
+# docs/scheduled-workers.md for the EventBridge setup when you want to move.
+#
+# KNOWN LIMITATIONS — read before relying on this for anything time-critical
+#
+#   * GitHub's scheduler is best-effort. Runs are queued and can be delayed by
+#     minutes to over an hour at busy times (the top of the hour is worst, hence
+#     the odd minutes below). Fine for a daily sweep; not fine for anything that
+#     must happen at a precise time.
+#   * Scheduled workflows are disabled automatically after 60 days with no commits
+#     to the repository. If the repo goes quiet, the workers stop silently. That
+#     alone is a reason to move to EventBridge before this matters.
+#   * If a run fails, the next one is not brought forward. Both jobs are
+#     idempotent, so the following day simply picks up the backlog.
+
+on:
+  schedule:
+    # Inspection reminders: every 30 minutes. Each inspection is reminded once, so
+    # frequency only affects how close to the 24-hour mark the reminder lands.
+    - cron: '7,37 * * * *'
+    # Verification maintenance: daily at 06:07 UTC (07:07 WAT), so the email
+    # arrives at the start of the working day rather than overnight.
+    - cron: '7 6 * * *'
+
+  # Manual trigger, for testing the wiring without waiting for a schedule and for
+  # catching up after an outage.
+  workflow_dispatch:
+    inputs:
+      worker:
+        description: 'Which worker to run'
+        required: true
+        default: 'verification-expiry'
+        type: choice
+        options:
+          - verification-expiry
+          - inspection-reminders
+
+jobs:
+  run-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decide which worker this run is for
+        id: which
+        run: |
+          # A workflow with two crons fires the same job for both, and the only way
+          # to tell them apart is the cron expression that triggered it.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "path=${{ inputs.worker }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "7 6 * * *" ]; then
+            echo "path=verification-expiry" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=inspection-reminders" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Call the worker
+        env:
+          ADMIN_API_URL: ${{ secrets.ADMIN_API_URL }}
+          WORKER_SECRET: ${{ secrets.INTERNAL_WORKER_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${ADMIN_API_URL:-}" ] || [ -z "${WORKER_SECRET:-}" ]; then
+            echo "::error::ADMIN_API_URL or INTERNAL_WORKER_SECRET is not set. See docs/scheduled-workers.md."
+            exit 1
+          fi
+
+          WORKER="${{ steps.which.outputs.path }}"
+          echo "Running $WORKER"
+
+          # --fail-with-body so a non-2xx fails the step but the response is still
+          # printed. Without the body a 401 is indistinguishable from a 500, and the
+          # most likely cause here is a rotated secret.
+          #
+          # The secret goes in a header, never the URL — a URL would be recorded in
+          # API Gateway access logs in plaintext.
+          HTTP_BODY=$(curl --fail-with-body --silent --show-error \
+            --max-time 120 \
+            --retry 2 --retry-delay 10 --retry-connrefused \
+            -X POST "${ADMIN_API_URL%/}/api/Internal/${WORKER}/run" \
+            -H "X-Worker-Secret: ${WORKER_SECRET}" \
+            -H 'Content-Length: 0')
+
+          echo "$HTTP_BODY"
+
+          # A 200 with failures inside is still a problem: somebody is either
+          # showing a badge they should not have, or did not get a warning they
+          # needed. Surface it as a workflow annotation rather than burying it.
+          if echo "$HTTP_BODY" | grep -q '"failed":[1-9]'; then
+            echo "::warning::The worker reported failures. Check Sentry and the response above."
+          fi
+
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::Worker call failed. Most likely causes, in order:"
+          echo "  1. INTERNAL_WORKER_SECRET does not match Internal__WorkerSecret on the Lambda (rotated?)"
+          echo "  2. ADMIN_API_URL is wrong — it must include the stage path, e.g. https://xxx.execute-api.af-south-1.amazonaws.com/admin"
+          echo "  3. Rate limited (10 requests / 5 min per IP) — unlikely on a schedule, possible if triggered manually in a loop"

@@ -84,8 +84,57 @@ public class Property : BaseEntity
     }
 
     public DateTime? PublishedAt { get; set; }
+    /// <summary>
+    /// Admin moderation flag — "we have looked at this listing".
+    /// </summary>
+    /// <remarks>
+    /// Deliberately NOT the same thing as title verification, and must not be
+    /// rendered as if it were. This says an admin reviewed the listing; it says
+    /// nothing about who owns the property. See
+    /// <see cref="TitleVerificationTier"/> for the claim that does.
+    /// </remarks>
     public bool IsVerified { get; set; } = false;
     public DateTime? VerifiedAt { get; set; }
+
+    // ── Title verification ──────────────────────────────────────
+    // Set when a VerificationCase of type Property is approved. Written only by
+    // VerificationService.
+
+    /// <summary>
+    /// How far this property's title has been verified.
+    /// </summary>
+    /// <remarks>
+    /// The strongest claim the platform can make, and the most dangerous to make
+    /// loosely — a defrauded buyer will point at whatever badge this drives.
+    /// </remarks>
+    public VerificationTier TitleVerificationTier { get; set; } = VerificationTier.Unverified;
+
+    public DateTime? TitleVerifiedAt { get; set; }
+
+    /// <summary>
+    /// Name on the title document, as recorded by the reviewer.
+    /// </summary>
+    /// <remarks>
+    /// Kept because the comparison between this and the lister is the check that
+    /// catches the most common fraud in this market: a real Certificate of
+    /// Occupancy belonging to somebody else.
+    /// </remarks>
+    public string? TitleHolderName { get; set; }
+
+    /// <summary>
+    /// False when the person listing the property is not the title holder.
+    /// </summary>
+    /// <remarks>
+    /// A legitimate and common case — an agent acting for an owner, or a tenant
+    /// subletting — but it changes what is required. When false, a Letter of
+    /// Authority to Let is needed, and the badge must not imply the lister owns
+    /// the property.
+    /// </remarks>
+    public bool ListerIsTitleHolder { get; set; } = true;
+
+    /// <summary>True when title verification is current.</summary>
+    [DynamoDBIgnore]
+    public bool IsTitleVerified => TitleVerificationTier >= VerificationTier.TitleVerified;
     /// <summary>Reason an admin gave when unpublishing this listing; cleared on republish.</summary>
     public string? UnpublishReason { get; set; }
 

@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using Amazon.S3;
 using HousingHub.Service.AdminService;
 using HousingHub.Service.AuthService;
@@ -80,6 +80,16 @@ public static class ConfigureServices
         services.AddScoped<IChatQueryService, ChatQueryService>();
         services.AddScoped<IPropertyAlertPreferenceCommandService, PropertyAlertPreferenceCommandService>();
         services.AddScoped<IPropertyAlertPreferenceQueryService, PropertyAlertPreferenceQueryService>();
+        services.AddScoped<VerificationService.Interfaces.IVerificationService,
+                           VerificationService.VerificationService>();
+
+        // No CAC provider account yet, so lookups defer to the human reviewer and
+        // report that they did not run rather than inventing a result. Swapping in
+        // Dojah/QoreID/Mono later is this one line.
+        services.AddScoped<VerificationService.Interfaces.ICacLookupService,
+                           VerificationService.DeferToReviewerCacLookupService>();
+        services.AddScoped<VerificationService.Interfaces.IVerificationExpiryService,
+                           VerificationService.VerificationExpiryService>();
         services.AddSingleton<IUtilityService, UtilityService>();
 
         // AWS S3 File Storage

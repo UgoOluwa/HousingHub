@@ -38,6 +38,10 @@ public static class ConfigureServices
         services.AddScoped<IRefreshTokenQueryRepository, RefreshTokenQueryRepository>();
         services.AddScoped<IPropertyAlertPreferenceCommandRepository, PropertyAlertPreferenceCommandRepository>();
         services.AddScoped<IPropertyAlertPreferenceQueryRepository, PropertyAlertPreferenceQueryRepository>();
+        services.AddScoped<IVerificationCaseCommandRepository, VerificationCaseCommandRepository>();
+        services.AddScoped<IVerificationCaseQueryRepository, VerificationCaseQueryRepository>();
+        services.AddScoped<IVerificationDocumentCommandRepository, VerificationDocumentCommandRepository>();
+        services.AddScoped<IVerificationDocumentQueryRepository, VerificationDocumentQueryRepository>();
 
         return services;
     }
