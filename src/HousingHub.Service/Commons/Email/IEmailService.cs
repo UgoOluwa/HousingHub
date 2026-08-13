@@ -42,6 +42,16 @@ public interface IEmailService
     /// this reason: a rejection the applicant cannot act on becomes a support ticket.
     /// </param>
     Task<bool> SendVerificationRejectedAsync(string toEmail, string firstName, string subjectDescription, string reason);
+
+    /// <summary>
+    /// Tells someone their verification lapsed because a document expired.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately distinct from the rejection email. Nothing was wrong with the
+    /// submission — it aged out — and somebody who reads this as a rejection goes
+    /// looking for a mistake they did not make.
+    /// </remarks>
+    Task<bool> SendVerificationExpiredAsync(string toEmail, string firstName, string subjectDescription);
     Task<bool> SendAccountReactivatedAsync(string toEmail, string firstName);
     /// <summary>Sent to the property owner when an admin marks their listing verified.</summary>
     Task<bool> SendPropertyVerifiedAsync(string ownerEmail, string ownerName, string propertyTitle);

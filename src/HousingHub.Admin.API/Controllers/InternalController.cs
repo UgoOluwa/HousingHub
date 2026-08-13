@@ -3,6 +3,7 @@ using HousingHub.Core.CustomResponses;
 using HousingHub.Core.Security;
 using HousingHub.Service.AdminService;
 using HousingHub.Service.InspectionService.Interfaces;
+using HousingHub.Service.VerificationService.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -31,6 +32,7 @@ namespace HousingHub.Admin.API.Controllers;
 public class InternalController(
     IInspectionCommandService inspectionCommandService,
     IAdminAuthService adminAuthService,
+    IVerificationExpiryService verificationExpiryService,
     IConfiguration configuration) : ControllerBase
 {
     /// <summary>
@@ -51,6 +53,45 @@ public class InternalController(
 
         var result = await inspectionCommandService.SendDueInspectionRemindersAsync();
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Expires verifications whose documents have lapsed, and takes the badge back.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Intended to run once a day. Verification is a claim with a shelf life —
+    /// LASRERA registrations are annual — and without something that actively expires
+    /// them, a badge granted once is granted forever. That is the same failure as not
+    /// verifying at all, just slower and more convincing to whoever relies on it.
+    /// </para>
+    /// <para>
+    /// Idempotent: a case already moved to Expired is skipped, so running it more
+    /// often than daily is harmless. Daily is enough — a badge lingering for a few
+    /// hours past its expiry is not the risk; lingering for months is.
+    /// </para>
+    /// <para>
+    /// The response reports failures separately. A non-zero <c>failed</c> means
+    /// somebody is still showing a badge they are no longer entitled to, so it is
+    /// worth alerting on rather than leaving in a log.
+    /// </para>
+    /// </remarks>
+    /// <param name="secret">Must match the configured Internal:WorkerSecret.</param>
+    [HttpPost("verification-expiry/run")]
+    [ProducesResponseType(typeof(BaseResponse<VerificationExpirySummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> RunVerificationExpiry(
+        [FromHeader(Name = "X-Worker-Secret")] string? secret)
+    {
+        if (!IsAuthorisedWorker(secret))
+            return Unauthorized();
+
+        var summary = await verificationExpiryService.ExpireLapsedAsync(DateTime.UtcNow);
+
+        return Ok(new BaseResponse<VerificationExpirySummary>(
+            summary, true, string.Empty,
+            $"Examined {summary.Examined}, expired {summary.Expired}, revoked {summary.TiersRevoked}, "
+            + $"failed {summary.Failed}."));
     }
 
     /// <summary>

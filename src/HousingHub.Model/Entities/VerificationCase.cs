@@ -92,6 +92,35 @@ public class VerificationCase : BaseEntity
     /// <summary>Attribute value written for a case awaiting an admin decision.</summary>
     public const string AwaitingReviewMarker = "AWAITING_REVIEW";
 
+    /// <summary>
+    /// Index key marking an approved case that can one day lapse.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Sparse, and doubly so: present only when the case is <b>approved</b> and has
+    /// an expiry at all. Approved cases accumulate forever and most of them never
+    /// expire — a Certificate of Occupancy does not lapse — so without this the
+    /// nightly sweep would read every case ever decided in order to find the handful
+    /// of LASRERA permits that ran out.
+    /// </para>
+    /// <para>
+    /// Derived with a discarding setter, same as <see cref="ReviewQueueStatus"/>. The
+    /// two must never disagree, and which one won would otherwise depend on the order
+    /// the DynamoDB mapper assigns properties.
+    /// </para>
+    /// </remarks>
+    [DynamoDBGlobalSecondaryIndexHashKey("ExpiryWatch-index")]
+    public string? ExpiryWatch
+    {
+        get => Status == VerificationCaseStatus.Approved && ExpiresAt.HasValue
+            ? ExpiryWatchMarker
+            : null;
+        set { /* derived from Status and ExpiresAt — see remarks */ }
+    }
+
+    /// <summary>Attribute value written for an approved case that carries an expiry.</summary>
+    public const string ExpiryWatchMarker = "WATCH_EXPIRY";
+
     public DateTime? SubmittedAt { get; set; }
     public DateTime? DecidedAt { get; set; }
     public Guid? DecidedByAdminId { get; set; }

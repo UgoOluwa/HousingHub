@@ -204,12 +204,9 @@ which check caught them teaches them what to fix. A human decides what to say.
   now only the admin side is reachable through a UI.
 - **Payment.** Verification is free at the moment. The charging model is settled
   (see `transaction-lifecycle-plan.md` §2.2) but needs the payment rail first.
-- **Expiry sweep.** `TryExpire` exists on the entity but nothing calls it on a
-  schedule. Until something does, a lapsed verification keeps its tier — which is
-  exactly why `IsBusinessVerified` checks the date rather than trusting it.
-- **Badges in the consumer app.** `IsBusinessVerified` is not rendered anywhere
-  yet. Same gap the identity badge had before it was fixed: the data exists and
-  nobody sees it.
+- **A scheduled trigger for the expiry sweep.** The sweep itself is built
+  (`POST /api/Internal/verification-expiry/run`), but nothing calls it yet — see
+  the section below.
 
 ---
 
@@ -220,11 +217,12 @@ only creates tables that are entirely absent, and it is now behind
 `Dynamo:AutoCreateTables` which is false in deployed environments — so these must
 be created directly.
 
-`VerificationCases` — hash key `Id`, three GSIs, all `ProjectionType.ALL`:
+`VerificationCases` — hash key `Id`, **four** GSIs, all `ProjectionType.ALL`:
 
 - `SubjectId-index` on `SubjectId`
 - `SubmittedByCustomerId-index` on `SubmittedByCustomerId`
 - `ReviewQueueStatus-index` on `ReviewQueueStatus` *(sparse — this is the review queue)*
+- `ExpiryWatch-index` on `ExpiryWatch` *(sparse — approved cases that can lapse)*
 
 `VerificationDocuments` — hash key `Id`, one GSI:
 
@@ -233,3 +231,71 @@ be created directly.
 All attributes are string type (`S`) for indexing purposes.
 
 Without these, every verification call fails.
+
+
+---
+
+## The expiry sweep
+
+Verification is a claim with a shelf life. LASRERA registrations are annual, so
+an agent verified last April is making a claim this April that nobody has
+checked. A badge granted once and never revisited is the same failure as not
+verifying at all — only slower, and more convincing to whoever relies on it.
+
+### What it does
+
+`POST /api/Internal/verification-expiry/run`, authenticated with the
+`X-Worker-Secret` header like the inspection reminder worker.
+
+For each approved case whose earliest document has passed its expiry:
+
+1. Move the case to `Expired`
+2. **Revoke the tier on the subject** — `BusinessVerificationTier` or
+   `TitleVerificationTier` back to `Unverified`
+3. Email the subject and post an in-app notification
+
+`BusinessVerifiedAt` is deliberately left in place. It records that a check
+happened, which is still true; it is the entitlement that lapses, not the history.
+
+**Identity is never revoked.** It is verified against NIN or BVN, which do not
+lapse, so an identity case should not carry an expiry — and revoking KYC would
+lock somebody out of publishing over a bookkeeping detail.
+
+### Scheduling it
+
+An EventBridge Scheduler rule, once a day:
+
+```
+POST https://<admin-api>/admin/api/Internal/verification-expiry/run
+Header: X-Worker-Secret: <Internal:WorkerSecret>
+```
+
+Daily is enough. A badge lingering a few hours past its expiry is not the risk;
+lingering for months is. The endpoint is idempotent — a case already expired is
+skipped — so running it more often is harmless, and a retry after a failure is
+safe.
+
+### Watch the response
+
+```json
+{ "examined": 12, "expired": 3, "tiersRevoked": 3, "failed": 0 }
+```
+
+**A non-zero `failed` means somebody is still showing a badge they are no longer
+entitled to.** That is worth alerting on rather than leaving in a log. One failure
+does not abort the run — the cases after it would otherwise keep their badges too
+— so the count is how you find out.
+
+### Why it is cheap
+
+It reads `ExpiryWatch-index`, which is sparse in two ways: a case appears only if
+it is **approved** *and* **has an expiry**. Most approved cases never expire — a
+Certificate of Occupancy does not lapse — so the nightly run reads the handful of
+cases that can actually lapse rather than every case ever decided.
+
+### The gap it does not close
+
+There is no advance warning yet. An agent finds out their badge dropped on the day
+it drops. A reminder at 30 and 7 days before expiry would be better, and the data
+to do it is already there — `ExpiresAt` on the case. Worth adding before you have
+enough verified agents for this to become a support burden.

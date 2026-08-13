@@ -88,6 +88,8 @@ public static class ConfigureServices
         // Dojah/QoreID/Mono later is this one line.
         services.AddScoped<VerificationService.Interfaces.ICacLookupService,
                            VerificationService.DeferToReviewerCacLookupService>();
+        services.AddScoped<VerificationService.Interfaces.IVerificationExpiryService,
+                           VerificationService.VerificationExpiryService>();
         services.AddSingleton<IUtilityService, UtilityService>();
 
         // AWS S3 File Storage

@@ -310,6 +310,28 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(toEmail, "Your Housing Hub Verification Needs Attention", text, html);
     }
 
+    public async Task<bool> SendVerificationExpiredAsync(
+        string toEmail, string firstName, string subjectDescription)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        // Careful not to sound like a rejection. Nothing was wrong with what they
+        // sent; a date passed. The instruction is "upload a current one", not
+        // "correct your mistake".
+        string body = $"""
+            {P($"Hi {firstName},")}
+            {P("One of the documents behind your Housing Hub verification has reached its expiry date, so the badge has come down for now. Nothing was wrong with your submission &mdash; documents like LASRERA registrations simply need renewing each year.")}
+            {DetailRow("Affected", subjectDescription)}
+            {P("Upload a current document and we&rsquo;ll review it and put the badge back.")}
+            {Button("Renew Verification", $"{baseUrl}/verification")}
+            """;
+
+        string html = WrapInLayout("Your verification has expired", body, Hero("&#8635;", "Verification expired"));
+        string text = $"Hi {firstName}, your Housing Hub verification for {subjectDescription} has expired because a document reached its expiry date. Upload a current document to restore it.";
+
+        return await SendAsync(toEmail, "Your Housing Hub Verification Has Expired", text, html);
+    }
+
     public async Task<bool> SendAccountReactivatedAsync(string toEmail, string firstName)
     {
         string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";

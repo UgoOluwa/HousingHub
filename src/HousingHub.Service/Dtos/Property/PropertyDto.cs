@@ -52,6 +52,26 @@ public record PropertyDto(
     /// flag set by an admin against the listing rather than the person.
     /// </remarks>
     bool IsOwnerVerified = false,
+
+    /// <summary>
+    /// The highest verification the person behind this listing currently holds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A single tier rather than a flag per check, and the UI renders one badge from
+    /// it. Two badges side by side invite a reader to average them into a general
+    /// impression of safety, which is exactly the reasoning we are trying to prevent
+    /// — the whole point of tiers is that each level makes a claim that is precisely
+    /// true.
+    /// </para>
+    /// <para>
+    /// <b>Current, not historical.</b> Computed through
+    /// <c>Customer.IsBusinessVerified</c>, so a lapsed LASRERA permit drops the tier
+    /// back to identity immediately rather than waiting for the nightly sweep. The
+    /// sweep clears the stored tier; this makes sure nothing is displayed in the gap.
+    /// </para>
+    /// </remarks>
+    Model.Enums.VerificationTier OwnerVerificationTier = Model.Enums.VerificationTier.Unverified,
     string? UnpublishReason = null,
     bool IsFlaggedDuplicate = false,
     Guid? PossibleDuplicateOfPropertyId = null);

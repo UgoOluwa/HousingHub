@@ -65,13 +65,37 @@ public class PropertyQueryService : IPropertyQueryService
     /// of Customers. Deliberately not folded into the mapper: Mapster maps a Property,
     /// and this needs a second entity.
     /// </remarks>
-    private async Task<Dictionary<Guid, bool>> GetOwnerVerificationAsync(IEnumerable<Property> properties)
+    private async Task<Dictionary<Guid, OwnerVerification>> GetOwnerVerificationAsync(
+        IEnumerable<Property> properties)
     {
         var ownerIds = properties.Select(p => p.OwnerId).Distinct().ToList();
         if (ownerIds.Count == 0) return [];
 
         var owners = await _unitOfWOrk.CustomerQueries.GetManyByAsync(c => c.Id, ownerIds);
-        return owners.ToDictionary(o => o.Id, o => o.IsKycVerified);
+        return owners.ToDictionary(o => o.Id, OwnerVerification.From);
+    }
+
+    /// <summary>
+    /// The verification state of a listing's owner, as renters should see it.
+    /// </summary>
+    /// <remarks>
+    /// Reads <c>IsBusinessVerified</c> rather than the stored tier, so a lapsed
+    /// LASRERA permit stops showing a business badge the moment it expires rather
+    /// than when the nightly sweep next runs. The sweep clears the stored value;
+    /// this closes the window in between.
+    /// </remarks>
+    private readonly record struct OwnerVerification(bool IdentityVerified, VerificationTier Tier)
+    {
+        public static OwnerVerification From(Customer owner)
+        {
+            var tier = owner.IsBusinessVerified
+                ? VerificationTier.BusinessVerified
+                : owner.IsKycVerified
+                    ? VerificationTier.IdentityVerified
+                    : VerificationTier.Unverified;
+
+            return new OwnerVerification(owner.IsKycVerified, tier);
+        }
     }
 
     /// <summary>
@@ -87,7 +111,15 @@ public class PropertyQueryService : IPropertyQueryService
         var verified = await GetOwnerVerificationAsync(properties);
 
         return _mapper.Map<List<PropertyDto>>(properties)
-            .Select(dto => dto with { IsOwnerVerified = verified.GetValueOrDefault(dto.OwnerId) })
+            .Select(dto =>
+            {
+                var owner = verified.GetValueOrDefault(dto.OwnerId);
+                return dto with
+                {
+                    IsOwnerVerified = owner.IdentityVerified,
+                    OwnerVerificationTier = owner.Tier,
+                };
+            })
             .ToList();
     }
 
@@ -120,7 +152,10 @@ public class PropertyQueryService : IPropertyQueryService
             {
                 PropertyAddress = addressTask.Result is { } address ? _mapper.Map<PropertyAddressDto>(address) : null,
                 OwnerName = ownerTask.Result is { } owner ? $"{owner.FirstName} {owner.LastName}" : null,
-                IsOwnerVerified = ownerTask.Result?.IsKycVerified == true
+                IsOwnerVerified = ownerTask.Result?.IsKycVerified == true,
+                OwnerVerificationTier = ownerTask.Result is { } o
+                    ? OwnerVerification.From(o).Tier
+                    : VerificationTier.Unverified
             };
 
             return new BaseResponse<PropertyDto?>(dto, true, string.Empty, ResponseMessages.Successful);
@@ -147,7 +182,10 @@ public class PropertyQueryService : IPropertyQueryService
             var owner = await _unitOfWOrk.CustomerQueries.GetByIdAsync(property.OwnerId);
             var dto = _mapper.Map<PropertyDto>(property) with
             {
-                IsOwnerVerified = owner?.IsKycVerified == true
+                IsOwnerVerified = owner?.IsKycVerified == true,
+                OwnerVerificationTier = owner is null
+                    ? VerificationTier.Unverified
+                    : OwnerVerification.From(owner).Tier
             };
 
             return new BaseResponse<PropertyDto?>(dto, true, string.Empty, ResponseMessages.Successful);

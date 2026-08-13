@@ -89,6 +89,10 @@ public class DynamoDbTableInitializer
             // scanning past every case ever decided. See
             // VerificationCase.ReviewQueueStatus.
             CreateGsi("ReviewQueueStatus-index", "ReviewQueueStatus"),
+            // Also sparse: only approved cases that carry an expiry. The nightly
+            // sweep reads this rather than every case ever decided — most approved
+            // cases never expire, since a Certificate of Occupancy does not lapse.
+            CreateGsi("ExpiryWatch-index", "ExpiryWatch"),
         }),
         ["VerificationDocuments"] = ("Id", new List<GlobalSecondaryIndex>
         {
