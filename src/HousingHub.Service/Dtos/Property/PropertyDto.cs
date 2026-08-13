@@ -72,6 +72,28 @@ public record PropertyDto(
     /// </para>
     /// </remarks>
     Model.Enums.VerificationTier OwnerVerificationTier = Model.Enums.VerificationTier.Unverified,
+
+    /// <summary>
+    /// The strongest verification that applies to this listing — the owner's tier,
+    /// raised to <c>TitleVerified</c> when the property's own title has been checked.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is what the badge renders. Distinct from
+    /// <see cref="OwnerVerificationTier"/> because title verification attaches to the
+    /// <i>property</i>, not the person: an agent can be business-verified across ten
+    /// listings while only one of them has had its title checked.
+    /// </para>
+    /// <para>
+    /// <b>Capped below TitleVerified unless Verification:ShowTitleBadge is on.</b>
+    /// "Title Verified" is the strongest claim the platform can make and the one a
+    /// defrauded buyer's lawyer will point at. The flag exists so the data can flow
+    /// and the code can ship while the wording is still with a lawyer — see
+    /// docs/transaction-lifecycle-plan.md. Turning it on is a legal decision, not a
+    /// deployment one.
+    /// </para>
+    /// </remarks>
+    Model.Enums.VerificationTier ListingVerificationTier = Model.Enums.VerificationTier.Unverified,
     string? UnpublishReason = null,
     bool IsFlaggedDuplicate = false,
     Guid? PossibleDuplicateOfPropertyId = null);

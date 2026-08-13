@@ -17,6 +17,17 @@ public class PropertyQueryService : IPropertyQueryService
     private readonly IMapper _mapper;
     private readonly ILogger<PropertyQueryService> _logger;
     private readonly bool _usePublishedIndex;
+
+    /// <summary>
+    /// Whether a title-verified listing may display the "Title Verified" badge.
+    /// </summary>
+    /// <remarks>
+    /// Off by default. The pipeline records title verification regardless — this only
+    /// governs whether renters are shown the strongest claim the platform can make.
+    /// It is a flag rather than a code change because the blocker is a lawyer
+    /// reviewing the wording, not engineering.
+    /// </remarks>
+    private readonly bool _showTitleBadge;
     private const string ClassName = "property";
 
     public PropertyQueryService(
@@ -29,6 +40,7 @@ public class PropertyQueryService : IPropertyQueryService
         _mapper = mapper;
         _logger = logger;
         _usePublishedIndex = configuration?.GetValue<bool>("Dynamo:UsePublishedIndex") ?? false;
+        _showTitleBadge = configuration?.GetValue<bool>("Verification:ShowTitleBadge") ?? false;
     }
 
     /// <summary>
@@ -99,6 +111,27 @@ public class PropertyQueryService : IPropertyQueryService
     }
 
     /// <summary>
+    /// The strongest claim that can be made about a listing.
+    /// </summary>
+    /// <remarks>
+    /// Takes the higher of the owner's tier and the property's own title tier,
+    /// because they measure different things — an agent can be business-verified
+    /// across ten listings while only one has had its title checked.
+    ///
+    /// Title is suppressed unless the badge has been cleared for display. Everything
+    /// below it still shows, so a title-verified listing whose badge is switched off
+    /// falls back to the owner's tier rather than showing nothing.
+    /// </remarks>
+    private VerificationTier ListingTierFor(Property property, VerificationTier ownerTier)
+    {
+        var titleTier = _showTitleBadge && property.IsTitleVerified
+            ? VerificationTier.TitleVerified
+            : VerificationTier.Unverified;
+
+        return titleTier > ownerTier ? titleTier : ownerTier;
+    }
+
+    /// <summary>
     /// Maps properties to DTOs and stamps each with its owner's verification state.
     /// </summary>
     /// <remarks>
@@ -110,14 +143,22 @@ public class PropertyQueryService : IPropertyQueryService
     {
         var verified = await GetOwnerVerificationAsync(properties);
 
+        // Keyed by id so the entity's title state is reachable while mapping — the
+        // DTO does not carry it, and the tier needs both halves.
+        var byId = properties.ToDictionary(p => p.Id);
+
         return _mapper.Map<List<PropertyDto>>(properties)
             .Select(dto =>
             {
                 var owner = verified.GetValueOrDefault(dto.OwnerId);
+
                 return dto with
                 {
                     IsOwnerVerified = owner.IdentityVerified,
                     OwnerVerificationTier = owner.Tier,
+                    ListingVerificationTier = byId.TryGetValue(dto.Id, out var entity)
+                        ? ListingTierFor(entity, owner.Tier)
+                        : owner.Tier,
                 };
             })
             .ToList();
@@ -155,7 +196,10 @@ public class PropertyQueryService : IPropertyQueryService
                 IsOwnerVerified = ownerTask.Result?.IsKycVerified == true,
                 OwnerVerificationTier = ownerTask.Result is { } o
                     ? OwnerVerification.From(o).Tier
-                    : VerificationTier.Unverified
+                    : VerificationTier.Unverified,
+                ListingVerificationTier = ListingTierFor(
+                    property,
+                    ownerTask.Result is { } o2 ? OwnerVerification.From(o2).Tier : VerificationTier.Unverified)
             };
 
             return new BaseResponse<PropertyDto?>(dto, true, string.Empty, ResponseMessages.Successful);
@@ -185,7 +229,10 @@ public class PropertyQueryService : IPropertyQueryService
                 IsOwnerVerified = owner?.IsKycVerified == true,
                 OwnerVerificationTier = owner is null
                     ? VerificationTier.Unverified
-                    : OwnerVerification.From(owner).Tier
+                    : OwnerVerification.From(owner).Tier,
+                ListingVerificationTier = ListingTierFor(
+                    property,
+                    owner is null ? VerificationTier.Unverified : OwnerVerification.From(owner).Tier)
             };
 
             return new BaseResponse<PropertyDto?>(dto, true, string.Empty, ResponseMessages.Successful);
