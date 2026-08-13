@@ -33,7 +33,8 @@ public class InternalController(
     IInspectionCommandService inspectionCommandService,
     IAdminAuthService adminAuthService,
     IVerificationExpiryService verificationExpiryService,
-    IConfiguration configuration) : ControllerBase
+    IConfiguration configuration,
+    ILogger<InternalController> logger) : ControllerBase
 {
     /// <summary>
     /// Sends 24-hour reminders (email + an automated Admin chat message) to both
@@ -164,9 +165,22 @@ public class InternalController(
     private bool IsAuthorisedWorker(string? presented)
     {
         var expected = configuration["Internal:WorkerSecret"];
-        if (string.IsNullOrEmpty(expected)) return false;
 
-        return SecretComparer.FixedTimeEquals(presented, expected);
+        if (SecretComparer.FixedTimeEquals(presented, expected)) return true;
+
+        // A bare 401 here is undiagnosable: both sides of the comparison are stored
+        // as secrets and displayed as dots, so there is no way to see which is wrong
+        // or why. This says what shape the mismatch has without printing either
+        // value — see SecretComparer.DescribeMismatch.
+        //
+        // Warning rather than Error on purpose. This fires on every unauthorised
+        // probe of a public endpoint, and routing that to Sentry would burn the
+        // free-tier quota on internet background noise.
+        logger.LogWarning(
+            "Internal worker call rejected: {Reason}",
+            SecretComparer.DescribeMismatch(presented, expected));
+
+        return false;
     }
 }
 

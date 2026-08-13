@@ -87,6 +87,19 @@ jobs:
           WORKER="${{ steps.which.outputs.path }}"
           echo "Running $WORKER"
 
+          # Strip whitespace from the secret. A value pasted into the GitHub secrets
+          # UI very often carries a trailing newline, which is invisible in every
+          # interface involved and turns the header into something the server cannot
+          # match. The server trims too; doing it here as well means curl never has
+          # to handle a newline inside a header value, which it rejects outright.
+          WORKER_SECRET="$(printf '%s' "$WORKER_SECRET" | tr -d '[:space:]')"
+
+          # Report the shape of what we are sending, never the value. If this is a
+          # 401, the length here against the length in the API log identifies the
+          # problem immediately.
+          echo "Secret length: ${#WORKER_SECRET}"
+          echo "Target: ${ADMIN_API_URL%/}/api/Internal/${WORKER}/run"
+
           # --fail-with-body so a non-2xx fails the step but the response is still
           # printed. Without the body a 401 is indistinguishable from a 500, and the
           # most likely cause here is a rotated secret.
@@ -98,7 +111,7 @@ jobs:
             --retry 2 --retry-delay 10 --retry-connrefused \
             -X POST "${ADMIN_API_URL%/}/api/Internal/${WORKER}/run" \
             -H "X-Worker-Secret: ${WORKER_SECRET}" \
-            -H 'Content-Length: 0')
+            --data '')
 
           echo "$HTTP_BODY"
 
@@ -112,7 +125,13 @@ jobs:
       - name: Explain a failure
         if: failure()
         run: |
-          echo "::error::Worker call failed. Most likely causes, in order:"
-          echo "  1. INTERNAL_WORKER_SECRET does not match Internal__WorkerSecret on the Lambda (rotated?)"
-          echo "  2. ADMIN_API_URL is wrong — it must include the stage path, e.g. https://xxx.execute-api.af-south-1.amazonaws.com/admin"
-          echo "  3. Rate limited (10 requests / 5 min per IP) — unlikely on a schedule, possible if triggered manually in a loop"
+          echo "::error::Worker call failed. To diagnose:"
+          echo "  A 401 means the request REACHED the API and the secret did not match."
+          echo "  The API logs the shape of the mismatch (lengths, whitespace) without"
+          echo "  printing either value — check CloudWatch for 'Internal worker call rejected'"
+          echo "  and compare against the secret length printed above."
+          echo ""
+          echo "  A 403 usually means ADMIN_API_URL is wrong. It must include the stage"
+          echo "  path: https://xxx.execute-api.af-south-1.amazonaws.com/admin"
+          echo ""
+          echo "  A 429 is the rate limit (10 requests / 5 min per IP).""

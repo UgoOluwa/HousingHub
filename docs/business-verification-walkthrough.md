@@ -209,28 +209,38 @@ the daily maintenance job is triggered.)*
 
 ---
 
-## Before this can run
+## Schema
 
-**Two DynamoDB tables need creating**, with their indexes. `DynamoDbTableInitializer`
-only creates tables that are entirely absent, and it is now behind
-`Dynamo:AutoCreateTables` which is false in deployed environments — so these must
-be created directly.
+`VerificationCases` and `VerificationDocuments` are **created automatically** at
+startup, along with their indexes. Nothing to do by hand.
 
-`VerificationCases` — hash key `Id`, **four** GSIs, all `ProjectionType.ALL`:
+`DynamoDbTableInitializer` now also adds indexes the code declares that a
+deployed table does not have, which it previously skipped — it only looked at
+tables that were entirely absent. That gap is why `PublishedStatus-index` needed
+creating manually; it does not any more.
 
-- `SubjectId-index` on `SubjectId`
-- `SubmittedByCustomerId-index` on `SubmittedByCustomerId`
-- `ReviewQueueStatus-index` on `ReviewQueueStatus` *(sparse — this is the review queue)*
-- `ExpiryWatch-index` on `ExpiryWatch` *(sparse — approved cases that can lapse)*
+For reference, what it provisions:
 
-`VerificationDocuments` — hash key `Id`, one GSI:
+`VerificationCases` — hash key `Id`, four GSIs, all `ProjectionType.ALL`:
 
-- `VerificationCaseId-index` on `VerificationCaseId`
+- `SubjectId-index`
+- `SubmittedByCustomerId-index`
+- `ReviewQueueStatus-index` *(sparse — the review queue)*
+- `ExpiryWatch-index` *(sparse — approved cases that can lapse)*
 
-All attributes are string type (`S`) for indexing purposes.
+`VerificationDocuments` — hash key `Id`, one GSI: `VerificationCaseId-index`.
 
-Without these, every verification call fails.
+Two things worth knowing:
 
+**Indexes arrive one at a time.** DynamoDB only builds one GSI per table at once,
+so a table gaining several converges over a few startups rather than in one pass.
+Until an index exists, queries against it fall back to a table scan — correct
+results, slower.
+
+**The execution role needs `CreateTable` and `UpdateTable`.** That is a real
+widening of what the API can do, traded for not having to remember a console step.
+Worth revisiting when the schema moves into infrastructure code — set
+`Dynamo:AutoCreateTables` to false then.
 
 ---
 

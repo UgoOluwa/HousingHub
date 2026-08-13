@@ -38,7 +38,7 @@ public interface IVerificationExpiryService
 /// Reminder thresholds, in days before expiry.
 /// </summary>
 /// <remarks>
-/// Descending, because the sweep takes the first threshold a case has crossed and
+/// Ascending, because the sweep takes the first threshold a case has crossed and
 /// a case three days from expiry should get the seven-day nudge rather than the
 /// thirty-day one it already missed.
 /// </remarks>
