@@ -37,5 +37,13 @@ public enum NotificationType
     /// action the user needs to take is different.
     /// </summary>
     [Description("Verification Expired")]
-    VerificationExpired = 9
+    VerificationExpired = 9,
+
+    /// <summary>
+    /// A verification will lapse soon. Sent while the holder can still act on it —
+    /// renewing a LASRERA registration takes weeks, so telling somebody on the day
+    /// it drops is telling them too late.
+    /// </summary>
+    [Description("Verification Expiring Soon")]
+    VerificationExpiringSoon = 10
 }

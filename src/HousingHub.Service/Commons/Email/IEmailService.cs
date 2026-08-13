@@ -52,6 +52,14 @@ public interface IEmailService
     /// looking for a mistake they did not make.
     /// </remarks>
     Task<bool> SendVerificationExpiredAsync(string toEmail, string firstName, string subjectDescription);
+
+    /// <summary>
+    /// Warns that a verification is about to lapse, while there is still time to act.
+    /// </summary>
+    /// <param name="daysRemaining">Days until it lapses. Shown, so it must be accurate.</param>
+    /// <param name="expiresAt">The date itself, so the reader can diarise it.</param>
+    Task<bool> SendVerificationExpiringSoonAsync(
+        string toEmail, string firstName, string subjectDescription, int daysRemaining, DateTime expiresAt);
     Task<bool> SendAccountReactivatedAsync(string toEmail, string firstName);
     /// <summary>Sent to the property owner when an admin marks their listing verified.</summary>
     Task<bool> SendPropertyVerifiedAsync(string ownerEmail, string ownerName, string propertyTitle);

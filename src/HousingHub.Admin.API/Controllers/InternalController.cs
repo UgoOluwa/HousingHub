@@ -56,7 +56,7 @@ public class InternalController(
     }
 
     /// <summary>
-    /// Expires verifications whose documents have lapsed, and takes the badge back.
+    /// Daily verification maintenance: expire what has lapsed, warn what is about to.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -71,14 +71,21 @@ public class InternalController(
     /// hours past its expiry is not the risk; lingering for months is.
     /// </para>
     /// <para>
-    /// The response reports failures separately. A non-zero <c>failed</c> means
-    /// somebody is still showing a badge they are no longer entitled to, so it is
-    /// worth alerting on rather than leaving in a log.
+    /// Both halves run in one call because they read the same index and belong to the
+    /// same job. Expiring runs first, so a case that lapsed overnight is expired
+    /// rather than warned that it expires in seven days.
+    /// </para>
+    /// <para>
+    /// The response reports failures separately. A non-zero <c>failed</c> on the
+    /// expiry side means somebody is still showing a badge they are no longer
+    /// entitled to; on the reminder side it means a warning did not reach someone
+    /// whose badge is about to drop. Both are worth alerting on rather than leaving
+    /// in a log.
     /// </para>
     /// </remarks>
     /// <param name="secret">Must match the configured Internal:WorkerSecret.</param>
     [HttpPost("verification-expiry/run")]
-    [ProducesResponseType(typeof(BaseResponse<VerificationExpirySummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BaseResponse<VerificationMaintenanceSummary>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> RunVerificationExpiry(
         [FromHeader(Name = "X-Worker-Secret")] string? secret)
@@ -86,12 +93,20 @@ public class InternalController(
         if (!IsAuthorisedWorker(secret))
             return Unauthorized();
 
-        var summary = await verificationExpiryService.ExpireLapsedAsync(DateTime.UtcNow);
+        var now = DateTime.UtcNow;
 
-        return Ok(new BaseResponse<VerificationExpirySummary>(
-            summary, true, string.Empty,
-            $"Examined {summary.Examined}, expired {summary.Expired}, revoked {summary.TiersRevoked}, "
-            + $"failed {summary.Failed}."));
+        // Expire first, remind second. Both read the same index, and doing them in
+        // this order means a case that lapsed overnight is expired rather than sent
+        // a "expires in 7 days" warning it has already outlived.
+        var expiry = await verificationExpiryService.ExpireLapsedAsync(now);
+        var reminders = await verificationExpiryService.SendExpiryRemindersAsync(now);
+
+        var result = new VerificationMaintenanceSummary(expiry, reminders);
+
+        return Ok(new BaseResponse<VerificationMaintenanceSummary>(
+            result, true, string.Empty,
+            $"Expired {expiry.Expired} (revoked {expiry.TiersRevoked}, failed {expiry.Failed}); "
+            + $"reminded {reminders.Sent} (failed {reminders.Failed})."));
     }
 
     /// <summary>
@@ -154,3 +169,12 @@ public class InternalController(
         return SecretComparer.FixedTimeEquals(presented, expected);
     }
 }
+
+/// <summary>
+/// Combined result of one daily verification maintenance run.
+/// </summary>
+/// <param name="Expiry">Badges taken away because their evidence lapsed.</param>
+/// <param name="Reminders">Warnings sent to people whose evidence lapses soon.</param>
+public record VerificationMaintenanceSummary(
+    VerificationExpirySummary Expiry,
+    VerificationReminderSummary Reminders);

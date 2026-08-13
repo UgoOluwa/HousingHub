@@ -91,6 +91,108 @@ public class VerificationExpiryService : IVerificationExpiryService
         return new VerificationExpirySummary(lapsed.Count, expired, revoked, failed);
     }
 
+    public async Task<VerificationReminderSummary> SendExpiryRemindersAsync(DateTime asOf)
+    {
+        var watched = await _unitOfWork.VerificationCaseQueries.GetAllAsync(
+            c => c.ExpiryWatch == VerificationCase.ExpiryWatchMarker);
+
+        var candidates = watched.Where(c => c.ExpiresAt.HasValue && c.ExpiresAt.Value > asOf).ToList();
+
+        var sent = 0;
+        var failed = 0;
+
+        foreach (var verificationCase in candidates)
+        {
+            // Thresholds are ordered descending, so the first one crossed is the
+            // tightest warning that still applies. A case three days out gets the
+            // seven-day nudge, not the thirty-day one it slept through.
+            var daysRemaining = (int)Math.Ceiling((verificationCase.ExpiresAt!.Value - asOf).TotalDays);
+
+            var threshold = ExpiryReminderThresholds.DaysBefore
+                .FirstOrDefault(t => daysRemaining <= t && verificationCase.NeedsExpiryReminder(t));
+
+            if (threshold == 0) continue;
+
+            try
+            {
+                // Sent before the threshold is recorded, so a failure is retried
+                // tomorrow rather than silently swallowed. The cost of that ordering
+                // is a possible duplicate if the save fails after the email went out
+                // — far better than a warning that never arrives.
+                await SendReminderAsync(verificationCase, daysRemaining);
+
+                verificationCase.MarkExpiryReminderSent(threshold);
+                await _unitOfWork.VerificationCaseCommands.UpdateAsync(verificationCase);
+                await _unitOfWork.SaveAsync();
+
+                sent++;
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                _logger.LogError(ex,
+                    "Could not send the {Threshold}-day expiry reminder for case {CaseId}",
+                    threshold, verificationCase.Id);
+            }
+        }
+
+        _logger.LogInformation(
+            "Verification expiry reminders: examined {Examined}, sent {Sent}, failed {Failed}",
+            candidates.Count, sent, failed);
+
+        return new VerificationReminderSummary(candidates.Count, sent, failed);
+    }
+
+    /// <summary>
+    /// Warns one subject that their verification is about to lapse.
+    /// </summary>
+    /// <remarks>
+    /// Not wrapped in its own try/catch, unlike the other notification paths here.
+    /// A reminder that fails to send has not happened, and the caller needs to know
+    /// so the threshold is not recorded and tomorrow's run tries again. Swallowing it
+    /// would mark the warning as delivered when it was not.
+    /// </remarks>
+    private async Task SendReminderAsync(VerificationCase verificationCase, int daysRemaining)
+    {
+        var customer = await _unitOfWork.CustomerQueries.GetByIdAsync(verificationCase.SubmittedByCustomerId)
+            ?? throw new InvalidOperationException(
+                $"Case {verificationCase.Id} has no submitter to remind.");
+
+        var subject = await DescribeSubjectAsync(verificationCase);
+
+        var notification = new Notification(
+            customer.Id,
+            NotificationType.VerificationExpiringSoon,
+            "Verification expiring soon",
+            $"Your verification for {subject} expires in {daysRemaining} "
+            + $"day{(daysRemaining == 1 ? "" : "s")}. Upload a current document to keep your badge.",
+            verificationCase.SubjectType == VerificationSubjectType.Property
+                ? verificationCase.SubjectId
+                : null);
+
+        await _unitOfWork.NotificationCommands.InsertAsync(notification);
+        await _unitOfWork.SaveAsync();
+
+        await _realtimeNotifier.SendNotificationAsync(customer.Id, new NotificationDto(
+            notification.Id, notification.DateCreated, notification.RecipientId,
+            notification.InspectionId, notification.Type, notification.Title,
+            notification.Message, notification.IsRead, notification.PropertyId));
+
+        await _emailService.SendVerificationExpiringSoonAsync(
+            customer.Email, customer.FirstName, subject, daysRemaining,
+            verificationCase.ExpiresAt!.Value);
+    }
+
+    /// <summary>Human-readable name for what was verified, used in copy the subject reads.</summary>
+    private async Task<string> DescribeSubjectAsync(VerificationCase verificationCase)
+    {
+        if (verificationCase.SubjectType != VerificationSubjectType.Property)
+            return "your business";
+
+        var property = await _unitOfWork.PropertyQueries.GetByIdAsync(verificationCase.SubjectId);
+        return property?.Title is { Length: > 0 } title ? $"\"{title}\"" : "your listing";
+    }
+
     /// <summary>
     /// Takes the tier back off the subject.
     /// </summary>
@@ -164,11 +266,7 @@ public class VerificationExpiryService : IVerificationExpiryService
             var customer = await _unitOfWork.CustomerQueries.GetByIdAsync(verificationCase.SubmittedByCustomerId);
             if (customer is null) return;
 
-            var subject = verificationCase.SubjectType == VerificationSubjectType.Property
-                ? (await _unitOfWork.PropertyQueries.GetByIdAsync(verificationCase.SubjectId))?.Title is { Length: > 0 } title
-                    ? $"\"{title}\""
-                    : "your listing"
-                : "your business";
+            var subject = await DescribeSubjectAsync(verificationCase);
 
             var notification = new Notification(
                 customer.Id,

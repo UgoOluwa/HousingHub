@@ -204,9 +204,8 @@ which check caught them teaches them what to fix. A human decides what to say.
   now only the admin side is reachable through a UI.
 - **Payment.** Verification is free at the moment. The charging model is settled
   (see `transaction-lifecycle-plan.md` §2.2) but needs the payment rail first.
-- **A scheduled trigger for the expiry sweep.** The sweep itself is built
-  (`POST /api/Internal/verification-expiry/run`), but nothing calls it yet — see
-  the section below.
+*(Everything the pipeline needs is now built. See `scheduled-workers.md` for how
+the daily maintenance job is triggered.)*
 
 ---
 
@@ -293,9 +292,20 @@ it is **approved** *and* **has an expiry**. Most approved cases never expire —
 Certificate of Occupancy does not lapse — so the nightly run reads the handful of
 cases that can actually lapse rather than every case ever decided.
 
-### The gap it does not close
+### Advance warning
 
-There is no advance warning yet. An agent finds out their badge dropped on the day
-it drops. A reminder at 30 and 7 days before expiry would be better, and the data
-to do it is already there — `ExpiresAt` on the case. Worth adding before you have
-enough verified agents for this to become a support burden.
+The same daily call also warns people **before** their badge drops, at **30 days**
+and **7 days** out. Renewing a LASRERA registration takes weeks, so finding out on
+the day is finding out too late.
+
+Each threshold is sent once. `LastExpiryReminderThreshold` on the case records the
+tightest warning already sent, which is what stops a worker running every day for
+a month from sending the same email thirty times — people filter a sender who does
+that.
+
+Someone who is already inside seven days when the first reminder fires gets the
+seven-day nudge, not the thirty-day one they slept through.
+
+The threshold is recorded **after** a successful send, so a mail outage delays a
+warning rather than losing it. The trade is a possible duplicate if the save fails
+after the email went out, which is much better than a warning that never arrives.

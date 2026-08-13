@@ -289,4 +289,128 @@ public class VerificationExpiryServiceTests
         watched.ExpiryWatch = VerificationCase.ExpiryWatchMarker;
         Assert.Null(watched.ExpiryWatch);
     }
+
+    // ── Reminders ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ACaseThirtyDaysOut_GetsTheThirtyDayWarning()
+    {
+        GivenVerifiedCustomer(Now.AddDays(30));
+        var soon = ApprovedCase(VerificationSubjectType.Business, CustomerId, Now.AddDays(30));
+        GivenWatchedCases(soon);
+
+        var summary = await _sut.SendExpiryRemindersAsync(Now);
+
+        Assert.Equal(1, summary.Sent);
+        Assert.Equal(30, soon.LastExpiryReminderThreshold);
+        _email.Verify(e => e.SendVerificationExpiringSoonAsync(
+            "ada@test.com", "Ada", It.IsAny<string>(), 30, It.IsAny<DateTime>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ACaseFortyDaysOut_IsNotWarnedYet()
+    {
+        GivenVerifiedCustomer(Now.AddDays(40));
+        GivenWatchedCases(ApprovedCase(VerificationSubjectType.Business, CustomerId, Now.AddDays(40)));
+
+        var summary = await _sut.SendExpiryRemindersAsync(Now);
+
+        Assert.Equal(0, summary.Sent);
+    }
+
+    [Fact]
+    public async Task RunningDailyForAMonth_SendsTwoRemindersNotThirty()
+    {
+        // The whole reason the threshold is stored. A worker running every day
+        // without it would send the same warning every day for a month, and people
+        // filter a sender who does that.
+        GivenVerifiedCustomer(Now.AddDays(31));
+        var soon = ApprovedCase(VerificationSubjectType.Business, CustomerId, Now.AddDays(31));
+        GivenWatchedCases(soon);
+
+        for (var day = 0; day <= 30; day++)
+        {
+            await _sut.SendExpiryRemindersAsync(Now.AddDays(day));
+        }
+
+        _email.Verify(e => e.SendVerificationExpiringSoonAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<DateTime>()),
+            Times.Exactly(2));
+
+        Assert.Equal(7, soon.LastExpiryReminderThreshold);
+    }
+
+    [Fact]
+    public async Task ACaseAlreadyInsideSevenDays_GetsTheSevenDayNudgeNotTheThirty()
+    {
+        // Somebody verified last week with a permit expiring in three days should
+        // get the urgent warning, not the one they already slept through.
+        GivenVerifiedCustomer(Now.AddDays(3));
+        var urgent = ApprovedCase(VerificationSubjectType.Business, CustomerId, Now.AddDays(3));
+        GivenWatchedCases(urgent);
+
+        await _sut.SendExpiryRemindersAsync(Now);
+
+        Assert.Equal(7, urgent.LastExpiryReminderThreshold);
+        _email.Verify(e => e.SendVerificationExpiringSoonAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), 3, It.IsAny<DateTime>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AnAlreadyLapsedCase_IsNotSentAReminder()
+    {
+        // It gets the expiry email instead. Warning somebody that something expires
+        // "in -2 days" is worse than saying nothing.
+        GivenVerifiedCustomer(Now.AddDays(-2));
+        GivenWatchedCases(ApprovedCase(VerificationSubjectType.Business, CustomerId, Now.AddDays(-2)));
+
+        var summary = await _sut.SendExpiryRemindersAsync(Now);
+
+        Assert.Equal(0, summary.Sent);
+    }
+
+    [Fact]
+    public async Task AFailedReminder_IsRetriedOnTheNextRun()
+    {
+        // The threshold is recorded only after a successful send, so a mail outage
+        // delays the warning rather than losing it.
+        GivenVerifiedCustomer(Now.AddDays(30));
+        var soon = ApprovedCase(VerificationSubjectType.Business, CustomerId, Now.AddDays(30));
+        GivenWatchedCases(soon);
+
+        _email.Setup(e => e.SendVerificationExpiringSoonAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<DateTime>()))
+            .ThrowsAsync(new InvalidOperationException("mail down"));
+
+        var first = await _sut.SendExpiryRemindersAsync(Now);
+
+        Assert.Equal(1, first.Failed);
+        Assert.Null(soon.LastExpiryReminderThreshold);
+
+        _email.Reset();
+        _email.Setup(e => e.SendVerificationExpiringSoonAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<DateTime>()))
+            .ReturnsAsync(true);
+
+        var second = await _sut.SendExpiryRemindersAsync(Now.AddDays(1));
+
+        Assert.Equal(1, second.Sent);
+        Assert.Equal(30, soon.LastExpiryReminderThreshold);
+    }
+
+    [Fact]
+    public void NeedsExpiryReminder_TracksWhichThresholdsRemain()
+    {
+        var item = ApprovedCase(VerificationSubjectType.Business, CustomerId, Now.AddDays(60));
+
+        Assert.True(item.NeedsExpiryReminder(30));
+        Assert.True(item.NeedsExpiryReminder(7));
+
+        item.MarkExpiryReminderSent(30);
+        Assert.False(item.NeedsExpiryReminder(30));
+        Assert.True(item.NeedsExpiryReminder(7));
+
+        item.MarkExpiryReminderSent(7);
+        Assert.False(item.NeedsExpiryReminder(7));
+    }
 }

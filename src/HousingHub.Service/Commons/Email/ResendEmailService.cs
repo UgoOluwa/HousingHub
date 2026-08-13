@@ -332,6 +332,29 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(toEmail, "Your Housing Hub Verification Has Expired", text, html);
     }
 
+    public async Task<bool> SendVerificationExpiringSoonAsync(
+        string toEmail, string firstName, string subjectDescription, int daysRemaining, DateTime expiresAt)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string dayWord = daysRemaining == 1 ? "day" : "days";
+
+        // Concrete and actionable. The date is spelled out as well as the countdown,
+        // because "in 30 days" is easy to defer and a date is easy to diarise.
+        string body = $"""
+            {P($"Hi {firstName},")}
+            {P($"One of the documents behind your Housing Hub verification expires in {daysRemaining} {dayWord}. Renewals can take a while &mdash; LASRERA registrations especially &mdash; so this is a good moment to start.")}
+            {DetailRow("Verification", subjectDescription)}
+            {DetailRow("Expires", expiresAt.ToString("d MMMM yyyy"))}
+            {P("Upload a current document before then and your badge stays up without a gap.")}
+            {Button("Renew Now", $"{baseUrl}/verification")}
+            """;
+
+        string html = WrapInLayout("Your verification expires soon", body, Hero("&#9203;", "Expiring soon"));
+        string text = $"Hi {firstName}, your Housing Hub verification for {subjectDescription} expires in {daysRemaining} {dayWord}, on {expiresAt:d MMMM yyyy}. Upload a current document to keep your badge.";
+
+        return await SendAsync(toEmail, $"Your Housing Hub verification expires in {daysRemaining} {dayWord}", text, html);
+    }
+
     public async Task<bool> SendAccountReactivatedAsync(string toEmail, string firstName)
     {
         string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";

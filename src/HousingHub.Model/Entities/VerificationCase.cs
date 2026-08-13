@@ -139,6 +139,40 @@ public class VerificationCase : BaseEntity
     /// </remarks>
     public DateTime? ExpiresAt { get; set; }
 
+    /// <summary>
+    /// Smallest reminder threshold already sent, in days before expiry. Null means
+    /// none have gone out.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One field rather than a timestamp per threshold, because the thresholds are
+    /// ordered and only the most recent one matters. Storing 30 means the thirty-day
+    /// warning went out; storing 7 means both did. Adding a fourteen-day threshold
+    /// later needs no schema change.
+    /// </para>
+    /// <para>
+    /// This is what makes the daily sweep idempotent. Without it, a worker running
+    /// every day for a month would send the same "expires in 30 days" email thirty
+    /// times, which is worse than not warning at all — people filter a sender who
+    /// does that.
+    /// </para>
+    /// </remarks>
+    public int? LastExpiryReminderThreshold { get; set; }
+
+    /// <summary>
+    /// True when a reminder for this threshold has not yet been sent.
+    /// </summary>
+    /// <param name="daysOut">The threshold being considered, e.g. 30 or 7.</param>
+    public bool NeedsExpiryReminder(int daysOut) =>
+        LastExpiryReminderThreshold is null || LastExpiryReminderThreshold > daysOut;
+
+    /// <summary>Records that the reminder for this threshold has gone out.</summary>
+    public void MarkExpiryReminderSent(int daysOut)
+    {
+        LastExpiryReminderThreshold = daysOut;
+        DateModified = DateTime.UtcNow;
+    }
+
     [DynamoDBIgnore]
     public ICollection<VerificationDocument> Documents { get; set; } = new List<VerificationDocument>();
 
