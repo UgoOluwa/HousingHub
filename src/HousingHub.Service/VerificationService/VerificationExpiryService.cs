@@ -103,7 +103,7 @@ public class VerificationExpiryService : IVerificationExpiryService
 
         foreach (var verificationCase in candidates)
         {
-            // Thresholds are ordered descending, so the first one crossed is the
+            // Thresholds are ordered ascending, so the first one crossed is the
             // tightest warning that still applies. A case three days out gets the
             // seven-day nudge, not the thirty-day one it slept through.
             var daysRemaining = (int)Math.Ceiling((verificationCase.ExpiresAt!.Value - asOf).TotalDays);

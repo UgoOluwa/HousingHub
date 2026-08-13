@@ -44,7 +44,9 @@ public interface IVerificationExpiryService
 /// </remarks>
 public static class ExpiryReminderThresholds
 {
-    public static readonly IReadOnlyList<int> DaysBefore = [30, 7];
+    // Ascending: SendExpiryRemindersAsync takes the first entry a case has crossed,
+    // so the smallest (tightest) one that still applies must come first.
+    public static readonly IReadOnlyList<int> DaysBefore = [7, 30];
 }
 
 /// <summary>What one reminder pass did.</summary>
