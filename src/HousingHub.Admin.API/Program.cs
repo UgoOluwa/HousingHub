@@ -31,7 +31,9 @@ namespace HousingHub.Admin.API;
 
 public static class Program
 {
-    public static async Task Main(string[] args)
+    // No top-level await remains: schema initialisation is fire-and-forget, so
+        // keeping this async would only raise CS1998.
+    public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
 
@@ -245,14 +247,27 @@ public static class Program
             }).AllowAnonymous();
         }
 
-        // Off unless Dynamo:AutoCreateTables is true — see the consumer API's
-        // MigrationExtensions for why this should not run on every cold start.
-        // Both APIs share the same tables, so whichever one has it enabled creates them.
-        if (builder.Configuration.GetValue<bool>("Dynamo:AutoCreateTables"))
+        // Schema reconciliation, on by default and not awaited — see the consumer
+        // API's MigrationExtensions for the reasoning. Both APIs share these tables;
+        // whichever starts first does the work, and both doing it is harmless because
+        // every step checks before it acts.
+        if (builder.Configuration.GetValue("Dynamo:AutoCreateTables", defaultValue: true))
         {
-            using var scope = app.Services.CreateScope();
-            var initializer = scope.ServiceProvider.GetRequiredService<DynamoDbTableInitializer>();
-            await initializer.InitializeAsync();
+            _ = Task.Run(async () =>
+            {
+                using var scope = app.Services.CreateScope();
+                try
+                {
+                    var initializer = scope.ServiceProvider.GetRequiredService<DynamoDbTableInitializer>();
+                    await initializer.InitializeAsync();
+                }
+                catch (Exception ex)
+                {
+                    // Must be caught: an unobserved exception in a fire-and-forget
+                    // task is a process-level risk.
+                    Log.Error(ex, "DynamoDB schema initialisation failed to run");
+                }
+            });
         }
 
         if (!isLambda)

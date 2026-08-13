@@ -5,31 +5,63 @@ namespace HousingHub.API.Common.Extensions;
 public static class MigrationExtensions
 {
     /// <summary>
-    /// Creates any missing DynamoDB tables, if table provisioning is switched on.
+    /// Brings the DynamoDB schema into line with the code, without blocking startup.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Off unless <c>Dynamo:AutoCreateTables</c> is true.</b> This runs before the
-    /// app accepts traffic, and it calls ListTables — so on Lambda it added a DynamoDB
-    /// round trip to <i>every</i> cold start, forever, in order to create tables that
-    /// have existed since the first deploy. It also forced the execution role to carry
-    /// <c>dynamodb:CreateTable</c> in production, a permission an API has no business
-    /// holding.
+    /// <b>On by default.</b> This was previously gated behind
+    /// <c>Dynamo:AutoCreateTables</c>, off in deployed environments, on the reasoning
+    /// that tables belong in an infrastructure definition. That reasoning is sound and
+    /// there is no such definition — so in practice the gate meant every schema change
+    /// became a manual console task that had to be remembered, and the failure when it
+    /// was forgotten was silent: a query against a missing index degrades to a table
+    /// scan and says nothing.
     /// </para>
     /// <para>
-    /// Leave it on for local development and integration tests, where starting against
-    /// an empty DynamoDB Local is routine. In deployed environments the tables belong in
-    /// your infrastructure definition, where they are reviewable and versioned.
+    /// Automatic-and-slightly-wasteful beats correct-and-not-done. Set
+    /// <c>Dynamo:AutoCreateTables</c> to false to switch it off once real IaC exists.
+    /// </para>
+    /// <para>
+    /// <b>Deliberately not awaited.</b> Blocking startup would buy nothing:
+    /// CreateTable and UpdateTable are asynchronous on DynamoDB's side, so the table
+    /// is still unusable when the call returns. Waiting would delay every cold start
+    /// to achieve the same end state a moment later. The task is fire-and-forget with
+    /// its own exception handling, so a schema problem degrades the app rather than
+    /// preventing it from starting.
+    /// </para>
+    /// <para>
+    /// <b>IAM.</b> The execution role needs <c>dynamodb:ListTables</c>,
+    /// <c>DescribeTable</c>, <c>CreateTable</c> and <c>UpdateTable</c>. That is a
+    /// genuine widening of what the API can do — the trade for not having to remember
+    /// a console step. Revisit it when the schema moves into infrastructure code.
     /// </para>
     /// </remarks>
-    public static async Task InitializeDynamoDbAsync(this IApplicationBuilder app, IConfiguration configuration)
+    public static void InitializeDynamoDb(this IApplicationBuilder app, IConfiguration configuration)
     {
-        if (!configuration.GetValue<bool>("Dynamo:AutoCreateTables"))
+        if (!configuration.GetValue("Dynamo:AutoCreateTables", defaultValue: true))
             return;
 
-        using IServiceScope scope = app.ApplicationServices.CreateScope();
+        _ = Task.Run(async () =>
+        {
+            using var scope = app.ApplicationServices.CreateScope();
 
-        var initializer = scope.ServiceProvider.GetRequiredService<DynamoDbTableInitializer>();
-        await initializer.InitializeAsync();
+            var logger = scope.ServiceProvider
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger(typeof(MigrationExtensions));
+
+            try
+            {
+                var initializer = scope.ServiceProvider.GetRequiredService<DynamoDbTableInitializer>();
+                await initializer.InitializeAsync();
+            }
+            catch (Exception ex)
+            {
+                // InitializeAsync already guards each table, so reaching here means
+                // something structural failed — resolution, credentials, region. Must
+                // still be caught: an unobserved exception in a fire-and-forget task
+                // is a process-level risk.
+                logger.LogError(ex, "DynamoDB schema initialisation failed to run");
+            }
+        });
     }
 }

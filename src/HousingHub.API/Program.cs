@@ -39,7 +39,9 @@ namespace HousingHub.API
 {
     public static class Program
     {
-        public static async Task Main(string[] args)
+        // No top-level await remains: schema initialisation is fire-and-forget, so
+        // keeping this async would only raise CS1998.
+        public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
@@ -305,7 +307,7 @@ namespace HousingHub.API
                 app.UseDocWithUi();
             }
 
-            await app.InitializeDynamoDbAsync(builder.Configuration);
+            app.InitializeDynamoDb(builder.Configuration);
 
             // Must stay anonymous: the deny-by-default FallbackPolicy applies to every
             // routed endpoint, including this one. Without the opt-out, load balancer
