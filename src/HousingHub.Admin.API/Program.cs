@@ -178,6 +178,15 @@ public static class Program
             var client = sp.GetRequiredService<IAmazonDynamoDB>();
             return new DynamoDBContextBuilder()
                 .WithDynamoDBClient(() => client)
+                .ConfigureContext(c =>
+                {
+                    // Prepended to every [DynamoDBTable] name, which is what lets one
+                    // AWS account hold two environments. Empty in dev — the existing
+                    // tables are unprefixed and giving them one would orphan the data.
+                    // DynamoDbTableInitializer reads the same key through the same
+                    // helper; see DynamoDbNaming for why that matters.
+                    c.TableNamePrefix = DynamoDbNaming.TablePrefix(builder.Configuration);
+                })
                 .Build();
         });
         builder.Services.AddTransient<DynamoDbTableInitializer>();
@@ -199,9 +208,13 @@ public static class Program
 
         var app = builder.Build();
 
-        if (isLambda)
+        // The API Gateway stage name doubles as a path prefix. Configuration rather
+        // than a constant, so a second stage does not 404 every route — see the
+        // matching note in the consumer API's Program.cs.
+        var pathBase = builder.Configuration["Api:PathBase"];
+        if (isLambda && !string.IsNullOrWhiteSpace(pathBase))
         {
-            app.UsePathBase("/admin");
+            app.UsePathBase(pathBase.Trim());
         }
 
         // Turns an unhandled exception into a normal JSON error response instead of a
@@ -234,16 +247,22 @@ public static class Program
         // already gates its docs this way.
         if (app.Environment.IsDevelopment())
         {
+            // Derived from the path base rather than hardcoded to "/admin". The docs
+            // only serve locally, where there is no path base, so the hardcoded value
+            // pointed the UI at a document that is not there — the page loaded and
+            // the schema pane stayed empty.
+            var docPath = $"{(isLambda ? pathBase?.TrimEnd('/') : null)}/openapi/v1.json";
+
             app.UseSwagger(c => c.RouteTemplate = "openapi/{documentName}.json");
             app.UseSwaggerUI(c =>
             {
-                c.SwaggerEndpoint("/admin/openapi/v1.json", "HousingHub Admin API v1");
+                c.SwaggerEndpoint(docPath, "HousingHub Admin API v1");
                 c.RoutePrefix = "swagger";
             });
             app.MapScalarApiReference("/scalar", options =>
             {
                 options.WithTitle("HousingHub Admin API")
-                       .WithOpenApiRoutePattern("/admin/openapi/v1.json");
+                       .WithOpenApiRoutePattern(docPath);
             }).AllowAnonymous();
         }
 
@@ -286,7 +305,8 @@ public static class Program
         // Root redirect only makes sense where the docs are actually served.
         if (app.Environment.IsDevelopment())
         {
-            app.MapGet("/", () => Results.Redirect("/admin/scalar")).AllowAnonymous();
+            // Relative, so it lands correctly whether or not a path base is applied.
+            app.MapGet("/", () => Results.Redirect("scalar")).AllowAnonymous();
         }
 
         app.MapControllers();
