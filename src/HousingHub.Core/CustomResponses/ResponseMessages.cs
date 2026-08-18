@@ -2,8 +2,8 @@ namespace HousingHub.Core.CustomResponses;
 
 public static class ResponseMessages
 {
-    public const string Successful = "Operation Successful";
-    public const string Failed = "Operation Failed";
+    public const string Successful = "Success.";
+    public const string Failed = "Something went wrong. Please try again.";
 
     /// <summary>
     /// Client-facing message for an unhandled exception.
@@ -101,51 +101,111 @@ public static class ResponseMessages
     public const string PropertyReportSubmitted = "Thanks — your report has been submitted for review.";
 
 
-    public static string SetCreationSuccessMessage(string message)
+    // ── Chat ─────────────────────────────────────────────────────
+
+    public const string ChatCannotMessageSelf = "You cannot send a message to yourself.";
+    public const string ChatNotParticipant = "You are not a participant in this conversation.";
+
+    /// <summary>
+    /// The "sender" is the caller's own account, so naming it as a sender is
+    /// meaningless to them — they did not know they were one. An admin messaging
+    /// from the dashboard hits this path too, hence "your account" rather than
+    /// anything role-specific.
+    /// </summary>
+    public const string ChatSenderNotFound = "We couldn't find your account. Please sign in again.";
+
+    public const string ChatRecipientNotFound = "We couldn't find the person you're trying to message.";
+
+    // ── Notifications ────────────────────────────────────────────
+
+    public const string NotificationNotOwned = "You can only mark your own notifications as read.";
+
+    // ── KYC documents ────────────────────────────────────────────
+
+    public const string KycDocumentNotOnFile = "No identity document has been uploaded for this account.";
+    public const string KycDocumentUploaded = "Document uploaded successfully.";
+    public const string KycSubmitted = "Your documents have been submitted. We'll let you know once verification is complete.";
+    public const string InvalidCustomerId = "That customer reference isn't valid.";
+
+    /// <summary>
+    /// Shown beside a freshly minted presigned URL. The ten minutes is the
+    /// expiry in <c>IFileStorageService</c>; if that changes, this changes.
+    /// </summary>
+    public const string PresignedLinkValidity = "Link valid for 10 minutes.";
+
+    // ── Customer administration ──────────────────────────────────
+
+    public const string CustomerSuspended = "Customer suspended.";
+    public const string CustomerReactivated = "Customer reactivated.";
+
+    // ── Property administration ──────────────────────────────────
+
+    public const string DuplicateFlagDismissed = "Duplicate flag dismissed.";
+
+    // ── Admin accounts ───────────────────────────────────────────
+
+    public const string AdminProfileUpdated = "Profile updated.";
+    public const string AdminPasswordIncorrectOrNotFound = "Current password is incorrect, or that admin no longer exists.";
+    public const string StaffMemberCreated = "Staff member created.";
+    public const string StaffAccountDeactivated = "Staff account deactivated.";
+    public const string StaffAccountReactivated = "Staff account reactivated.";
+    public const string CannotDeactivateOwnAccount = "You cannot deactivate your own account.";
+    public const string AdminPromotedToSuperAdmin = "Admin promoted to SuperAdmin.";
+
+    // ── Inspections (continued) ──────────────────────────────────
+
+    public const string InspectionCannotCancel = "Completed or already cancelled inspections can't be cancelled.";
+
+    /// <summary>Worker summary. Pluralised properly rather than emitting "reminder(s)".</summary>
+    public static string InspectionRemindersSent(int count) =>
+        count == 1 ? "Sent 1 inspection reminder." : $"Sent {count} inspection reminders.";
+
+    // ── Generic CRUD templates ───────────────────────────────────
+    //
+    // Roughly 160 call sites render their messages through these, which is why
+    // they are worth getting right: they are the most-seen copy in the product.
+    //
+    // Every one of them used to emit an ungrammatical fragment -- "customer Not
+    // Found", "Successfully created property file" -- built from a lowercase
+    // entity noun and a Title-Cased verb. Call sites also disagreed on casing,
+    // so "property" and "Property" produced two different messages for one
+    // condition.
+    //
+    // The entity noun is normalised here rather than trusted to agree across
+    // thirty-odd call sites, because it did not.
+
+    /// <summary>Lowercases an entity noun for use mid-sentence.</summary>
+    private static string Entity(string? name) =>
+        string.IsNullOrWhiteSpace(name) ? "record" : name.Trim().ToLowerInvariant();
+
+    /// <summary>Sentence-initial form of an entity noun.</summary>
+    private static string EntityCapitalised(string? name)
     {
-        string successMessage = $"Successfully created {message}";
-        return successMessage;
+        var entity = Entity(name);
+        return char.ToUpperInvariant(entity[0]) + entity[1..];
     }
 
-    public static string SetUpdateSuccessMessage(string message)
-    {
-        string successMessage = $"Successfully updated {message}";
-        return successMessage;
-    }
+    public static string SetCreationSuccessMessage(string message) =>
+        $"{EntityCapitalised(message)} created.";
 
-    public static string SetDeletedSuccessMessage(string message)
-    {
-        string successMessage = $"Successfully deleted {message}";
-        return successMessage;
-    }
+    public static string SetUpdateSuccessMessage(string message) =>
+        $"{EntityCapitalised(message)} updated.";
 
-    public static string SetCreationFailureMessage(string message)
-    {
-        string failureMessage = $"Failed to create {message}";
-        return failureMessage;
-    }
+    public static string SetDeletedSuccessMessage(string message) =>
+        $"{EntityCapitalised(message)} deleted.";
 
-    public static string SetUpdateFailureMessage(string message)
-    {
-        string failureMessage = $"Failed to update {message}";
-        return failureMessage;
-    }
+    public static string SetCreationFailureMessage(string message) =>
+        $"We couldn't create that {Entity(message)}. Please try again.";
 
-    public static string SetDeletedFailureMessage(string message)
-    {
-        string failureMessage = $"Failed to deleted {message}";
-        return failureMessage;
-    }
+    public static string SetUpdateFailureMessage(string message) =>
+        $"We couldn't update that {Entity(message)}. Please try again.";
 
-    public static string SetNotFoundMessage(string message)
-    {
-        string notFoundMessage = $"{message} Not Found";
-        return notFoundMessage;
-    }
+    public static string SetDeletedFailureMessage(string message) =>
+        $"We couldn't delete that {Entity(message)}. Please try again.";
 
-    public static string SetAlreadyExistsMessage(string message)
-    {
-        string alreadyExistsMessage = $"The {message} already exists.";
-        return alreadyExistsMessage;
-    }
+    public static string SetNotFoundMessage(string message) =>
+        $"We couldn't find that {Entity(message)}.";
+
+    public static string SetAlreadyExistsMessage(string message) =>
+        $"That {Entity(message)} already exists.";
 } 

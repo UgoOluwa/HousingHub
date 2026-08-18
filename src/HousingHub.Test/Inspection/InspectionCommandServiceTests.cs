@@ -161,7 +161,7 @@ public class InspectionCommandServiceTests
         var result = await _sut.ScheduleInspectionAsync(dto, CustomerId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("customer"), result.Message);
     }
 
     [Fact]
@@ -174,7 +174,7 @@ public class InspectionCommandServiceTests
         var result = await _sut.ScheduleInspectionAsync(dto, CustomerId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("property"), result.Message);
     }
 
     [Fact]

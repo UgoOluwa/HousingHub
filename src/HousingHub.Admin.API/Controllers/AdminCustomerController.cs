@@ -84,7 +84,7 @@ public class AdminCustomerController(
 
         var stored = customer?.Data?.IdDocumentUrl;
         if (string.IsNullOrWhiteSpace(stored))
-            return NotFound(new BaseResponse<string?>(null, false, string.Empty, "No KYC document on file."));
+            return NotFound(new BaseResponse<string?>(null, false, string.Empty, ResponseMessages.KycDocumentNotOnFile));
 
         // Documents submitted before KYC moved to the private bucket are stored as full
         // public URLs rather than object keys. Presigning those would produce nonsense,
@@ -99,7 +99,7 @@ public class AdminCustomerController(
 
         var url = await fileStorageService.GetPresignedUrlAsync(stored, KycDocumentLinkLifetime);
 
-        return Ok(new BaseResponse<string>(url, true, string.Empty, "Link valid for 10 minutes."));
+        return Ok(new BaseResponse<string>(url, true, string.Empty, ResponseMessages.PresignedLinkValidity));
     }
 
     /// <summary>Suspends a customer account (sets IsActive = false).</summary>

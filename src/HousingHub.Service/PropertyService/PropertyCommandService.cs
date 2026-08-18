@@ -305,7 +305,7 @@ public class PropertyCommandService : IPropertyCommandService
             await _unitOfWOrk.PropertyCommands.UpdateAsync(property);
             await _unitOfWOrk.SaveAsync();
 
-            return new BaseResponse<bool>(true, true, string.Empty, "Duplicate flag dismissed.");
+            return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.DuplicateFlagDismissed);
         }
         catch (Exception ex)
         {

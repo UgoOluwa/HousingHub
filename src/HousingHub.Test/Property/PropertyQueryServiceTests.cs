@@ -149,7 +149,7 @@ public class PropertyQueryServiceTests
 
         Assert.False(result.IsSuccessful);
         Assert.Null(result.Data);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("property"), result.Message);
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public class PropertyQueryServiceTests
 
         Assert.False(result.IsSuccessful);
         Assert.Null(result.Data);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("property"), result.Message);
     }
 
     [Fact]
@@ -197,7 +197,7 @@ public class PropertyQueryServiceTests
 
         Assert.False(result.IsSuccessful);
         Assert.Null(result.Data);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("property"), result.Message);
     }
 
     [Fact]
@@ -266,7 +266,7 @@ public class PropertyQueryServiceTests
 
         Assert.False(result.IsSuccessful);
         Assert.Null(result.Data);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("property"), result.Message);
     }
 
     // ??? GetAllPropertiesAsync ????????????????????????????????????????

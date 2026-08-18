@@ -168,7 +168,7 @@ public class PropertyCommandServiceTests
         var result = await _sut.CreateProperty(CreateValidDto(), OwnerId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("customer"), result.Message);
     }
 
     [Fact]
@@ -344,7 +344,7 @@ public class PropertyCommandServiceTests
         var result = await _sut.UpdateProperty(dto, OwnerId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("property"), result.Message);
     }
 
     [Fact]
@@ -358,7 +358,7 @@ public class PropertyCommandServiceTests
         var result = await _sut.CreateProperty(CreateValidDto(), OwnerId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("Failed to create", result.Message);
+        Assert.Equal(ResponseMessages.SetCreationFailureMessage("property"), result.Message);
     }
 
     [Fact]
@@ -466,7 +466,7 @@ public class PropertyCommandServiceTests
         var result = await _sut.UpdateProperty(dto, OwnerId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("customer"), result.Message);
     }
 
     // ??? Delete
@@ -548,7 +548,7 @@ public class PropertyCommandServiceTests
         var result = await _sut.DeleteProperty(PropertyId, OwnerId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("property"), result.Message);
     }
 
     [Fact]
@@ -559,7 +559,7 @@ public class PropertyCommandServiceTests
         var result = await _sut.DeleteProperty(PropertyId, OwnerId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("customer"), result.Message);
     }
 
     [Fact]
@@ -929,7 +929,7 @@ public class PropertyCommandServiceTests
         var result = await _sut.CreateProperty(CreateValidDto(), adminId, targetOwnerId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("owner"), result.Message);
     }
 
     // ??? Create ?? possible-duplicate detection ??????????????????????
@@ -1055,7 +1055,7 @@ public class PropertyCommandServiceTests
 
         Assert.False(result.IsSuccessful);
         Assert.False(result.Data);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("property"), result.Message);
     }
 
     // ??? SetPropertyPublishedInternalAsync ?? saved-search alert matching ????

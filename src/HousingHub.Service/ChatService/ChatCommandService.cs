@@ -42,21 +42,21 @@ public class ChatCommandService : IChatCommandService
         try
         {
             if (senderId == request.RecipientId)
-                return new BaseResponse<ChatMessageDto>(null, false, string.Empty, "You cannot send a message to yourself.");
+                return new BaseResponse<ChatMessageDto>(null, false, string.Empty, ResponseMessages.ChatCannotMessageSelf);
 
             // Sender is usually a Customer, but an admin messaging a customer/owner
             // from the Admin dashboard is also a valid sender — falls back to the
             // Admins table when not found among customers.
             var senderName = await ResolveSenderNameAsync(senderId);
             if (senderName == null)
-                return new BaseResponse<ChatMessageDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("sender"));
+                return new BaseResponse<ChatMessageDto>(null, false, string.Empty, ResponseMessages.ChatSenderNotFound);
 
             // Recipient is usually a Customer, but a customer/owner messaging an
             // admin (or replying to one) is also valid — falls back to the Admins
             // table when not found among customers, same as ResolveSenderNameAsync.
             var recipientInfo = await ResolveRecipientInfoAsync(request.RecipientId);
             if (recipientInfo == null)
-                return new BaseResponse<ChatMessageDto>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("recipient"));
+                return new BaseResponse<ChatMessageDto>(null, false, string.Empty, ResponseMessages.ChatRecipientNotFound);
 
             // Find or create conversation
             var conversation = await FindConversationAsync(senderId, request.RecipientId);
@@ -139,7 +139,7 @@ public class ChatCommandService : IChatCommandService
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("conversation"));
 
             if (!conversation.HasParticipant(authenticatedUserId))
-                return new BaseResponse<bool>(false, false, string.Empty, "You are not a participant in this conversation.");
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.ChatNotParticipant);
 
             var unreadMessages = await _unitOfWOrk.ChatMessageQueries.GetAllAsync(
                 x => x.ConversationId == conversationId && x.SenderId != authenticatedUserId && !x.IsRead);
