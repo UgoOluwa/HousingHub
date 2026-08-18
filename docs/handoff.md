@@ -4,9 +4,9 @@ Written at the point of moving this work into Claude Code. Read this before
 picking anything up; it says what is done, what is half-done, and what is
 waiting on a human.
 
-**Date:** 14 August 2026
-**Head commits:** `HousingHub` `36415a4` · `Housing-Hub-FE` `cb8e89b` ·
-`Housing-Hub-Admin` `f178b87`
+**Date:** 18 August 2026
+**Head commits (master):** `HousingHub` `c8a363d` · `Housing-Hub-FE` `1eab97c` ·
+`Housing-Hub-Admin` `600be69`
 
 ---
 
@@ -27,17 +27,10 @@ imply the sequence is settled.
 
 ---
 
-## Immediate: unblock the frontend deploys
+## Immediate: nothing
 
-**`NEXT_PUBLIC_S3_ORIGIN` must be set on every Vercel environment of both
-frontend projects before their latest commits deploy.** The production build now
-throws when it is missing — deliberately, but it means ordering matters.
-
-```
-NEXT_PUBLIC_S3_ORIGIN=https://housinghub-files-dev.s3.af-south-1.amazonaws.com
-```
-
-Both projects, all environments, current dev value.
+`NEXT_PUBLIC_S3_ORIGIN` is set on both Vercel projects, and everything below has
+shipped. The next move is Phase 1, and Phase 1 is entirely yours.
 
 ---
 
@@ -47,7 +40,7 @@ Full plan: `environment-separation-plan.md`. Decisions already taken — one AWS
 account with prefixed resources, `develop` → dev and `master` → production,
 custom domain on production only, both frontends on Vercel.
 
-### Phase 0 — code made environment-aware ✅ committed, ⚠️ not yet verified
+### Phase 0 — code made environment-aware ✅ shipped and verified
 
 Every change defaults to today's values, so deploying it should change nothing.
 That is the point: it is the only part of the split that can break what exists,
@@ -68,21 +61,20 @@ What changed:
 - Incidental: the admin Scalar docs pointed at `/admin/openapi/v1.json` locally
   where there is no path base, so the schema pane has been loading empty.
 
-**Not compiled.** There was no .NET SDK available in the environment where this
-was written. TypeScript passes on both frontends (`tsc --noEmit`) and the
-production guard was exercised in both directions, but `dotnet build` and
-`dotnet test` have not run against these changes. **Do that first.**
+**Verified 18 August 2026.** `dotnet build` clean, 649 tests passing, both
+frontends producing real production builds, and PR #36 deployed both Lambdas
+green. The smoke walk was done and nothing had moved.
 
-Then deploy to dev and confirm nothing moved:
+Two things shipped alongside it:
 
-- CloudWatch shows `Reconciling DynamoDB schema for 16 tables with prefix ''` —
-  the empty prefix confirms dev is untouched
-- Homepage loads and **photos render** (the S3 origin change)
-- Log in, upload a photo, open a listing with video
-- Admin dashboard loads; open a verification case and click **View**
-- Trigger a worker from Actions — expect 200
-
-Photos gone → `NEXT_PUBLIC_S3_ORIGIN`. Routes 404 → `Api:PathBase`.
+- `Microsoft.OpenApi` 2.3.0 → 2.7.5 on both APIs, closing GHSA-v5pm-xwqc-g5wc
+  (a circular schema reference can terminate OpenAPI parsing).
+- `HousingHub.Data` was pinning `Microsoft.Extensions.Configuration.Abstractions`
+  at 8.0.0 while `HousingHub.Core` pinned 10.0.0. CI never minded; **SDK 10.0.302
+  fails the restore outright where 10.0.400 does not**, so a local build can fail
+  on a tree that deploys perfectly. Both are on 10.0.0 now. If a restore fails
+  locally and CI is green, compare `dotnet --version` against the SDK the deploy
+  workflow installs before believing the tree is broken.
 
 ### Phases 1–6 — outstanding
 
@@ -99,6 +91,17 @@ Photos gone → `NEXT_PUBLIC_S3_ORIGIN`. Routes 404 → `Api:PathBase`.
 Phase 1's two steps must happen **in the same sitting**. Vercel promotes the
 repository's default branch; making `develop` default without changing Vercel's
 Production Branch starts deploying `develop` to your production domain.
+
+Two things to sort out before Phase 1 rather than during it:
+
+- **`develop` already exists in all three repos and is badly stale** — 57, 32 and
+  20 commits behind `master`. It carries **no** unique commits, so catching it up
+  is a fast-forward with nothing to resolve. Do that before making it the default
+  branch, or the default branch is three months of missing work.
+- **`Housing-Hub-FE`'s default branch on GitHub is `main`, not `master`**, and
+  `main` is over a hundred commits behind. Deploys come from `master`. Since
+  Phase 1 turns on what the default branch is, resolve which of the two is real
+  first.
 
 Generate the three production secrets fresh — `openssl rand -base64 48` for
 `Jwt:Secret`, `AdminJwt:Secret`, `Internal:WorkerSecret`. Do not copy dev's;
@@ -156,6 +159,15 @@ both covered in `transaction-lifecycle-plan.md`.
   workflows are disabled automatically after 60 days without a commit. If the
   repo goes quiet the workers stop silently. `scheduled-workers.md` has the
   EventBridge migration.
+- **Nothing is tested before it merges.** `deploy.yml` runs on push to `master`
+  and has no `pull_request` trigger, so the tests run *after* a merge, as the
+  first half of the deploy. The two frontends have no workflows at all and have
+  never had an automated build check. A PR-triggered job in each repo is the
+  cheapest reliability available and belongs with the Phase 3 workflow work.
+- **Dependabot is disabled on `HousingHub`.** It is why the OpenAPI advisory
+  above only ever surfaced as a local build warning. Both frontends have it on
+  and are carrying open alerts — `nanoid`, `js-yaml`, `postcss`, all build-time
+  or dev-dependency transitives rather than anything serving a user request.
 - **CSP allows `'unsafe-inline'` for scripts** in both frontends. Removing it
   needs per-request nonces via middleware.
 
