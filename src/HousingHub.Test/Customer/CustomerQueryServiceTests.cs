@@ -63,7 +63,7 @@ public class CustomerQueryServiceTests
         var result = await _sut.GetCustomerAsync(Guid.NewGuid());
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("customer"), result.Message);
     }
 
     [Fact]

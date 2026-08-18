@@ -94,7 +94,7 @@ public class ChatQueryService : IChatQueryService
                 return new BaseResponse<PaginatedResult<ChatMessageDto>>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("conversation"));
 
             if (!conversation.HasParticipant(authenticatedUserId))
-                return new BaseResponse<PaginatedResult<ChatMessageDto>>(null, false, string.Empty, "You are not a participant in this conversation.");
+                return new BaseResponse<PaginatedResult<ChatMessageDto>>(null, false, string.Empty, ResponseMessages.ChatNotParticipant);
 
             // Get all messages for this conversation, then paginate from the most recent
             var allMessages = (await _unitOfWOrk.ChatMessageQueries.GetAllAsync(

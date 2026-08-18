@@ -16,7 +16,7 @@ public class UploadKycDocumentCommandHandler : IRequestHandler<UploadKycDocument
     public async Task<BaseResponse<string>> Handle(UploadKycDocumentCommand request, CancellationToken cancellationToken)
     {
         if (request.CustomerId == Guid.Empty)
-            return new BaseResponse<string>(false, null, "Invalid customer ID.", null);
+            return new BaseResponse<string>(false, null, Core.CustomResponses.ResponseMessages.InvalidCustomerId, null);
 
         // Government identity documents. Previously this path had no validation at
         // all and wrote to the same public bucket prefix as property photos, so the
@@ -35,6 +35,6 @@ public class UploadKycDocumentCommandHandler : IRequestHandler<UploadKycDocument
         var key = await _fileStorageService.UploadPrivateFileAsync(
             request.File!, $"kyc/{request.CustomerId}", validation.ContentType);
 
-        return new BaseResponse<string>(true, key, "Document uploaded successfully.", null);
+        return new BaseResponse<string>(true, key, Core.CustomResponses.ResponseMessages.KycDocumentUploaded, null);
     }
 }

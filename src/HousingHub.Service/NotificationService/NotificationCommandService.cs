@@ -28,7 +28,7 @@ public class NotificationCommandService : INotificationCommandService
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("notification"));
 
             if (notification.RecipientId != authenticatedUserId)
-                return new BaseResponse<bool>(false, false, string.Empty, "You can only mark your own notifications as read.");
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.NotificationNotOwned);
 
             notification.IsRead = true;
             await _unitOfWOrk.NotificationCommands.UpdateAsync(notification);

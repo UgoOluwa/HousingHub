@@ -241,7 +241,7 @@ public class ChatQueryServiceTests
         var result = await _sut.GetMessagesAsync(ConversationId, UserId, 1, 10);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("conversation"), result.Message);
     }
 
     [Fact]

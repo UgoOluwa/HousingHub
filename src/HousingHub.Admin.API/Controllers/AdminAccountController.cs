@@ -44,8 +44,8 @@ public class AdminAccountController(IAdminAuthService adminAuthService) : Contro
         if (adminId == Guid.Empty) return Unauthorized();
 
         var success = await adminAuthService.UpdateAdminProfileAsync(adminId, dto);
-        if (!success) return NotFound(new { message = "Admin not found." });
-        return Ok(new BaseResponse<bool>(true, true, string.Empty, "Profile updated successfully."));
+        if (!success) return NotFound(new { message = ResponseMessages.SetNotFoundMessage("admin") });
+        return Ok(new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.AdminProfileUpdated));
     }
 
     /// <summary>Changes the password of the currently authenticated admin.</summary>
@@ -63,8 +63,8 @@ public class AdminAccountController(IAdminAuthService adminAuthService) : Contro
         if (adminId == Guid.Empty) return Unauthorized();
 
         var success = await adminAuthService.ChangeAdminPasswordAsync(adminId, dto.CurrentPassword, dto.NewPassword);
-        if (!success) return BadRequest(new BaseResponse<bool>(false, false, string.Empty, "Current password is incorrect or admin not found."));
-        return Ok(new BaseResponse<bool>(true, true, string.Empty, "Password changed successfully."));
+        if (!success) return BadRequest(new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.AdminPasswordIncorrectOrNotFound));
+        return Ok(new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.PasswordChangeSuccess));
     }
 
     // ── Staff Management ─────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ public class AdminAccountController(IAdminAuthService adminAuthService) : Contro
     public async Task<IActionResult> CreateStaff([FromBody] CreateStaffDto dto)
     {
         await adminAuthService.CreateStaffAsync(dto.Email, dto.FirstName, dto.LastName, dto.Role);
-        return Ok(new BaseResponse<bool>(true, true, string.Empty, "Staff member created."));
+        return Ok(new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.StaffMemberCreated));
     }
 
     /// <summary>Returns a list of all admin staff members.</summary>
@@ -110,11 +110,11 @@ public class AdminAccountController(IAdminAuthService adminAuthService) : Contro
     {
         var adminId = GetAdminId();
         if (id == adminId)
-            return BadRequest(new BaseResponse<bool>(false, false, string.Empty, "You cannot deactivate your own account."));
+            return BadRequest(new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.CannotDeactivateOwnAccount));
 
         var success = await adminAuthService.DeactivateAdminAsync(id);
-        if (!success) return NotFound(new BaseResponse<bool>(false, false, string.Empty, "Staff member not found."));
-        return Ok(new BaseResponse<bool>(true, true, string.Empty, "Staff account deactivated."));
+        if (!success) return NotFound(new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("staff member")));
+        return Ok(new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.StaffAccountDeactivated));
     }
 
     /// <summary>Reactivates a previously deactivated admin staff member account.</summary>
@@ -128,8 +128,8 @@ public class AdminAccountController(IAdminAuthService adminAuthService) : Contro
     public async Task<IActionResult> ReactivateStaff(Guid id)
     {
         var success = await adminAuthService.ReactivateAdminAsync(id);
-        if (!success) return NotFound(new BaseResponse<bool>(false, false, string.Empty, "Staff member not found."));
-        return Ok(new BaseResponse<bool>(true, true, string.Empty, "Staff account reactivated."));
+        if (!success) return NotFound(new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("staff member")));
+        return Ok(new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.StaffAccountReactivated));
     }
 
     private Guid GetAdminId()

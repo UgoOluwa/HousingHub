@@ -147,7 +147,7 @@ namespace HousingHub.API.Controllers.V1
 
             var stored = customer?.Data?.IdDocumentUrl;
             if (string.IsNullOrWhiteSpace(stored))
-                return NotFound(new Core.CustomResponses.BaseResponse<string?>(null, false, string.Empty, "No KYC document on file."));
+                return NotFound(new Core.CustomResponses.BaseResponse<string?>(null, false, string.Empty, ResponseMessages.KycDocumentNotOnFile));
 
             // Documents submitted before KYC moved to the private prefix are stored as
             // full public URLs. Those objects are no longer anonymously readable once
@@ -158,7 +158,7 @@ namespace HousingHub.API.Controllers.V1
 
             var url = await _fileStorageService.GetPresignedUrlAsync(stored, KycDocumentLinkLifetime);
 
-            return Ok(new Core.CustomResponses.BaseResponse<string>(url, true, string.Empty, "Link valid for 10 minutes."));
+            return Ok(new Core.CustomResponses.BaseResponse<string>(url, true, string.Empty, ResponseMessages.PresignedLinkValidity));
         }
 
         [Authorize]
