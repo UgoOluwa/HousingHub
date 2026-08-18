@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet format:*)",
+      "Bash(dotnet restore:*)",
+      "Bash(dotnet test:*)",
+      "Bash(find:*)",
+      "Bash(git add:*)",
+      "Bash(git branch:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git status:*)",
+      "Bash(head:*)",
+      "Bash(ls:*)",
+      "Bash(rg:*)",
+      "Bash(tail:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(gh pr create:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(**/appsettings.Production.json)",
+      "Bash(git push --force:*)",
+      "Bash(aws:*)"
+    ]
+  }
+}
