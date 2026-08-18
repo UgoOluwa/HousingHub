@@ -92,16 +92,21 @@ Phase 1's two steps must happen **in the same sitting**. Vercel promotes the
 repository's default branch; making `develop` default without changing Vercel's
 Production Branch starts deploying `develop` to your production domain.
 
-Two things to sort out before Phase 1 rather than during it:
+`develop` existed in all three repos but sat 57, 32 and 20 commits behind
+`master` with no unique commits of its own. **Fast-forwarded to `master` in all
+three on 18 August**, so Phase 1 can now make it the default branch without that
+meaning three months of missing work.
 
-- **`develop` already exists in all three repos and is badly stale** — 57, 32 and
-  20 commits behind `master`. It carries **no** unique commits, so catching it up
-  is a fast-forward with nothing to resolve. Do that before making it the default
-  branch, or the default branch is three months of missing work.
-- **`Housing-Hub-FE`'s default branch on GitHub is `main`, not `master`**, and
-  `main` is over a hundred commits behind. Deploys come from `master`. Since
-  Phase 1 turns on what the default branch is, resolve which of the two is real
-  first.
+One trap worth naming, because it cost time here: `git branch -a` shows
+`origin/HEAD -> origin/<branch>`, which is a pointer **cached at clone time and
+never refreshed by `git fetch`**. In this clone it still read `origin/main` for
+`Housing-Hub-FE` long after GitHub's default became `master`, which reads exactly
+like a misconfigured repository. `git remote set-head origin -a` refreshes it.
+Confirm a default branch against `gh api repos/<owner>/<repo> --jq
+.default_branch`, never against the local ref.
+
+A stale `main` still exists on `Housing-Hub-FE` and `HousingHub`, far behind
+`master` and unused. Deleting them is safe but nobody has decided to.
 
 Generate the three production secrets fresh — `openssl rand -base64 48` for
 `Jwt:Secret`, `AdminJwt:Secret`, `Internal:WorkerSecret`. Do not copy dev's;
