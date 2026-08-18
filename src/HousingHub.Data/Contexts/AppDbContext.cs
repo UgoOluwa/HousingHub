@@ -1,5 +1,6 @@
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace HousingHub.Data.Contexts;
@@ -8,6 +9,13 @@ public class DynamoDbTableInitializer
 {
     private readonly IAmazonDynamoDB _client;
     private readonly ILogger<DynamoDbTableInitializer> _logger;
+
+    /// <summary>
+    /// Prepended to every name in <see cref="TableDefinitions"/> before it reaches
+    /// DynamoDB. Must be the same value the <c>IDynamoDBContext</c> was built with
+    /// — see <see cref="DynamoDbNaming"/> for why both read it through one helper.
+    /// </summary>
+    private readonly string _tablePrefix;
 
     private static readonly Dictionary<string, (string HashKey, List<GlobalSecondaryIndex>? GSIs)> TableDefinitions = new()
     {
@@ -100,10 +108,14 @@ public class DynamoDbTableInitializer
         }),
     };
 
-    public DynamoDbTableInitializer(IAmazonDynamoDB client, ILogger<DynamoDbTableInitializer> logger)
+    public DynamoDbTableInitializer(
+        IAmazonDynamoDB client,
+        IConfiguration configuration,
+        ILogger<DynamoDbTableInitializer> logger)
     {
         _client = client;
         _logger = logger;
+        _tablePrefix = DynamoDbNaming.TablePrefix(configuration);
     }
 
     /// <summary>
@@ -131,6 +143,10 @@ public class DynamoDbTableInitializer
 
         try
         {
+            // ListTables returns at most 100 names per page. With two environments
+            // sharing an account that is 32 tables, so a single page is still
+            // comfortable — but this is the call that would need paginating first
+            // if a third environment ever lands here.
             var listed = await _client.ListTablesAsync();
             existing = listed.TableNames.ToHashSet(StringComparer.Ordinal);
         }
@@ -140,8 +156,22 @@ public class DynamoDbTableInitializer
             return;
         }
 
-        foreach (var (tableName, definition) in TableDefinitions)
+        // Logged once per start, and worth the line. If the prefix is wrong, every
+        // symptom that follows is silent: tables get created under names nothing
+        // reads, and queries return empty rather than failing. This is the only
+        // place that states which set of tables this process is about to touch.
+        _logger.LogInformation(
+            "Reconciling DynamoDB schema for {Count} tables with prefix '{TablePrefix}'",
+            TableDefinitions.Count,
+            _tablePrefix);
+
+        foreach (var (logicalName, definition) in TableDefinitions)
         {
+            // The dictionary holds logical names; DynamoDB is addressed by physical
+            // ones. Converting here rather than in the definitions keeps the
+            // declarations readable and the prefix applied in exactly one place.
+            var tableName = _tablePrefix + logicalName;
+
             try
             {
                 if (existing.Contains(tableName))

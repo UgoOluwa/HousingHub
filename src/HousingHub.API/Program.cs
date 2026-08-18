@@ -268,6 +268,15 @@ namespace HousingHub.API
                 var client = sp.GetRequiredService<IAmazonDynamoDB>();
                 return new DynamoDBContextBuilder()
                     .WithDynamoDBClient(() => client)
+                    .ConfigureContext(c =>
+                    {
+                        // Prepended to every [DynamoDBTable] name, which is what lets
+                        // one AWS account hold two environments. Empty in dev — the
+                        // existing tables are unprefixed and giving them one would
+                        // orphan the data. DynamoDbTableInitializer reads the same key
+                        // through the same helper; see DynamoDbNaming for why.
+                        c.TableNamePrefix = DynamoDbNaming.TablePrefix(builder.Configuration);
+                    })
                     .Build();
             });
             builder.Services.AddTransient<DynamoDbTableInitializer>();
@@ -296,9 +305,18 @@ namespace HousingHub.API
 
             var app = builder.Build();
 
-            if (isLambda)
+            // The API Gateway stage name doubles as a path prefix, so the app has to
+            // know it. It was hardcoded to "/dev" — a stage name compiled into the
+            // application, which meant a second stage 404'd every route. It is also
+            // where the CSP bug came from: the value looks like a base URL and gets
+            // used as one, but a CSP source carrying a path matches only that exact
+            // path.
+            //
+            // Empty or unset means no path base, which is correct outside Lambda.
+            var pathBase = builder.Configuration["Api:PathBase"];
+            if (isLambda && !string.IsNullOrWhiteSpace(pathBase))
             {
-                app.UsePathBase("/dev");
+                app.UsePathBase(pathBase.Trim());
             }
 
             // Configure the HTTP request pipeline.
