@@ -149,8 +149,8 @@ public class InternalController(
             return Unauthorized();
 
         var success = await adminAuthService.PromoteToSuperAdminAsync(email);
-        if (!success) return NotFound(new BaseResponse<bool>(false, false, string.Empty, "Admin not found."));
-        return Ok(new BaseResponse<bool>(true, true, string.Empty, "Admin promoted to SuperAdmin."));
+        if (!success) return NotFound(new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.SetNotFoundMessage("admin")));
+        return Ok(new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.AdminPromotedToSuperAdmin));
     }
 
     /// <summary>

@@ -101,7 +101,7 @@ public class ChatCommandServiceTests
         var result = await _sut.SendMessageAsync(dto, SenderId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.ChatSenderNotFound, result.Message);
     }
 
     [Fact]
@@ -167,7 +167,7 @@ public class ChatCommandServiceTests
         var result = await _sut.SendMessageAsync(dto, SenderId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.ChatRecipientNotFound, result.Message);
     }
 
     [Fact]
@@ -443,7 +443,7 @@ public class ChatCommandServiceTests
         var result = await _sut.MarkConversationAsReadAsync(ConversationId, RecipientId);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("Not Found", result.Message);
+        Assert.Equal(ResponseMessages.SetNotFoundMessage("conversation"), result.Message);
     }
 
     [Fact]

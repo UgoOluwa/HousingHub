@@ -266,7 +266,7 @@ public class CustomerCommandService : ICustomerCommandService
             await _unitOfWOrk.CustomerCommands.UpdateAsync(customer);
             await _unitOfWOrk.SaveAsync();
 
-            return new BaseResponse<bool>(true, true, string.Empty, "KYC submitted successfully. Verification is pending.");
+            return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.KycSubmitted);
         }
         catch (Exception ex)
         {
@@ -369,7 +369,7 @@ public class CustomerCommandService : ICustomerCommandService
             await _unitOfWOrk.CustomerCommands.UpdateAsync(customer);
             await _unitOfWOrk.SaveAsync();
 
-            return new BaseResponse<bool>(true, true, string.Empty, "Customer suspended successfully.");
+            return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.CustomerSuspended);
         }
         catch (Exception ex)
         {
@@ -393,7 +393,7 @@ public class CustomerCommandService : ICustomerCommandService
 
             await _emailService.SendAccountReactivatedAsync(customer.Email, customer.FirstName);
 
-            return new BaseResponse<bool>(true, true, string.Empty, "Customer reactivated successfully.");
+            return new BaseResponse<bool>(true, true, string.Empty, ResponseMessages.CustomerReactivated);
         }
         catch (Exception ex)
         {

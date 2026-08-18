@@ -513,7 +513,7 @@ public class InspectionCommandService : IInspectionCommandService
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.InspectionNotCustomer);
 
             if (inspection.Status == InspectionStatus.Completed || inspection.Status == InspectionStatus.Cancelled)
-                return new BaseResponse<bool>(false, false, string.Empty, "Cannot cancel a completed or already cancelled inspection.");
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.InspectionCannotCancel);
 
             inspection.Status = InspectionStatus.Cancelled;
             await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
@@ -596,7 +596,7 @@ public class InspectionCommandService : IInspectionCommandService
 
             await _unitOfWOrk.SaveAsync();
 
-            return new BaseResponse<int>(sentCount, true, string.Empty, $"Sent {sentCount} inspection reminder(s).");
+            return new BaseResponse<int>(sentCount, true, string.Empty, ResponseMessages.InspectionRemindersSent(sentCount));
         }
         catch (Exception ex)
         {
