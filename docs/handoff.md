@@ -103,11 +103,12 @@ the debt list). These are the ones needed to find anything:
 | Bucket | `housinghub-files-prod` |
 | Table prefix | `prod_` |
 
-The consumer API returns 200 on `/prod/health`. **The admin API is still 502** —
-its six mandatory variables are not set yet. `AdminJwt:Secret`,
-`AdminJwt:Issuer`, `AdminJwt:Audience`, `Internal:WorkerSecret`,
-`Email:ResendApiKey`, and `Cors:AllowedOrigins` (as `Cors__AllowedOrigins__0`,
-which is an array and fails the check if written without the index).
+Both APIs return **200** on `/health` as of 26 August. Note `Cors:AllowedOrigins`
+is an array and must be set as `Cors__AllowedOrigins__0` — written without the
+index it binds as a string and fails the check.
+
+Still to do on Phase 2: fourteen of the sixteen `prod_` tables. See the
+`AutoCreateTables` note below for why the running API will not finish the job.
 
 ### What Phase 2 taught, at some cost
 
@@ -129,6 +130,22 @@ Sixteen tables therefore need either eight forced cold starts or, better, the
 same work run from a process that is not frozen. Treat it as a bootstrap
 convenience, not schema management — which is what the `appsettings.json` comment
 means by "set false once the schema lives in real infrastructure code."
+
+**A missing Sentry DSN stopped the app booting.** `SentryOptionsConfigurator` set
+`options.Dsn = null` when the DSN was absent; the SDK reads null as "not
+configured" and throws, where an empty string means "disabled". The comment two
+lines above promised the opposite — "a missing environment variable should cost
+you monitoring, never a boot failure". No configuration could work around it,
+because a blank env var mapped back to null. Fixed in `b2eec50`, with tests for
+the no-DSN path that nothing had covered — the path every environment takes until
+a DSN exists. API Gateway reported it as a 502 containing no mention of Sentry.
+
+**The admin API had no health endpoint.** Until `70b7cbc` the only way to ask
+whether it had started was to call a real endpoint and read 401 as "yes" — which
+is unsound, since 401 is equally what a broken token configuration returns. From
+outside, 401 and 502 look similarly broken and mean opposite things: started and
+refused you, versus never started. Telling them apart needed CloudWatch. This is
+why `deploy.yml` health-checks both APIs.
 
 **Nothing about a healthy-looking 200 tells you which tables you are on.** The
 consumer API returned 200 while zero `prod_` tables existed, because `/health`
