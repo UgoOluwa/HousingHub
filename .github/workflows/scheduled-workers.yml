@@ -54,10 +54,26 @@ on:
         options:
           - verification-expiry
           - inspection-reminders
+      target:
+        description: 'Which environment to run against'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - dev
 
 jobs:
   run-worker:
     runs-on: ubuntu-latest
+
+    # The schedule always runs against production — that is where the badges an
+    # expiry sweep revokes, and the reminders a renter actually receives, live.
+    # A manual run can be aimed at dev to test the wiring without touching real
+    # verifications. The environment is what resolves ADMIN_API_URL and
+    # INTERNAL_WORKER_SECRET, so each one carries its own values.
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'production' }}
+
     steps:
       - name: Decide which worker this run is for
         id: which

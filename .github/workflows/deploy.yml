@@ -1,8 +1,21 @@
 name: Test and Deploy to AWS Lambda
 
+# Two environments, one workflow. `develop` deploys to dev, `master` deploys to
+# production, and the difference is carried entirely by the GitHub Environment
+# each job selects — so the same secret *name* resolves to a different value.
+#
+# WHY PULL REQUESTS RUN HERE TOO
+#
+# Until now the tests ran only after a merge, as the first half of a deploy. A
+# broken change was therefore already on the release branch by the time anything
+# said so. The `test` job now also runs on pull requests; `deploy` explicitly
+# does not.
+
 on:
   push:
-    branches: [master]
+    branches: [develop, master]
+  pull_request:
+    branches: [develop, master]
   workflow_dispatch: {}
 
 env:
@@ -33,10 +46,24 @@ jobs:
 
   deploy:
     needs: test
+    # A pull request proves the tests pass. It must never ship anything.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+
+    # Selects the credentials, the function names and the health URL below.
+    # Put a required reviewer on `production` in the repository settings — that
+    # approval gate is the only thing standing between a merge and real users.
+    environment: ${{ github.ref == 'refs/heads/master' && 'production' || 'dev' }}
+
     permissions:
       id-token: write
       contents: read
+
+    env:
+      # Dev's functions are unsuffixed; production's carry `-prod`. Deriving both
+      # from the branch keeps the two names in one place instead of two workflows.
+      FUNCTION_SUFFIX: ${{ github.ref == 'refs/heads/master' && '-prod' || '' }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -53,10 +80,58 @@ jobs:
       - name: Install Amazon.Lambda.Tools
         run: dotnet tool install -g Amazon.Lambda.Tools
 
+      - name: Announce the target
+        run: |
+          echo "Deploying to functions: HousingHub-API${FUNCTION_SUFFIX} and HousingHub-Admin-API${FUNCTION_SUFFIX}"
+
       - name: Deploy HousingHub.API
         working-directory: src/HousingHub.API
-        run: dotnet lambda deploy-function HousingHub-API --region ${{ env.AWS_REGION }}
+        run: dotnet lambda deploy-function "HousingHub-API${FUNCTION_SUFFIX}" --region ${{ env.AWS_REGION }}
 
       - name: Deploy HousingHub.Admin.API
         working-directory: src/HousingHub.Admin.API
-        run: dotnet lambda deploy-function HousingHub-Admin-API --region ${{ env.AWS_REGION }}
+        run: dotnet lambda deploy-function "HousingHub-Admin-API${FUNCTION_SUFFIX}" --region ${{ env.AWS_REGION }}
+
+      # `deploy-function` updates code and leaves environment variables alone,
+      # which is convenient and also a trap: a setting added in code is simply
+      # absent in AWS until somebody remembers to add it. RequiredSecrets turns
+      # that into a refusal to boot, which API Gateway surfaces as a 502 — so a
+      # health check is the cheapest way to notice. Standing up production the
+      # first time, 200-versus-502 was the only signal that told us anything.
+      - name: Health check
+        env:
+          CONSUMER_HEALTH_URL: ${{ vars.CONSUMER_HEALTH_URL }}
+          ADMIN_HEALTH_URL: ${{ vars.ADMIN_HEALTH_URL }}
+        run: |
+          set -uo pipefail
+
+          if [ -z "${CONSUMER_HEALTH_URL:-}" ] || [ -z "${ADMIN_HEALTH_URL:-}" ]; then
+            echo "::warning::CONSUMER_HEALTH_URL / ADMIN_HEALTH_URL not set on this environment; skipping the health check."
+            exit 0
+          fi
+
+          fail=0
+          for pair in "consumer:${CONSUMER_HEALTH_URL}" "admin:${ADMIN_HEALTH_URL}"; do
+            name="${pair%%:*}"
+            url="${pair#*:}"
+
+            # A cold start after a code update can take a few seconds; retry rather
+            # than failing the deploy on a race.
+            code=0
+            for attempt in 1 2 3 4 5; do
+              code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$url" || echo 000)
+              [ "$code" = "200" ] && break
+              echo "  $name attempt $attempt: $code"
+              sleep 10
+            done
+
+            if [ "$code" = "200" ]; then
+              echo "$name OK ($url)"
+            else
+              echo "::error::$name health check returned $code from $url"
+              echo "  502 usually means the app refused to start — check the CloudWatch log for 'Refusing to start'."
+              fail=1
+            fi
+          done
+
+          exit $fail
