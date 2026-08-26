@@ -76,17 +76,99 @@ Two things shipped alongside it:
   locally and CI is green, compare `dotnet --version` against the SDK the deploy
   workflow installs before believing the tree is broken.
 
-### Phases 1–6 — outstanding
+### Phases 1–6
 
-| Phase | What | Whose |
+| Phase | What | Status |
 |---|---|---|
-| 1 | `develop` branch in all three repos, set as default | **You** |
-| 1 | Vercel **Production Branch → `master`** on both projects | **You** |
-| 2 | S3 bucket, two IAM roles, two Lambdas, two API Gateways | **You** |
-| 3 | GitHub Environments + `deploy.yml` matrix | Agent can do the workflow files |
-| 4 | Vercel environment variables, preview-deploy policy | **You** |
-| 5 | Google OAuth prod client, Resend DNS, Sentry alert rule | **You** |
-| 6 | SuperAdmin bootstrap, full smoke test | **You** |
+| 1 | `develop` default in all three repos, `master` protected | ✅ 18 Aug |
+| 1 | Vercel **Production Branch → `master`** on both projects | ✅ |
+| 2 | S3 bucket, IAM roles, two Lambdas, two API Gateways | ✅ except admin env vars |
+| 3 | GitHub Environments + `deploy.yml` matrix | Workflows written; **Environments not created** |
+| 4 | Vercel environment variables, preview-deploy policy | Outstanding — **you** |
+| 5 | Google OAuth prod client, Resend DNS, Sentry alert rule | Outstanding — **you** |
+| 6 | SuperAdmin bootstrap, full smoke test | Outstanding — **you** |
+
+### Production resources, as built
+
+Roughly fifteen console-set values per Lambda are still invisible to review (see
+the debt list). These are the ones needed to find anything:
+
+| | Value |
+|---|---|
+| Account / region | `289291307029` · `af-south-1` |
+| Consumer API | `https://e2dteg0k7i.execute-api.af-south-1.amazonaws.com/prod` |
+| Admin API | `https://kpwiufp5r8.execute-api.af-south-1.amazonaws.com/admin` |
+| Lambdas | `HousingHub-API-prod` (1024 MB) · `HousingHub-Admin-API-prod` (512 MB) |
+| Execution role | `HousingHub-Lambda-Prod`, inline policy `HousingHub-Prod-Scoped` |
+| Bucket | `housinghub-files-prod` |
+| Table prefix | `prod_` |
+
+Both APIs return **200** on `/health` as of 26 August. Note `Cors:AllowedOrigins`
+is an array and must be set as `Cors__AllowedOrigins__0` — written without the
+index it binds as a string and fails the check.
+
+Still to do on Phase 2: fourteen of the sixteen `prod_` tables. See the
+`AutoCreateTables` note below for why the running API will not finish the job.
+
+### What Phase 2 taught, at some cost
+
+**The scoped IAM role paid for itself on day one.** `Dynamo__TablePrefix` was set
+to `prod` rather than `prod_`, so the initializer tried to create `prodAdmins`,
+`prodCustomers` and so on. Every call was refused — `not authorized to perform:
+dynamodb:CreateTable on ... table/prodVerificationDocuments` — because the policy
+grants `table/prod_*` and that pattern needs the literal underscore. Sixteen
+tables under names nothing would ever read did not get created. This is the
+argument against skipping the resource scoping to save time.
+
+**`Dynamo:AutoCreateTables` does not converge under Lambda.** `InitializeAsync`
+is deliberately backgrounded — its own remarks say schema convergence "must not
+stop the API accepting traffic," which is right for an API. But Lambda freezes
+the execution environment when the handler returns, so the background task gets
+milliseconds per cold start and stops two tables in. Repeated invocations do not
+help: reconciliation runs at *startup*, and a warm container has already started.
+Sixteen tables therefore need either eight forced cold starts or, better, the
+same work run from a process that is not frozen. Treat it as a bootstrap
+convenience, not schema management — which is what the `appsettings.json` comment
+means by "set false once the schema lives in real infrastructure code."
+
+**A missing Sentry DSN stopped the app booting.** `SentryOptionsConfigurator` set
+`options.Dsn = null` when the DSN was absent; the SDK reads null as "not
+configured" and throws, where an empty string means "disabled". The comment two
+lines above promised the opposite — "a missing environment variable should cost
+you monitoring, never a boot failure". No configuration could work around it,
+because a blank env var mapped back to null. Fixed in `b2eec50`, with tests for
+the no-DSN path that nothing had covered — the path every environment takes until
+a DSN exists. API Gateway reported it as a 502 containing no mention of Sentry.
+
+**The admin API had no health endpoint.** Until `70b7cbc` the only way to ask
+whether it had started was to call a real endpoint and read 401 as "yes" — which
+is unsound, since 401 is equally what a broken token configuration returns. From
+outside, 401 and 502 look similarly broken and mean opposite things: started and
+refused you, versus never started. Telling them apart needed CloudWatch. This is
+why `deploy.yml` health-checks both APIs.
+
+**Nothing about a healthy-looking 200 tells you which tables you are on.** The
+consumer API returned 200 while zero `prod_` tables existed, because `/health`
+does not touch DynamoDB. The single line
+`Reconciling DynamoDB schema for 16 tables with prefix 'prod_'` is the only thing
+that says which data a process is about to touch. Read it, not the status code.
+
+### Phase 3 — what is left to do by hand
+
+`deploy.yml` and `scheduled-workers.yml` are updated and expect these to exist:
+
+1. Two **GitHub Environments** named exactly `dev` and `production`.
+2. In each, a secret `AWS_DEPLOY_ROLE_ARN` for that environment's deploy role.
+   `scheduled-workers.yml` also needs `ADMIN_API_URL` and
+   `INTERNAL_WORKER_SECRET` per environment.
+3. In each, two **variables** (not secrets) `CONSUMER_HEALTH_URL` and
+   `ADMIN_HEALTH_URL`. The deploy fails if they return anything but 200, which is
+   what catches a setting added in code and never added in AWS.
+4. A **required reviewer** on `production`. That approval is the only thing
+   between a merge to `master` and real users.
+
+Until the Environments exist, a push to `master` will fail at the credentials
+step rather than deploy anything — which is the safe direction to fail.
 
 Phase 1's two steps must happen **in the same sitting**. Vercel promotes the
 repository's default branch; making `develop` default without changing Vercel's
@@ -164,11 +246,12 @@ both covered in `transaction-lifecycle-plan.md`.
   workflows are disabled automatically after 60 days without a commit. If the
   repo goes quiet the workers stop silently. `scheduled-workers.md` has the
   EventBridge migration.
-- **Nothing is tested before it merges.** `deploy.yml` runs on push to `master`
-  and has no `pull_request` trigger, so the tests run *after* a merge, as the
-  first half of the deploy. The two frontends have no workflows at all and have
-  never had an automated build check. A PR-triggered job in each repo is the
-  cheapest reliability available and belongs with the Phase 3 workflow work.
+- **The frontends are still tested by nobody.** `deploy.yml` now runs its tests on
+  pull requests as well as pushes, so a broken backend change is caught before it
+  reaches a release branch. Neither frontend has any workflow at all, and neither
+  has ever had an automated build check — despite `tsc --noEmit` plus a real
+  build being the only verification those repos have. A PR-triggered job in each
+  is the cheapest reliability left on this list.
 - **Dependabot is disabled on `HousingHub`.** It is why the OpenAPI advisory
   above only ever surfaced as a local build warning. Both frontends have it on
   and are carrying open alerts — `nanoid`, `js-yaml`, `postcss`, all build-time

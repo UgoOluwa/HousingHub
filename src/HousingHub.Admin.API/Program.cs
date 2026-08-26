@@ -98,6 +98,7 @@ public static class Program
             .WriteTo.Console());
 
         builder.Services.AddAdminRateLimiting();
+        builder.Services.AddHealthChecks();
 
         builder.Services.AddControllers(options =>
         {
@@ -308,6 +309,20 @@ public static class Program
             // Relative, so it lands correctly whether or not a path base is applied.
             app.MapGet("/", () => Results.Redirect("scalar")).AllowAnonymous();
         }
+
+        // The consumer API has had one of these; this side did not, so there was no
+        // way to ask whether the admin API had started other than calling a real
+        // endpoint and reading 401 as "up". That is a poor signal: a 401 is also
+        // what a broken token configuration returns.
+        //
+        // Must be anonymous. The FallbackPolicy here denies by default and demands
+        // role=Admin, so without the opt-out a probe gets 401 and any sane monitor
+        // marks the target unhealthy.
+        //
+        // No UIResponseWriter, unlike the consumer: it would mean taking a
+        // HealthChecks.UI.Client dependency on this project for a body nothing
+        // parses. Plain text is what a probe needs.
+        app.MapHealthChecks("/health").AllowAnonymous();
 
         app.MapControllers();
 
