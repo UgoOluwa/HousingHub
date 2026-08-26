@@ -65,7 +65,15 @@ public static class SentryOptionsConfigurator
         // No DSN means the SDK is inert rather than broken. A missing environment
         // variable should cost you monitoring, never a boot failure or a stream of
         // transport errors in the logs.
-        options.Dsn = string.IsNullOrWhiteSpace(dsn) ? null : dsn;
+        //
+        // It must be string.Empty and not null. To the SDK, null means "not
+        // configured, go and look elsewhere", and SettingLocator.GetDsn() then
+        // throws ArgumentNullException — "You must supply a DSN to use Sentry. To
+        // disable Sentry, pass an empty string." Empty string is the documented way
+        // to switch it off. This shipped as null and took the admin API down on its
+        // first production boot: hosting failed to start, and API Gateway reported
+        // it as a 502 with nothing about Sentry in it.
+        options.Dsn = string.IsNullOrWhiteSpace(dsn) ? string.Empty : dsn;
         options.Environment = configuration["Sentry:Environment"] ?? "production";
         if (!string.IsNullOrWhiteSpace(release)) options.Release = release;
 
