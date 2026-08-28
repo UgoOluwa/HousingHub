@@ -347,16 +347,52 @@ untidiness.
 
 ### Phase 6 — bootstrap and smoke test
 
-1. Set `Internal__EnableSuperAdminBootstrap=true` on the prod admin Lambda.
-2. Register the first admin, promote via
-   `PUT /api/Internal/admins/promote`, set the flag back to `false`.
-3. Walk the full journey against production with the browser console open:
+There is a chicken-and-egg problem here worth stating plainly: staff accounts are
+created by SuperAdmins, and the first SuperAdmin has to come from somewhere. Two
+separate switches exist for that, both default-off, and **both must be on at the
+same time**. The original version of this list mentioned only one, which leaves
+you stuck at a 403 with nothing explaining it.
+
+1. On the prod **admin** Lambda, set both:
+   - `Internal__EnableSuperAdminBootstrap=true` — ungates the promote endpoint.
+     While false it returns **404, not 403**, deliberately: a 403 confirms the
+     route exists and is merely switched off.
+   - `ADMIN_SEED_KEY=<fresh random value>` — ungates admin creation. Note this
+     one is read straight from the environment via
+     `Environment.GetEnvironmentVariable`, **not** through `IConfiguration`, so it
+     is a flat name with no `__` nesting, it is absent from
+     `RequiredSecrets.Validate`, and nothing will tell you it is missing except a
+     403 from the create endpoint. Generate it fresh —
+     `docs/SECRET-ROTATION-REQUIRED.md` explains why dev's is tainted.
+
+2. Create the admin, then promote it:
+   - `POST /api/AdminAuth/create` with `{ SeedKey, Email, Password, FirstName,
+     LastName }`. The password is vestigial on this path — admin login is
+     OTP-only — but the field is required.
+   - `PUT /api/Internal/admins/promote?email=<email>` with an `X-Worker-Secret`
+     header matching `Internal:WorkerSecret`. Rate limited to 10 requests per
+     5 minutes per IP.
+
+3. **Turn both off again**: `Internal__EnableSuperAdminBootstrap=false`, and
+   delete `ADMIN_SEED_KEY` entirely rather than blanking it. Left on, an
+   anonymous caller who learns the seed key can mint an account with
+   `role=Admin` — which the fallback policy accepts for everything that is not
+   SuperAdmin-only, including reading KYC documents through presigned URLs.
+   Verify by confirming the create endpoint 403s and promote 404s afterwards.
+4. Walk the full journey against production with the browser console open:
    sign up, verify email, create a listing with photos and a video, publish
    (KYC gate should block until identity is verified), search from a signed-out
    browser, book an inspection, open a verification case, review it from the
    admin UI, approve, confirm the badge and the email.
-4. Trigger both workers manually from Actions and confirm 200.
-5. Confirm in the DynamoDB console that only `prod_*` tables gained rows.
+
+   Keep the console open throughout rather than checking at the end. A refused
+   CSP request is silent — it shows up as a blank panel or an image that never
+   arrives, never as an error — and the S3 origin differs per environment now,
+   so production is the first place a wrong value can appear.
+
+5. Trigger both workers manually from Actions and confirm 200. Use the
+   `workflow_dispatch` target input to pick `production`.
+6. Confirm in the DynamoDB console that only `prod_*` tables gained rows.
 
 That last check is the one that catches a missed prefix, and it is much easier
 to fix on day one than after a week of mixed data.

@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Mvc;
+using HousingHub.Core.CustomResponses;
 using System.Text;
 using Amazon;
 using Amazon.DynamoDBv2;
@@ -7,9 +9,9 @@ using Asp.Versioning;
 using HealthChecks.UI.Client;
 using HousingHub.API.Common;
 using HousingHub.API.Common.Extensions;
-using HousingHub.API.Common.Middlewares;
 using HousingHub.API.Hubs;
 using HousingHub.Application;
+using HousingHub.Application.Commons.Web;
 using HousingHub.Core.Configuration;
 using HousingHub.Core.Observability;
 using HousingHub.Data.Contexts;
@@ -132,6 +134,33 @@ namespace HousingHub.API
                 // global rather than per-endpoint.
                 options.Filters.Add<PaginationClampFilter>();
             });
+            // Model-state failures are shaped into the same envelope as everything else.
+            //
+            // These are rejected before the action runs, so ValidationBehaviour and the
+            // exception middleware never see them. Without this the response is the
+            // framework's ValidationProblemDetails, which has no `message` field — and a
+            // client looking for one falls through to whatever its HTTP library says,
+            // which is how a user came to be shown "Request failed with status code 400".
+            builder.Services.Configure<ApiBehaviorOptions>(options =>
+            {
+                options.InvalidModelStateResponseFactory = context =>
+                {
+                    var failures = context.ModelState
+                        .Where(entry => entry.Value?.Errors.Count > 0)
+                        .Select(entry => new KeyValuePair<string, string[]>(
+                            entry.Key,
+                            entry.Value!.Errors.Select(e => e.ErrorMessage).ToArray()))
+                        .ToList();
+
+                    var body = new BaseErrorResponse(
+                        ValidationMessageFormatter.DescribeEach(failures).ToHashSet(),
+                        StatusCodes.Status400BadRequest.ToString(),
+                        ValidationMessageFormatter.Summarise(failures));
+
+                    return new BadRequestObjectResult(body);
+                };
+            });
+
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddTransient<IConfigureOptions<SwaggerGenOptions>, ConfigureSwaggerOptions>();
