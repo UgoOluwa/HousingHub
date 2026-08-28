@@ -17,6 +17,8 @@ public record InspectionDto(
     DateTime? RescheduledDate,
     TimeSpan? RescheduledTime,
     string? RescheduleNote,
+    /// <summary>Who proposed the pending reschedule; the other party is the one who answers it.</summary>
+    Guid? RescheduleRequestedById,
     string? PropertyImageUrl = null,
     Guid? PropertyOwnerId = null,
     string? CustomerName = null,

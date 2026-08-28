@@ -138,6 +138,16 @@ public class PropertyCommandService : IPropertyCommandService
                         property.Latitude = coordinates.Value.Latitude;
                         property.Longitude = coordinates.Value.Longitude;
                     }
+                    else
+                    {
+                        // Best-effort is right — this must not block a listing — but it
+                        // is not free: GetNearbyPropertiesAsync skips anything without
+                        // coordinates, so this listing will never appear under
+                        // "properties near you" and nothing else would ever say so.
+                        _logger.LogWarning(
+                            "Property {PropertyId} saved without coordinates; it will not appear in nearby results. Address: {Place}, {City}, {State}",
+                            property.Id, address.Place, address.City, address.State);
+                    }
                 }
 
                 var possibleDuplicate = await FindPossibleDuplicateAsync(

@@ -40,7 +40,14 @@ internal sealed class NominatimGeocodingService : IGeocodingService
             if (match == null
                 || !double.TryParse(match.Lat, System.Globalization.CultureInfo.InvariantCulture, out var lat)
                 || !double.TryParse(match.Lon, System.Globalization.CultureInfo.InvariantCulture, out var lon))
+            {
+                // A no-match used to return null with nothing logged, which made it
+                // indistinguishable from never having been called. The consequence is
+                // invisible too: the listing simply never appears under "properties
+                // near you", and no one is told why.
+                _logger.LogWarning("Geocoding returned no usable match for \"{Query}\"", query);
                 return null;
+            }
 
             return (lat, lon);
         }
