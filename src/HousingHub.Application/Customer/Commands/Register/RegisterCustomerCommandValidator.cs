@@ -1,3 +1,4 @@
+using HousingHub.Core.CustomResponses;
 ﻿using FluentValidation;
 
 namespace HousingHub.Application.Customer.Commands.Register;
@@ -10,7 +11,9 @@ public class RegisterCustomerCommandValidator : AbstractValidator<RegisterCustom
         RuleFor(x => x.FirstName).NotNull().NotEmpty();
         RuleFor(x => x.LastName).NotNull().NotEmpty();
         RuleFor(x => x.PhoneNumber).NotNull().NotEmpty();
-        RuleFor(x => x.CustomerType).IsInEnum().NotNull().NotEmpty();
+        RuleFor(x => x.CustomerType).IsInEnum()
+            .WithMessage(ResponseMessages.InvalidAccountType)
+            .NotNull().NotEmpty();
         RuleFor(c => c.Password).NotEmpty().MinimumLength(8);
     }
 }
