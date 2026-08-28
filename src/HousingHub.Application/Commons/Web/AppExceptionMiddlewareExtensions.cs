@@ -1,6 +1,7 @@
-﻿namespace HousingHub.API.Common.Middlewares;
+using Microsoft.AspNetCore.Builder;
+﻿namespace HousingHub.Application.Commons.Web;
 
-public static class UseCustomMiddlerwares
+public static class AppExceptionMiddlewareExtensions
 {
     public static IApplicationBuilder UseAppExceptionMiddleware(this IApplicationBuilder builder)
     {

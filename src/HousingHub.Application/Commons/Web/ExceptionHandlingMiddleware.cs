@@ -1,10 +1,12 @@
 ﻿using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Application.Commons.Exceptions;
 
-namespace HousingHub.API.Common.Middlewares;
+namespace HousingHub.Application.Commons.Web;
 
-internal class ExceptionHandlingMiddleware : IMiddleware
+public class ExceptionHandlingMiddleware : IMiddleware
 {
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
 
