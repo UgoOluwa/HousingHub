@@ -353,6 +353,7 @@ public class InspectionCommandService : IInspectionCommandService
             inspection.RescheduledDate = request.RescheduledDate;
             inspection.RescheduledTime = request.RescheduledTime;
             inspection.RescheduleNote = request.Note;
+            inspection.RescheduleRequestedById = authenticatedUserId;
 
             await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
 
@@ -441,6 +442,13 @@ public class InspectionCommandService : IInspectionCommandService
             if (inspection.Status != InspectionStatus.Rescheduled)
                 return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionNotPendingOrRescheduled);
 
+            // A proposal is answered by the other party, not by the one who made it.
+            // Both were previously offered Accept and Decline, and both were allowed
+            // to use them, so a proposer could confirm their own new date and the
+            // other side would simply find the inspection moved.
+            if (inspection.RescheduleRequestedById == authenticatedUserId)
+                return new BaseResponse<InspectionDto>(null, false, string.Empty, ResponseMessages.InspectionAwaitingOtherParty);
+
             if (accept)
             {
                 inspection.ScheduledDate = inspection.RescheduledDate!.Value;
@@ -455,6 +463,8 @@ public class InspectionCommandService : IInspectionCommandService
                 inspection.Status = InspectionStatus.Confirmed;
                 inspection.DeclineNote = note;
             }
+
+            inspection.RescheduleRequestedById = null;
 
             await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
 

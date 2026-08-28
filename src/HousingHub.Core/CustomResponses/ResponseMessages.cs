@@ -90,6 +90,9 @@ public static class ResponseMessages
     public const string InspectionNotPendingOrRescheduled = "Only pending or rescheduled inspections can be responded to.";
     public const string InspectionNotOwner = "Only the property owner can respond to inspections.";
     public const string InspectionNotCustomer = "Only the customer who scheduled the inspection can respond to a reschedule.";
+    /// <summary>Shown when someone tries to answer a reschedule they proposed.</summary>
+    public const string InspectionAwaitingOtherParty = "You proposed this new time. It's waiting on the other person to accept or decline.";
+
     public const string InspectionNotParticipant = "Only the property owner or the customer who scheduled the inspection can reschedule.";
     public const string InspectionCannotReschedule = "Only pending or confirmed inspections can be rescheduled.";
     public const string CannotInspectOwnProperty = "You cannot schedule an inspection for your own property.";
