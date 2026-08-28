@@ -33,6 +33,17 @@ public class PropertyInspection : BaseEntity
 
     public string? RescheduleNote { get; set; }
 
+    /// <summary>
+    /// Who proposed the pending reschedule. Null on inspections that have never been
+    /// rescheduled, and on rows written before this existed.
+    /// </summary>
+    /// <remarks>
+    /// Without it, "respond to a reschedule" cannot tell the two parties apart: both
+    /// were shown Accept/Decline for a date one of them had just proposed, and the
+    /// server let the proposer accept their own suggestion.
+    /// </remarks>
+    public Guid? RescheduleRequestedById { get; set; }
+
     /// <summary>Set once the 24-hour reminder has been sent, so the reminder worker never sends it twice.</summary>
     public DateTime? ReminderSentAt { get; set; }
 
