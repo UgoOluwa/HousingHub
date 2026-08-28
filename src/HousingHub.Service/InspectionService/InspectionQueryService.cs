@@ -385,10 +385,20 @@ public class InspectionQueryService : IInspectionQueryService
         }
     }
 
+    /// <summary>First <b>image</b>, not first file.</summary>
+    /// <remarks>
+    /// Both of these took the earliest upload of any type. A listing whose video was
+    /// uploaded first therefore reported an .mp4 as its image, and the clients hand
+    /// that to next/image, which rejects it with 400 and renders a broken thumbnail.
+    /// The method name has always said image; only now does it mean it.
+    /// </remarks>
     private async Task<string?> GetFirstPropertyImageUrlAsync(Guid propertyId)
     {
         var files = await _unitOfWOrk.PropertyFileQueries.GetAllAsync(f => f.PropertyId == propertyId);
-        return files.OrderBy(f => f.DateUploaded).FirstOrDefault()?.FileUrl;
+        return files
+            .Where(f => f.Type == PropertyFileType.Image)
+            .OrderBy(f => f.DateUploaded)
+            .FirstOrDefault()?.FileUrl;
     }
 
     private async Task<Dictionary<Guid, string?>> GetPropertyImageUrlsAsync(IEnumerable<Guid> propertyIds)
@@ -399,6 +409,7 @@ public class InspectionQueryService : IInspectionQueryService
 
         var files = await _unitOfWOrk.PropertyFileQueries.GetManyByAsync(f => f.PropertyId, ids);
         return files
+            .Where(f => f.Type == PropertyFileType.Image)
             .GroupBy(f => f.PropertyId)
             .ToDictionary(g => g.Key, g => (string?)g.OrderBy(f => f.DateUploaded).First().FileUrl);
     }
