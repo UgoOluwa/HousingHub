@@ -49,6 +49,14 @@ correctly on the server and displayed to no one: `PropertyDto.IsVerified`,
 field that represents a claim about a user, trace it to a rendered pixel or it
 is not done.
 
+**Declared and never populated — the inverse of the above.** `AdminPropertyListDto.ThumbnailUrl`
+and `VerificationCaseDto.SubjectLabel` were both read by clients and set by
+nothing. One made every admin thumbnail fall through to `files[0]`, which is a
+video as often as not; the other left every row of a submitter's verification list
+reading "Property verification" with no way to tell which property. Both are found
+the same way as the bug above — trace the field end to end rather than reading
+either half.
+
 **Read `IsBusinessVerified`, never `BusinessVerificationTier`.** The tier
 survives expiry until a sweep revokes it. The computed property checks the date.
 Same shape for title verification.
