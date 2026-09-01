@@ -293,12 +293,25 @@ rather than reading either half.
 
 **Technical debt, in rough priority order:**
 
-- **`Dynamo:UsePublishedIndex` is `false`.** Every published listing predating
-  the sparse index is missing from it, so the homepage still scans the table.
-  Fixing it means re-saving those rows — `data-backfill-required.md`. Note that
-  production, starting empty, can set this `true` from day one.
-- **No production backups.** DynamoDB point-in-time recovery is off by default
-  and is per-table. Turn it on for the `prod_*` tables once they exist.
+- **`Dynamo:UsePublishedIndex` is `true` in production** and `false` in dev.
+  Production started empty, so every published listing is in the sparse index and
+  the homepage reads it rather than scanning. Dev still scans: its rows predate
+  the index and are absent from it until re-saved — `data-backfill-required.md`.
+  The two environments therefore exercise different read paths, which is worth
+  remembering when a query behaves differently in production.
+- ~~**No production backups.**~~ Point-in-time recovery is **enabled on all
+  sixteen `prod_*` tables**, with deletion protection alongside it — 31 August
+  2026. The two cover different failures and you want both: PITR undoes bad
+  writes for 35 days, and deleting a table destroys its continuous backups with
+  it, which is what deletion protection prevents.
+
+  Two things about PITR before relying on it. **A restore creates a new table**
+  and never overwrites in place, so recovering means restoring to
+  `prod_Customers_restored` and then getting the app to point at it — a rename or
+  a `Dynamo__TablePrefix` change and a redeploy. Worth rehearsing once on a
+  throwaway table rather than discovering the shape of it mid-incident. And the
+  **dev tables remain unprotected**, holding every record that predates the fixes
+  from the Phase 6 smoke walk.
 - **Configuration lives in the AWS console.** Roughly fifteen environment
   variables per Lambda, set by hand, invisible to review, lost if a function is
   recreated. Survivable at two environments, painful at three. Terraform or SAM
