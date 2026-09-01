@@ -270,9 +270,13 @@ public class VerificationService : IVerificationService
             var ordered = cases.OrderByDescending(c => c.DateCreated).ToList();
             var counts = await CountDocumentsAsync(ordered.Select(c => c.Id));
 
+            // includeLabels on the submitter's own list too. The reasoning for leaving
+            // it off — that they already know what they submitted — holds for one
+            // listing and fails for several: every row read "Property verification"
+            // with nothing to say which property.
             var dtos = new List<VerificationCaseDto>(ordered.Count);
             foreach (var item in ordered)
-                dtos.Add(await ToDtoAsync(item, counts.GetValueOrDefault(item.Id, 0)));
+                dtos.Add(await ToDtoAsync(item, counts.GetValueOrDefault(item.Id, 0), includeLabels: true));
 
             return Ok(dtos);
         }
@@ -747,10 +751,10 @@ public class VerificationService : IVerificationService
 
         if (includeLabels)
         {
-            // Only for the reviewer's screens. Two extra key reads per case is a fine
-            // price for a queue a human can triage without opening every row, but it
-            // is not worth paying on the submitter's own list where they already know
-            // what they submitted.
+            // Two extra key reads per case, paid on the reviewer's queue and on the
+            // submitter's own list. Both need to name the subject: a queue a human can
+            // triage without opening every row, and a list where "Property
+            // verification" repeated four times identifies nothing.
             var submitter = await _unitOfWork.CustomerQueries.GetByIdAsync(source.SubmittedByCustomerId);
             submittedByName = submitter is null ? null : $"{submitter.FirstName} {submitter.LastName}";
 
