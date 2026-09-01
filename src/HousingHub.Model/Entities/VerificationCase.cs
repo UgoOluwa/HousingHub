@@ -229,6 +229,24 @@ public class VerificationCase : BaseEntity
     }
 
     /// <summary>
+    /// Abandons a draft. Returns false unless the case is still in Draft.
+    /// </summary>
+    /// <remarks>
+    /// Draft only, deliberately. Once submitted the case belongs to the reviewer,
+    /// and letting a submitter withdraw it mid-review would let someone pull a case
+    /// back the moment it started going badly — which is exactly the case a reviewer
+    /// most needs to finish, since EscalatedNameMismatch is decided from it.
+    /// </remarks>
+    public bool TryCancel()
+    {
+        if (Status != VerificationCaseStatus.Draft) return false;
+
+        Status = VerificationCaseStatus.Cancelled;
+        DateModified = DateTime.UtcNow;
+        return true;
+    }
+
+    /// <summary>
     /// Marks the case as actively being looked at, so two admins do not duplicate
     /// the work. Returns false if it was not merely Submitted.
     /// </summary>

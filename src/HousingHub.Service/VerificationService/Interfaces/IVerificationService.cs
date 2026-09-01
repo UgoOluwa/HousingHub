@@ -37,6 +37,9 @@ public interface IVerificationService
     /// Hands a draft to review. Fails if the required documents for the requested
     /// tier are not all present.
     /// </summary>
+    /// <summary>Abandons a draft case and deletes its uploaded documents. Draft only.</summary>
+    Task<BaseResponse<bool>> CancelCaseAsync(Guid customerId, Guid caseId);
+
     Task<BaseResponse<VerificationCaseDto>> SubmitCaseAsync(Guid customerId, Guid caseId);
 
     /// <summary>Every case the caller has submitted, newest first.</summary>

@@ -29,6 +29,79 @@ public class VerificationCaseStateTests
         return c;
     }
 
+    // ── Cancel ───────────────────────────────────────────────────
+
+    [Fact]
+    public void TryCancel_OnADraft_Succeeds()
+    {
+        var c = NewCase();
+
+        Assert.True(c.TryCancel());
+        Assert.Equal(VerificationCaseStatus.Cancelled, c.Status);
+    }
+
+    [Fact]
+    public void TryCancel_OnADraft_ClosesItToFurtherDocuments()
+    {
+        var c = NewCase();
+        c.TryCancel();
+
+        Assert.False(c.CanAcceptDocuments);
+    }
+
+    [Fact]
+    public void TryCancel_OnceSubmitted_Refuses()
+    {
+        // The case belongs to the reviewer from here. Withdrawing mid-review would
+        // let someone pull a case back the moment it started going badly, which is
+        // exactly the case a reviewer most needs to finish.
+        var c = SubmittedCase();
+
+        Assert.False(c.TryCancel());
+        Assert.Equal(VerificationCaseStatus.Submitted, c.Status);
+    }
+
+    [Fact]
+    public void TryCancel_UnderReview_Refuses()
+    {
+        var c = SubmittedCase();
+        c.TryBeginReview(AdminId);
+
+        Assert.False(c.TryCancel());
+        Assert.Equal(VerificationCaseStatus.UnderReview, c.Status);
+    }
+
+    [Fact]
+    public void TryCancel_Twice_RefusesTheSecondTime()
+    {
+        var c = NewCase();
+        c.TryCancel();
+
+        Assert.False(c.TryCancel());
+        Assert.Equal(VerificationCaseStatus.Cancelled, c.Status);
+    }
+
+    [Fact]
+    public void ACancelledCase_CannotBeSubmitted()
+    {
+        var c = NewCase();
+        c.TryCancel();
+
+        Assert.False(c.TrySubmit());
+        Assert.Equal(VerificationCaseStatus.Cancelled, c.Status);
+    }
+
+    [Fact]
+    public void ACancelledCase_IsNotAwaitingReview()
+    {
+        // It must never surface in the admin queue: ReviewQueueStatus is a sparse
+        // index, and a cancelled case appearing there would be work nobody can do.
+        var c = NewCase();
+        c.TryCancel();
+
+        Assert.False(c.IsAwaitingReview);
+    }
+
     // ── Draft ────────────────────────────────────────────────────
 
     [Fact]

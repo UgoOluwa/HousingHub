@@ -142,6 +142,15 @@ public enum VerificationCaseStatus
     /// <summary>Approved once, but a document has since expired.</summary>
     Expired = 6,
 
+    /// <summary>Abandoned by the submitter while still a draft.</summary>
+    /// <remarks>
+    /// A distinct terminal state rather than a delete. Nothing has been reviewed at
+    /// this point, so there is no decision to preserve — but there is a record that
+    /// someone started and stopped, which is worth keeping when the subject of the
+    /// case is a claim about a business or a land title.
+    /// </remarks>
+    Cancelled = 8,
+
     /// <summary>
     /// The name on the documents does not match the account holder.
     /// </summary>
