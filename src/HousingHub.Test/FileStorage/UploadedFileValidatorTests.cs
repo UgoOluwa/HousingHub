@@ -59,7 +59,10 @@ public class UploadedFileValidatorTests
         var result = UploadedFileValidator.Validate(file.Object, UploadedFileValidator.ImageExtensions);
 
         Assert.False(result.IsValid);
-        Assert.Contains("10MB", result.Error);
+        // Derived from the limit rather than written out. This asserted on "10MB",
+        // which tied it to a number the platform could never honour — so correcting
+        // the limit broke the test instead of the test catching the limit.
+        Assert.Contains($"{UploadedFileValidator.DefaultMaxBytes / (1024 * 1024)}MB", result.Error);
     }
 
     [Fact]
