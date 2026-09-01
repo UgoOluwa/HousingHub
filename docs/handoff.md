@@ -101,11 +101,26 @@ Two things shipped alongside it:
 | 6 | SuperAdmin bootstrap, full smoke test | ✅ |
 
 Both frontends also gained a CI workflow, which neither had ever had: `tsc
---noEmit` plus a real production build on every pull request. Lint runs
-**non-blocking** at roughly 476 errors on the consumer app and 62 on the admin
-one — gating on that would fail every PR on day one and the check would be
-switched off within a week. Clear the admin app first; it is the tractable one.
-Drop `continue-on-error` when a repo reaches zero.
+--noEmit` plus a real production build on every pull request.
+
+Lint differs between them. **`Housing-Hub-Admin` is at zero errors and lint is a
+hard gate there.** Getting it there was not cosmetic — removing an `any` on the
+KYC review queue surfaced a read of `item.createdAt` where the field is
+`dateCreated`, so the submitted-date column had been resolving to `undefined` for
+every account whose `kycSubmittedAt` was null. A wrong date in the list reviewers
+triage from, hidden by the annotation.
+
+Two rules there are `warn` rather than fixed —
+`react-hooks/set-state-in-effect` (10) and `react-hooks/static-components` (2).
+Both are real, both want state derived differently rather than annotated away, and
+every instance sits in an auth guard, a role context or a settings prefill.
+Behavioural changes in the app that approves KYC, unverifiable without signing in
+and walking the review flow. Raise them to `error` once cleared.
+
+**`Housing-Hub-FE` lint is still non-blocking at roughly 476 errors.** A separate,
+larger job. Note also that a local run overcounts: `.deleted-scratch/` is
+gitignored, so CI never sees it — the admin app read 62 locally and 26 in CI until
+eslint was told to ignore it too.
 
 ### Production resources, as built
 
