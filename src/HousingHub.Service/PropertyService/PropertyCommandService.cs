@@ -106,6 +106,8 @@ public class PropertyCommandService : IPropertyCommandService
             {
                 OwnerId = ownerId,
                 Features = request.Features,
+                Bedrooms = request.Bedrooms,
+                Bathrooms = request.Bathrooms,
                 ContactPersonName = request.ContactPersonName,
                 ContactPersonEmail = request.ContactPersonEmail,
                 ContactPersonPhoneNumber = request.ContactPersonPhoneNumber,
@@ -368,6 +370,12 @@ public class PropertyCommandService : IPropertyCommandService
             if (request.Availability.HasValue) property.Availability = request.Availability.Value;
             if (request.PropertyLeaseType.HasValue) property.PropertyLeaseType = request.PropertyLeaseType.Value;
             if (request.Features.HasValue) property.Features = request.Features.Value;
+            // Patch semantics like every field around them: null means "not supplied by
+            // this request", so an edit that omits them leaves the stored counts alone.
+            // Clearing a count therefore isn't expressible here — nor is it anywhere else
+            // in this method, and inventing a sentinel for one field would be worse.
+            if (request.Bedrooms.HasValue) property.Bedrooms = request.Bedrooms.Value;
+            if (request.Bathrooms.HasValue) property.Bathrooms = request.Bathrooms.Value;
             if (request.ContactPersonName != null) property.ContactPersonName = request.ContactPersonName;
             if (request.ContactPersonEmail != null) property.ContactPersonEmail = request.ContactPersonEmail;
             if (request.ContactPersonPhoneNumber != null) property.ContactPersonPhoneNumber = request.ContactPersonPhoneNumber;

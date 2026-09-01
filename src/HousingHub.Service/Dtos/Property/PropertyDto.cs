@@ -96,4 +96,9 @@ public record PropertyDto(
     Model.Enums.VerificationTier ListingVerificationTier = Model.Enums.VerificationTier.Unverified,
     string? UnpublishReason = null,
     bool IsFlaggedDuplicate = false,
-    Guid? PossibleDuplicateOfPropertyId = null);
+    Guid? PossibleDuplicateOfPropertyId = null,
+
+    /// <summary>Bedroom count, or null when the lister did not state one — see Property.Bedrooms.</summary>
+    int? Bedrooms = null,
+    /// <summary>Bathroom count, or null when the lister did not state one.</summary>
+    int? Bathrooms = null);

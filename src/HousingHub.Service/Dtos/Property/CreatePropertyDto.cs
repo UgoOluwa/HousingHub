@@ -20,4 +20,6 @@ public record CreatePropertyDto(
     double? Latitude,
     double? Longitude,
     IList<IFormFile>? Files = null,
-    bool ConfirmDuplicate = false);
+    bool ConfirmDuplicate = false,
+    int? Bedrooms = null,
+    int? Bathrooms = null);

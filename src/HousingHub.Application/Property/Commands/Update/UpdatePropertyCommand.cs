@@ -19,4 +19,6 @@ public record UpdatePropertyCommand(
     string? ContactPersonEmail,
     string? ContactPersonPhoneNumber,
     UpdatePropertyAddressDto? PropertyAddress,
-    Guid AuthenticatedUserId) : IRequest<BaseResponse<PropertyDto?>>;
+    Guid AuthenticatedUserId,
+    int? Bedrooms = null,
+    int? Bathrooms = null) : IRequest<BaseResponse<PropertyDto?>>;
