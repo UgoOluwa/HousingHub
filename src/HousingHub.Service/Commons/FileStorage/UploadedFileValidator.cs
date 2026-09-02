@@ -18,8 +18,35 @@ namespace HousingHub.Service.Commons.FileStorage;
 /// </remarks>
 public static class UploadedFileValidator
 {
-    public const long DefaultMaxBytes = 10 * 1024 * 1024;   // 10 MB
-    public const long DocumentMaxBytes = 15 * 1024 * 1024;  // 15 MB — scans run larger
+    /// <summary>Ceiling for uploads that arrive through the API.</summary>
+    /// <remarks>
+    /// <para>
+    /// 4 MB, and not by preference. Every upload here crosses API Gateway, which caps
+    /// a payload at 10 MB, and then Lambda, which caps it at 6 MB — and the base64
+    /// encoding applied on the way through inflates binary by about a third. The real
+    /// ceiling is therefore somewhere near 4.5 MB of file.
+    /// </para>
+    /// <para>
+    /// These constants used to read 10 MB and 15 MB. Neither was achievable, and the
+    /// failure was maximally unhelpful: API Gateway rejects an oversized request
+    /// before the function is invoked, so nothing reached CloudWatch, and its error
+    /// carries no CORS headers, so the browser reported a bare network failure. A
+    /// user with a 12 MB scan was told to check their connection.
+    /// </para>
+    /// <para>
+    /// Both clients check the same number before sending. Raising it means moving to
+    /// presigned direct-to-S3 uploads, which bypass both ceilings — until then this
+    /// is the honest figure.
+    /// </para>
+    /// </remarks>
+    public const long DefaultMaxBytes = 4 * 1024 * 1024;
+
+    /// <summary>
+    /// Identity and title documents. The same platform ceiling applies — a scan does
+    /// run larger than a photo, which is an argument for presigned uploads rather
+    /// than for a number this stack cannot honour.
+    /// </summary>
+    public const long DocumentMaxBytes = 4 * 1024 * 1024;
 
     public static readonly IReadOnlySet<string> ImageExtensions =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -82,7 +109,7 @@ public static class UploadedFileValidator
             return Result.Invalid("No file was supplied.");
 
         if (file.Length > maxBytes)
-            return Result.Invalid($"File exceeds the {maxBytes / (1024 * 1024)}MB limit.");
+            return Result.Invalid($"That file is too large. Please upload one under {maxBytes / (1024 * 1024)}MB.");
 
         var extension = Path.GetExtension(file.FileName);
 

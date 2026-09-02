@@ -4,9 +4,9 @@ Written at the point of moving this work into Claude Code. Read this before
 picking anything up; it says what is done, what is half-done, and what is
 waiting on a human.
 
-**Date:** 18 August 2026
-**Head commits (master):** `HousingHub` `c8a363d` · `Housing-Hub-FE` `1eab97c` ·
-`Housing-Hub-Admin` `600be69`
+**Date:** 31 August 2026
+**Head commits (master):** `HousingHub` `3434a1b` · `Housing-Hub-FE` `84bec80` ·
+`Housing-Hub-Admin` `0d9b523`
 
 ---
 
@@ -29,8 +29,20 @@ imply the sequence is settled.
 
 ## Immediate: nothing
 
-`NEXT_PUBLIC_S3_ORIGIN` is set on both Vercel projects, and everything below has
-shipped. The next move is Phase 1, and Phase 1 is entirely yours.
+The environment split is done — all six phases. Production runs on its own
+Lambdas, API Gateways, S3 bucket and `prod_` tables, deployed by the pipeline,
+and the full journey has been walked against it.
+
+Two things are known-unverified rather than done:
+
+- **Sentry is confirmed on the frontends only.** An event was raised from the
+  browser and arrived. Nothing has confirmed the API side, because these services
+  catch their own exceptions and return a failed `BaseResponse` — so the SDK is
+  bound to `LogError` rather than to unhandled exceptions, and there is no way to
+  force an event from outside without a deliberate failure path. The first real
+  backend error will answer it, which is a poor moment to find out.
+- **The beta still has not started**, and the argument under "The one thing to
+  understand first" is unchanged.
 
 ---
 
@@ -82,11 +94,33 @@ Two things shipped alongside it:
 |---|---|---|
 | 1 | `develop` default in all three repos, `master` protected | ✅ 18 Aug |
 | 1 | Vercel **Production Branch → `master`** on both projects | ✅ |
-| 2 | S3 bucket, IAM roles, two Lambdas, two API Gateways | ✅ except admin env vars |
-| 3 | GitHub Environments + `deploy.yml` matrix | Workflows written; **Environments not created** |
-| 4 | Vercel environment variables, preview-deploy policy | Outstanding — **you** |
-| 5 | Google OAuth prod client, Resend DNS, Sentry alert rule | Outstanding — **you** |
-| 6 | SuperAdmin bootstrap, full smoke test | Outstanding — **you** |
+| 2 | S3 bucket, IAM roles, two Lambdas, two API Gateways | ✅ |
+| 3 | GitHub Environments + `deploy.yml` matrix | ✅ deploying both branches |
+| 4 | Vercel environment variables, preview-deploy policy | ✅ |
+| 5 | Google OAuth prod client, Resend DNS, Sentry | ✅ (Sentry unverified on the APIs) |
+| 6 | SuperAdmin bootstrap, full smoke test | ✅ |
+
+Both frontends also gained a CI workflow, which neither had ever had: `tsc
+--noEmit` plus a real production build on every pull request.
+
+Lint differs between them. **`Housing-Hub-Admin` is at zero errors and lint is a
+hard gate there.** Getting it there was not cosmetic — removing an `any` on the
+KYC review queue surfaced a read of `item.createdAt` where the field is
+`dateCreated`, so the submitted-date column had been resolving to `undefined` for
+every account whose `kycSubmittedAt` was null. A wrong date in the list reviewers
+triage from, hidden by the annotation.
+
+Two rules there are `warn` rather than fixed —
+`react-hooks/set-state-in-effect` (10) and `react-hooks/static-components` (2).
+Both are real, both want state derived differently rather than annotated away, and
+every instance sits in an auth guard, a role context or a settings prefill.
+Behavioural changes in the app that approves KYC, unverifiable without signing in
+and walking the review flow. Raise them to `error` once cleared.
+
+**`Housing-Hub-FE` lint is still non-blocking at roughly 476 errors.** A separate,
+larger job. Note also that a local run overcounts: `.deleted-scratch/` is
+gitignored, so CI never sees it — the admin app read 62 locally and 26 in CI until
+eslint was told to ignore it too.
 
 ### Production resources, as built
 
@@ -107,8 +141,9 @@ Both APIs return **200** on `/health` as of 26 August. Note `Cors:AllowedOrigins
 is an array and must be set as `Cors__AllowedOrigins__0` — written without the
 index it binds as a string and fails the check.
 
-Still to do on Phase 2: fourteen of the sixteen `prod_` tables. See the
-`AutoCreateTables` note below for why the running API will not finish the job.
+All sixteen `prod_` tables exist. Fourteen of them were created by a script run
+from CloudShell rather than by the API — see the `AutoCreateTables` note below for
+why the running API will not finish the job itself.
 
 ### What Phase 2 taught, at some cost
 
@@ -216,6 +251,47 @@ both covered in `transaction-lifecycle-plan.md`.
 
 ---
 
+## What the Phase 6 smoke walk found
+
+Fifteen bugs, none of them environment-specific. Every one had been reachable in
+dev the whole time; Phase 6 is simply the first occasion anyone walked the entire
+journey end to end. That is the case for the smoke walk existing, and the case
+for doing it again after any large change.
+
+**They were nearly all one shape: a contract stated in one place and not honoured
+in another.** Worth holding onto, because it predicts where to look next.
+
+| What was claimed | What was true |
+|---|---|
+| `SentryOptionsConfigurator`: "a missing environment variable should cost you monitoring, never a boot failure" | A null DSN threw and the admin API would not start |
+| The admin API had a health endpoint | It had none; the only way to ask was to read a 401 as "up" |
+| The KYC form's fields were what the profile endpoint required | It also required a phone number, which the form never asked for, so every Google signup dead-ended |
+| Frontend and backend agreed on `PropertyType` | Orderings differed entirely; every listing saved as a type other than the one chosen, and `PropertyLeaseType` recorded "Sale" as "Lease" |
+| `getMyProperties` returned `PropertyDetail[]` | It returns a paginated envelope; the verification page believed the type and crashed on `.map` |
+| `files[0]` is the cover image | It is the first upload of any type, so a video reached `next/image`, which rejects it |
+| `GetFirstPropertyImageUrlAsync` returned an image | It returned the first file, regardless of type |
+| The KYC card: verification is needed to request inspections | Nothing checked it, on either side |
+| `thumbnailUrl`, `SubjectLabel` | Declared on DTOs and never populated |
+| The reschedule panel was "shown to whichever party needs to act" | Shown to both, and the server let a proposer accept their own proposal |
+| The upload label said 8MB, the validator allowed 15MB | API Gateway and Lambda cap the payload near 4.5MB, and reject it before the function runs |
+
+Two of those are worth generalising:
+
+**A wrong type is a runtime crash for exactly as long as the type is wrong.**
+Correcting `getMyProperties`' declaration made the compiler name the crash site
+before it was touched. The `/properties` page had been surviving the same shape
+with a four-deep ladder of `Array.isArray` guards and `as any` escapes — a
+workaround at the call site that kept one page alive and left the trap armed for
+the next caller.
+
+**"Declared and never populated" is the inverse of the bug this codebase already
+knows about.** `CLAUDE.md` warns that fields get computed and rendered nowhere.
+`thumbnailUrl` and `SubjectLabel` are the opposite: rendered — or branched on —
+and never computed. Both are found the same way, by tracing a field end to end
+rather than reading either half.
+
+---
+
 ## Open items
 
 **Waiting on a human:**
@@ -232,12 +308,25 @@ both covered in `transaction-lifecycle-plan.md`.
 
 **Technical debt, in rough priority order:**
 
-- **`Dynamo:UsePublishedIndex` is `false`.** Every published listing predating
-  the sparse index is missing from it, so the homepage still scans the table.
-  Fixing it means re-saving those rows — `data-backfill-required.md`. Note that
-  production, starting empty, can set this `true` from day one.
-- **No production backups.** DynamoDB point-in-time recovery is off by default
-  and is per-table. Turn it on for the `prod_*` tables once they exist.
+- **`Dynamo:UsePublishedIndex` is `true` in production** and `false` in dev.
+  Production started empty, so every published listing is in the sparse index and
+  the homepage reads it rather than scanning. Dev still scans: its rows predate
+  the index and are absent from it until re-saved — `data-backfill-required.md`.
+  The two environments therefore exercise different read paths, which is worth
+  remembering when a query behaves differently in production.
+- ~~**No production backups.**~~ Point-in-time recovery is **enabled on all
+  sixteen `prod_*` tables**, with deletion protection alongside it — 31 August
+  2026. The two cover different failures and you want both: PITR undoes bad
+  writes for 35 days, and deleting a table destroys its continuous backups with
+  it, which is what deletion protection prevents.
+
+  Two things about PITR before relying on it. **A restore creates a new table**
+  and never overwrites in place, so recovering means restoring to
+  `prod_Customers_restored` and then getting the app to point at it — a rename or
+  a `Dynamo__TablePrefix` change and a redeploy. Worth rehearsing once on a
+  throwaway table rather than discovering the shape of it mid-incident. And the
+  **dev tables remain unprotected**, holding every record that predates the fixes
+  from the Phase 6 smoke walk.
 - **Configuration lives in the AWS console.** Roughly fifteen environment
   variables per Lambda, set by hand, invisible to review, lost if a function is
   recreated. Survivable at two environments, painful at three. Terraform or SAM
@@ -246,18 +335,37 @@ both covered in `transaction-lifecycle-plan.md`.
   workflows are disabled automatically after 60 days without a commit. If the
   repo goes quiet the workers stop silently. `scheduled-workers.md` has the
   EventBridge migration.
-- **The frontends are still tested by nobody.** `deploy.yml` now runs its tests on
-  pull requests as well as pushes, so a broken backend change is caught before it
-  reaches a release branch. Neither frontend has any workflow at all, and neither
-  has ever had an automated build check — despite `tsc --noEmit` plus a real
-  build being the only verification those repos have. A PR-triggered job in each
-  is the cheapest reliability left on this list.
+- **Lint is red in both frontends** — roughly 476 errors on the consumer app, 62
+  on the admin one. Both now run `tsc --noEmit` and a real build on every pull
+  request, but lint is `continue-on-error` because gating on those numbers would
+  fail every PR immediately. Clear the admin app first and make it a real gate
+  there; the consumer app is a separate, larger job.
 - **Dependabot is disabled on `HousingHub`.** It is why the OpenAPI advisory
   above only ever surfaced as a local build warning. Both frontends have it on
   and are carrying open alerts — `nanoid`, `js-yaml`, `postcss`, all build-time
   or dev-dependency transitives rather than anything serving a user request.
+- **Uploads are capped at 4MB by the platform, not by choice.** API Gateway caps
+  a payload at 10MB, Lambda at 6MB, and base64 inflates binary by a third on the
+  way through — so the real ceiling is about 4.5MB of file. `DocumentMaxBytes`
+  says 15MB and one label said 8MB; both were fiction, and the failure arrived as
+  a bare network error because API Gateway rejects the request before the function
+  runs and its error carries no CORS headers. The clients now check first. Making
+  the advertised limit real means presigned direct-to-S3 uploads.
+- **Geocoding is best-effort against Nominatim.** A listing saved without
+  coordinates never appears under "properties near you", because the query skips
+  anything with a null latitude. Nominatim rate-limits at roughly one request a
+  second and blocks some cloud egress, so this will happen. Both silent paths now
+  log; the fix is a provider with a contract.
+- **A draft verification cannot be cancelled.** There is no endpoint and no
+  transition — `VerificationCase` has `TrySubmit`, `TryBeginReview`, `TryDecide`
+  and `TryExpire`. Someone who starts one by mistake is stuck with it. Wants a
+  `Cancelled` state rather than a delete, so the audit trail survives.
 - **CSP allows `'unsafe-inline'` for scripts** in both frontends. Removing it
   needs per-request nonces via middleware.
+- **One production listing carries a wrong `PropertyType`.** Created before the
+  enum fix, so it is stored as `Apartment`. Production has a handful of records;
+  deleting and recreating is cheaper than any correction, and worth doing before
+  there is more.
 
 ---
 

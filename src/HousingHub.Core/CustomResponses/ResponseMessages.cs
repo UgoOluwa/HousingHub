@@ -56,7 +56,6 @@ public static class ResponseMessages
     // Property messages
     public const string UnauthorizedPropertyAction = "Only home owners or agents can manage properties.";
     public const string PropertyNotOwnedByUser = "You do not have permission to modify this property.";
-    public const string FileTooLarge = "File size exceeds the maximum allowed size of 10MB.";
     public const string InvalidFileType = "Only image and video files are allowed.";
     public const string OwnerNotManagedByHousingHub = "This owner isn't managed by HousingHub, so an admin can't post a listing on their behalf.";
 
@@ -79,6 +78,9 @@ public static class ResponseMessages
     public const string VerificationDecisionNoteRequired = "A reason is required so the applicant knows what to do next.";
     public const string VerificationDocumentsNotAllReviewed = "Every document must be reviewed before the case can be approved.";
     public const string VerificationDocumentRejectionReasonRequired = "A reason is required when rejecting a document.";
+    public const string VerificationCaseCancelled = "That verification request has been cancelled.";
+    public const string VerificationCaseNotCancellable = "This request has already been submitted, so it can't be cancelled. Contact support if you need it withdrawn.";
+
     public const string VerificationSubjectRequired = "A property must be specified for a title verification request.";
     public const string VerificationPropertyNotOwned = "You can only request verification for your own listing.";
 

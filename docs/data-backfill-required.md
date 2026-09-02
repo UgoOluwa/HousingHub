@@ -1,7 +1,8 @@
 # Data backfill required
 
-Two pre-existing data problems surfaced during the security work. Neither is caused
-by these changes, but both constrain what can safely be enforced in code.
+Pre-existing data problems that constrain what can safely be enforced in code. Most
+surfaced during the security work and are not caused by those changes; item 4 is a
+consequence of adding a field, and needs no action beyond knowing what it does.
 
 ---
 
@@ -163,3 +164,50 @@ no worse than before.
 Both read the same table, but only the consumer API queries published listings, so
 only its flag matters for step 4. The admin API filters on `IsPublished` in memory
 after loading, which is unchanged.
+
+---
+
+## 4. `Property.Bedrooms` and `Property.Bathrooms` are absent on every existing row
+
+**Severity: not a bug. A visible gap, and a filter that excludes older listings.**
+
+`Property` had no bedroom or bathroom field until now. `GetAllPropertiesFilterDto`
+had carried a `Bedrooms` filter the whole time, and `PropertyQueryService` had the
+matching block commented out with a note that it *"requires Bedrooms field on
+Property entity when added"* — so `?bedrooms=3` was accepted, ignored, and answered
+with every listing regardless. Meanwhile `PropertyCard` filled the gap on the
+consumer site with `Math.floor(Math.random() * 3) + 2`, so every card showed a renter
+an invented count that changed on each render.
+
+Both fields are now on the entity, both are honoured by the filter, and both are
+nullable.
+
+### Why nullable, and why no backfill
+
+`null` means *the lister did not state a count*, which is a different answer from
+zero and reads differently to a renter. Land genuinely has no bedrooms; a listing
+created before today simply never said. Defaulting the existing rows to `0` would
+turn "we don't know" into a claim the owner never made, on every listing at once —
+so there is deliberately **no backfill**, and none should be run.
+
+### What that means in practice
+
+- Existing listings render no bedroom or bathroom line at all. Not "0 Bedrooms".
+- Filtering by bedrooms excludes them. A listing cannot match "3 bedrooms" when
+  nobody has said how many it has. Owners populate it by editing the listing.
+- Until owners do, the bedroom filter will look sparse. That is the honest state,
+  and it is self-healing as listings are edited.
+
+### The one thing worth watching
+
+If the filter is found to be returning too little to be useful, the fix is to
+prompt owners to fill the counts in — not to widen the match to include listings
+with no stated count. That would answer a search for a 3-bedroom flat with listings
+that never claimed to be one, which is where this whole class of bug started.
+
+### Not covered
+
+`PropertyAlertPreference` has no bedroom field, so a saved search cannot alert on
+bedroom count. The consumer app says so beneath the "Get Alerts For This Search"
+button rather than dropping the criterion silently. Adding it is an entity, a DTO
+and a change to the alert matcher.

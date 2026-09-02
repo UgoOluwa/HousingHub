@@ -17,4 +17,6 @@ public record UpdatePropertyDto(
     string? ContactPersonPhoneNumber,
     UpdatePropertyAddressDto? PropertyAddress,
     double? Latitude,
-    double? Longitude);
+    double? Longitude,
+    int? Bedrooms = null,
+    int? Bathrooms = null);
