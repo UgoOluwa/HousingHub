@@ -47,10 +47,29 @@ public enum PaymentStatus
     /// Held apart from a failure because nothing is wrong with the <i>payment</i> —
     /// money may well have moved. What is wrong is that the amount does not match
     /// the amount recorded when the attempt was created, and the only safe response
-    /// is to hand nothing over and have a person look at it. Deliberately terminal:
-    /// a later webhook must not quietly settle it.
+    /// is to hand nothing over and have a person look at it. Deliberately terminal
+    /// as far as settlement goes: a later webhook must not quietly settle it. It
+    /// can, however, be refunded — that is usually the right resolution.
     /// </remarks>
     Flagged = 5,
+
+    /// <summary>A refund has been asked of the provider and not yet confirmed.</summary>
+    /// <remarks>
+    /// Its own state rather than a flag, because the money has not moved back yet
+    /// and saying it has would be a lie to whoever is reading the receipt. Paystack
+    /// answers most refunds as pending and confirms by webhook.
+    /// </remarks>
+    RefundPending = 6,
+
+    /// <summary>The provider confirmed the money went back.</summary>
+    /// <remarks>
+    /// <b>No longer settled.</b> <c>IsSettled</c> is true only for
+    /// <see cref="Successful"/>, so a refunded payment stops satisfying the
+    /// verification gate — somebody whose money has been returned has not paid for
+    /// a review. That falls out of the definition rather than needing a special
+    /// case, which is why the definition is worth keeping narrow.
+    /// </remarks>
+    Refunded = 7,
 }
 
 /// <summary>Outcome of attempting to settle a payment. See <see cref="Entities.Payment.TrySettle"/>.</summary>
@@ -70,4 +89,27 @@ public enum PaymentSettlementOutcome
 
     /// <summary>Terminal already — failed, abandoned or flagged. Cannot be settled.</summary>
     NotPending = 4,
+}
+
+/// <summary>Outcome of attempting to start or finish a refund.</summary>
+public enum RefundOutcome
+{
+    /// <summary>Asked of the provider; awaiting confirmation.</summary>
+    Requested = 1,
+
+    /// <summary>The provider confirmed the money went back.</summary>
+    Completed = 2,
+
+    /// <summary>
+    /// Already refunded, or a refund is already in flight. Not an error — refund
+    /// webhooks are retried like any other, and a second request must not send a
+    /// second refund.
+    /// </summary>
+    AlreadyInProgress = 3,
+
+    /// <summary>Nothing to refund: the payment never succeeded.</summary>
+    NotRefundable = 4,
+
+    /// <summary>The provider refused, or could not be reached.</summary>
+    Failed = 5,
 }

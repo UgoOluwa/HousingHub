@@ -168,7 +168,13 @@ public class AdminPaymentQueryService : IAdminPaymentQueryService
                 customer is null ? null : $"{customer.FirstName} {customer.LastName}".Trim(),
                 customer?.Email,
                 p.FailureReason,
-                p.FlagNote);
+                p.FlagNote,
+                p.RefundReason,
+                p.RefundedByAdminId,
+                p.RefundRequestedAt,
+                p.RefundedAt,
+                p.RefundAmountKobo,
+                p.ProviderRefundReference);
         }).ToList();
     }
 

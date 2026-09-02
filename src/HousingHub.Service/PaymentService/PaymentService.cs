@@ -3,6 +3,7 @@ using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
+using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.Payments;
 using HousingHub.Service.Dtos.Payment;
 using HousingHub.Service.PaymentService.Interfaces;
@@ -62,6 +63,7 @@ public class PaymentService : IPaymentService
     private readonly IUnitOfWOrk _unitOfWork;
     private readonly IPaymentGateway _gateway;
     private readonly PaymentFeeCatalogue _fees;
+    private readonly IEmailService _emailService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<PaymentService> _logger;
 
@@ -69,12 +71,14 @@ public class PaymentService : IPaymentService
         IUnitOfWOrk unitOfWork,
         IPaymentGateway gateway,
         PaymentFeeCatalogue fees,
+        IEmailService emailService,
         IConfiguration configuration,
         ILogger<PaymentService> logger)
     {
         _unitOfWork = unitOfWork;
         _gateway = gateway;
         _fees = fees;
+        _emailService = emailService;
         _configuration = configuration;
         _logger = logger;
     }
@@ -272,9 +276,20 @@ public class PaymentService : IPaymentService
             var root = document.RootElement;
 
             eventName = root.TryGetProperty("event", out var e) ? e.GetString() : null;
-            reference = root.TryGetProperty("data", out var data) && data.TryGetProperty("reference", out var r)
-                ? r.GetString()
-                : null;
+
+            reference = null;
+            if (root.TryGetProperty("data", out var data))
+            {
+                // Charge events carry `reference`; refund events carry
+                // `transaction_reference` and use `reference` for the refund's own
+                // identifier. Reading the wrong one on a refund would look up a
+                // payment that does not exist and silently drop the event.
+                if (data.TryGetProperty("transaction_reference", out var tr))
+                    reference = tr.GetString();
+
+                if (string.IsNullOrWhiteSpace(reference) && data.TryGetProperty("reference", out var r))
+                    reference = r.GetString();
+            }
         }
         catch (JsonException ex)
         {
@@ -284,7 +299,9 @@ public class PaymentService : IPaymentService
             return true;
         }
 
-        if (!string.Equals(eventName, "charge.success", StringComparison.OrdinalIgnoreCase))
+        var handled = eventName?.ToLowerInvariant();
+
+        if (handled is not ("charge.success" or "refund.processed" or "refund.failed"))
         {
             _logger.LogInformation("Ignoring payment webhook event {Event}", eventName);
             return true;
@@ -292,7 +309,7 @@ public class PaymentService : IPaymentService
 
         if (string.IsNullOrWhiteSpace(reference))
         {
-            _logger.LogError("A charge.success webhook arrived with no reference");
+            _logger.LogError("A {Event} webhook arrived with no reference", eventName);
             return true;
         }
 
@@ -305,6 +322,9 @@ public class PaymentService : IPaymentService
             _logger.LogWarning("Payment webhook for unknown reference {Reference}", reference);
             return true;
         }
+
+        if (handled is "refund.processed" or "refund.failed")
+            return await HandleRefundEventAsync(payment, handled, rawBody);
 
         // Re-read from the gateway rather than trusting the amount in the payload.
         // The signature proves the body came from the provider; asking the provider
@@ -343,6 +363,12 @@ public class PaymentService : IPaymentService
                 _logger.LogInformation(
                     "Settled payment {Reference} for {AmountKobo} kobo, purpose {Purpose}, subject {SubjectId}",
                     payment.Reference, payment.AmountKobo, payment.Purpose, payment.SubjectId);
+
+                // After the save, and never in front of it. The payment is the
+                // record; the receipt is a courtesy. A failing mail provider must
+                // not cost somebody the thing they have paid for, and SendAsync
+                // swallows its own failures precisely so this cannot throw here.
+                await SendReceiptAsync(payment);
                 return true;
 
             case PaymentSettlementOutcome.AlreadySettled:
@@ -363,6 +389,135 @@ public class PaymentService : IPaymentService
                 return true;
         }
     }
+
+    /// <summary>
+    /// Records the outcome of a refund the provider has told us about.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The signed payload is taken at its word here, unlike a charge, and the reason
+    /// is that the risk runs the other way. Accepting a forged <i>charge</i> would
+    /// hand over a paid service; accepting a forged <i>refund</i> would tell somebody
+    /// their money is coming back when it is not. The signature check is what stops
+    /// both, and there is no entitlement being granted to re-verify against.
+    /// </para>
+    /// <para>
+    /// Handles a refund issued directly in the provider's dashboard too — that
+    /// arrives as a webhook having never passed through this application, which is
+    /// why <c>TryCompleteRefund</c> accepts a payment that was merely Successful.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> HandleRefundEventAsync(Payment payment, string eventName, string rawBody)
+    {
+        long? amountKobo = null;
+        string? refundReference = null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(rawBody);
+            if (document.RootElement.TryGetProperty("data", out var data))
+            {
+                if (data.TryGetProperty("amount", out var amount) && amount.TryGetInt64(out var value))
+                    amountKobo = value;
+
+                // The refund's own identifier, distinct from the charge's.
+                if (data.TryGetProperty("id", out var id))
+                    refundReference = id.ToString();
+            }
+        }
+        catch (JsonException)
+        {
+            // Already parsed once to get here, so this is close to impossible — but
+            // a missing amount is survivable: the figure we asked for stands.
+            _logger.LogWarning("Could not read refund detail from {Event} for {Reference}", eventName, payment.Reference);
+        }
+
+        if (eventName == "refund.failed")
+        {
+            if (payment.TryAbandonRefund("The payment provider could not complete the refund."))
+            {
+                await _unitOfWork.PaymentCommands.UpdateAsync(payment);
+                await _unitOfWork.SaveAsync();
+
+                // Loud, because nobody is watching for this and the customer is
+                // still owed money. A flagged payment returns to the admin queue;
+                // one that was merely successful does not, which is why this line
+                // is the only signal.
+                _logger.LogError(
+                    "Refund FAILED for payment {Reference} ({AmountKobo} kobo). The payer is still owed this money.",
+                    payment.Reference, payment.RefundAmountKobo ?? payment.AmountKobo);
+            }
+
+            return true;
+        }
+
+        var outcome = payment.TryCompleteRefund(amountKobo, refundReference);
+
+        if (outcome == RefundOutcome.Completed)
+        {
+            await _unitOfWork.PaymentCommands.UpdateAsync(payment);
+            await _unitOfWork.SaveAsync();
+            _logger.LogInformation(
+                "Refund completed for payment {Reference}, {AmountKobo} kobo",
+                payment.Reference, payment.RefundAmountKobo);
+
+            await SendRefundEmailAsync(payment);
+        }
+
+        // AlreadyInProgress on a repeat delivery, which is expected. Either way the
+        // provider has been answered and should not redeliver.
+        return true;
+    }
+
+    private async Task SendReceiptAsync(Payment payment)
+    {
+        var customer = await _unitOfWork.CustomerQueries.GetByIdAsync(payment.CustomerId);
+        if (customer is null || string.IsNullOrWhiteSpace(customer.Email))
+        {
+            _logger.LogWarning(
+                "Settled payment {Reference} but could not find an address to send a receipt to", payment.Reference);
+            return;
+        }
+
+        await _emailService.SendPaymentReceiptAsync(
+            customer.Email,
+            customer.FirstName,
+            payment.Reference,
+            DescribePurpose(payment.Purpose),
+            payment.AmountKobo,
+            payment.IdentityFeeKobo,
+            payment.Channel);
+    }
+
+    private async Task SendRefundEmailAsync(Payment payment)
+    {
+        var customer = await _unitOfWork.CustomerQueries.GetByIdAsync(payment.CustomerId);
+        if (customer is null || string.IsNullOrWhiteSpace(customer.Email))
+        {
+            _logger.LogWarning(
+                "Refunded payment {Reference} but could not find an address to tell the payer", payment.Reference);
+            return;
+        }
+
+        await _emailService.SendPaymentRefundedAsync(
+            customer.Email,
+            customer.FirstName,
+            payment.Reference,
+            payment.RefundAmountKobo ?? payment.AmountKobo,
+            // A refund always has a reason by the time it completes — TryBeginRefund
+            // requires one. The fallback covers a refund issued in the provider's
+            // dashboard, which reaches us with no reason of ours attached.
+            payment.RefundReason ?? "Refunded by Housing Hub");
+    }
+
+    /// <summary>Wording for a receipt. Never the enum name.</summary>
+    internal static string DescribePurpose(PaymentPurpose purpose) => purpose switch
+    {
+        PaymentPurpose.BusinessVerification => "Business verification",
+        PaymentPurpose.PropertyVerification => "Property title verification",
+        PaymentPurpose.IdentityVerification => "Identity verification",
+        _ => "Verification",
+    };
 
     // ── internals ────────────────────────────────────────────────
 

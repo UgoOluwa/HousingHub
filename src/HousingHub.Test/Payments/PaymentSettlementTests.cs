@@ -222,4 +222,215 @@ public class PaymentSettlementTests
         Assert.Null(payment.FlagWatch);
         Assert.Equal(PaymentStatus.Pending, payment.Status);
     }
+
+    // ── Refunds ──────────────────────────────────────────────────
+
+    private static readonly Guid AdminId = Guid.NewGuid();
+    private const string Reason = "Documents rejected as a duplicate submission";
+
+    [Fact]
+    public void TryBeginRefund_OnASettledPayment_Requests()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(payment.AmountKobo, "pstk_1", "card");
+
+        var outcome = payment.TryBeginRefund(payment.AmountKobo, Reason, AdminId);
+
+        Assert.Equal(RefundOutcome.Requested, outcome);
+        Assert.Equal(PaymentStatus.RefundPending, payment.Status);
+        Assert.Equal(Reason, payment.RefundReason);
+        Assert.Equal(AdminId, payment.RefundedByAdminId);
+        Assert.NotNull(payment.RefundRequestedAt);
+
+        // Not yet refunded — the money has not moved back.
+        Assert.Null(payment.RefundedAt);
+    }
+
+    /// <summary>
+    /// A flagged payment is refundable, and is the commonest reason to refund:
+    /// money arrived, nothing was handed over.
+    /// </summary>
+    [Fact]
+    public void TryBeginRefund_OnAFlaggedPayment_Requests()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(100, "pstk_1", "card");
+        Assert.Equal(PaymentStatus.Flagged, payment.Status);
+
+        var outcome = payment.TryBeginRefund(100, Reason, AdminId);
+
+        Assert.Equal(RefundOutcome.Requested, outcome);
+        Assert.Equal(PaymentStatus.RefundPending, payment.Status);
+    }
+
+    /// <summary>Nothing arrived, so there is nothing to send back.</summary>
+    [Theory]
+    [InlineData(PaymentStatus.Pending)]
+    [InlineData(PaymentStatus.Failed)]
+    [InlineData(PaymentStatus.Abandoned)]
+    public void TryBeginRefund_OnAPaymentThatNeverSucceeded_IsRefused(PaymentStatus status)
+    {
+        var payment = CreatePayment();
+        if (status != PaymentStatus.Pending) payment.TryFail(status, "no");
+
+        var outcome = payment.TryBeginRefund(payment.AmountKobo, Reason, AdminId);
+
+        Assert.Equal(RefundOutcome.NotRefundable, outcome);
+        Assert.Equal(status, payment.Status);
+    }
+
+    /// <summary>
+    /// Two admins clicking at once must not send two refunds. The status is claimed
+    /// before the provider is contacted, so the second attempt finds one in flight.
+    /// </summary>
+    [Fact]
+    public void TryBeginRefund_Twice_OnlyRequestsOnce()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(payment.AmountKobo, "pstk_1", "card");
+
+        var first = payment.TryBeginRefund(payment.AmountKobo, Reason, AdminId);
+        var second = payment.TryBeginRefund(payment.AmountKobo, "Another reason entirely", Guid.NewGuid());
+
+        Assert.Equal(RefundOutcome.Requested, first);
+        Assert.Equal(RefundOutcome.AlreadyInProgress, second);
+        Assert.Equal(Reason, payment.RefundReason);
+        Assert.Equal(AdminId, payment.RefundedByAdminId);
+    }
+
+    [Fact]
+    public void TryCompleteRefund_RecordsTheRefund()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(payment.AmountKobo, "pstk_1", "card");
+        payment.TryBeginRefund(payment.AmountKobo, Reason, AdminId);
+
+        var outcome = payment.TryCompleteRefund(payment.AmountKobo, "refund_9");
+
+        Assert.Equal(RefundOutcome.Completed, outcome);
+        Assert.Equal(PaymentStatus.Refunded, payment.Status);
+        Assert.Equal("refund_9", payment.ProviderRefundReference);
+        Assert.NotNull(payment.RefundedAt);
+    }
+
+    /// <summary>
+    /// The whole point of the narrow IsSettled definition: a refunded payment stops
+    /// satisfying the verification gate without the gate knowing refunds exist.
+    /// </summary>
+    [Fact]
+    public void ARefundedPayment_IsNoLongerSettled()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(payment.AmountKobo, "pstk_1", "card");
+        Assert.True(payment.IsSettled);
+
+        payment.TryBeginRefund(payment.AmountKobo, Reason, AdminId);
+        Assert.False(payment.IsSettled);
+
+        payment.TryCompleteRefund(payment.AmountKobo, "refund_9");
+        Assert.False(payment.IsSettled);
+    }
+
+    /// <summary>Refund webhooks are retried like any other.</summary>
+    [Fact]
+    public void TryCompleteRefund_Twice_CompletesOnce()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(payment.AmountKobo, "pstk_1", "card");
+        payment.TryBeginRefund(payment.AmountKobo, Reason, AdminId);
+        payment.TryCompleteRefund(payment.AmountKobo, "refund_9");
+        var refundedAt = payment.RefundedAt;
+
+        var second = payment.TryCompleteRefund(payment.AmountKobo, "refund_10");
+
+        Assert.Equal(RefundOutcome.AlreadyInProgress, second);
+        Assert.Equal(refundedAt, payment.RefundedAt);
+        Assert.Equal("refund_9", payment.ProviderRefundReference);
+    }
+
+    /// <summary>
+    /// A refund issued in the provider's dashboard never passes through this
+    /// application, so it arrives as a webhook against a merely-successful payment.
+    /// </summary>
+    [Fact]
+    public void TryCompleteRefund_WithoutHavingBeenRequestedHere_StillCompletes()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(payment.AmountKobo, "pstk_1", "card");
+
+        var outcome = payment.TryCompleteRefund(payment.AmountKobo, "refund_9");
+
+        Assert.Equal(RefundOutcome.Completed, outcome);
+        Assert.Equal(PaymentStatus.Refunded, payment.Status);
+    }
+
+    /// <summary>
+    /// The amount refunded is recorded separately, because on a flagged payment it
+    /// is not the amount we asked for.
+    /// </summary>
+    [Fact]
+    public void RefundAmount_IsWhatArrived_NotWhatWasAskedFor()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(100, "pstk_1", "card");
+
+        payment.TryBeginRefund(100, Reason, AdminId);
+        payment.TryCompleteRefund(100, "refund_9");
+
+        Assert.Equal(100, payment.RefundAmountKobo);
+        Assert.Equal(PurposeFee + IdentityFee, payment.AmountKobo);
+    }
+
+    /// <summary>A failed refund goes back where it was, so it is not stuck pending forever.</summary>
+    [Fact]
+    public void TryAbandonRefund_RestoresASuccessfulPayment()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(payment.AmountKobo, "pstk_1", "card");
+        payment.TryBeginRefund(payment.AmountKobo, Reason, AdminId);
+
+        Assert.True(payment.TryAbandonRefund("provider refused"));
+        Assert.Equal(PaymentStatus.Successful, payment.Status);
+        Assert.Null(payment.RefundRequestedAt);
+        Assert.Null(payment.RefundAmountKobo);
+    }
+
+    /// <summary>
+    /// And a flagged one goes back to flagged, so it returns to the admin queue
+    /// rather than quietly reading as a normal completed payment.
+    /// </summary>
+    [Fact]
+    public void TryAbandonRefund_RestoresAFlaggedPaymentToFlagged()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(100, "pstk_1", "card");
+        payment.TryBeginRefund(100, Reason, AdminId);
+
+        Assert.True(payment.TryAbandonRefund("provider refused"));
+        Assert.Equal(PaymentStatus.Flagged, payment.Status);
+        Assert.Equal(Payment.FlaggedMarker, payment.FlagWatch);
+    }
+
+    [Fact]
+    public void TryAbandonRefund_OnAPaymentWithNoRefundInFlight_DoesNothing()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(payment.AmountKobo, "pstk_1", "card");
+
+        Assert.False(payment.TryAbandonRefund("nope"));
+        Assert.Equal(PaymentStatus.Successful, payment.Status);
+    }
+
+    /// <summary>Refunding a flagged payment resolves it, so it leaves the queue.</summary>
+    [Fact]
+    public void FlagWatch_IsClearedByARefund()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(100, "pstk_1", "card");
+        Assert.Equal(Payment.FlaggedMarker, payment.FlagWatch);
+
+        payment.TryBeginRefund(100, Reason, AdminId);
+
+        Assert.Null(payment.FlagWatch);
+    }
 }

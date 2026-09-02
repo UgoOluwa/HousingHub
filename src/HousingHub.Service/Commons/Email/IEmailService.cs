@@ -73,4 +73,36 @@ public interface IEmailService
     Task<bool> SendStaffAssignedToInspectionAsync(string staffEmail, string staffFirstName, string propertyTitle, string ownerName, DateTime scheduledDate, TimeSpan scheduledTime);
     /// <summary>Sent to a customer when a newly published property matches one of their saved search preferences.</summary>
     Task<bool> SendPropertyAlertMatchAsync(string customerEmail, string customerFirstName, string propertyTitle, string propertyAddress, decimal price);
+
+    /// <summary>
+    /// A receipt, sent once a payment settles.
+    /// </summary>
+    /// <remarks>
+    /// The only durable record the payer gets. Amounts are in kobo, as they are
+    /// everywhere else, and converted for display inside the template — a receipt
+    /// stating the wrong figure is worse than no receipt.
+    /// </remarks>
+    Task<bool> SendPaymentReceiptAsync(
+        string toEmail,
+        string firstName,
+        string reference,
+        string purposeDescription,
+        long amountKobo,
+        long identityFeeKobo,
+        string? channel);
+
+    /// <summary>
+    /// Confirmation that money has been sent back.
+    /// </summary>
+    /// <remarks>
+    /// Says how long a Nigerian card refund realistically takes to appear, because
+    /// the alternative is a support conversation for every refund issued — the money
+    /// leaves us immediately and reaches the payer's statement days later.
+    /// </remarks>
+    Task<bool> SendPaymentRefundedAsync(
+        string toEmail,
+        string firstName,
+        string reference,
+        long amountKobo,
+        string reason);
 }

@@ -88,6 +88,13 @@ public static class ResponseMessages
     public const string PaymentCouldNotStart = "We couldn't start that payment. Please try again.";
     public const string PaymentAlreadySettled = "This has already been paid for.";
     public const string PaymentCaseNotPayable = "This verification request isn't awaiting payment.";
+
+    // Refunds. Shown to staff rather than customers, so these can name the actual
+    // obstacle — an admin who is told "something went wrong" cannot act on it.
+    public const string RefundReasonRequired = "Give a reason of at least ten characters. It is recorded against the refund and is what explains the money leaving months from now.";
+    public const string RefundAlreadyInProgress = "This payment has already been refunded, or a refund is already in flight.";
+    public const string RefundNotPossible = "Only a payment the provider has confirmed can be refunded.";
+    public const string RefundNotConfirmedByProvider = "The payment provider does not report this as a successful charge, so there is nothing to send back. Check it in the provider's dashboard first.";
     public const string VerificationDecisionNoteRequired = "A reason is required so the applicant knows what to do next.";
     public const string VerificationDocumentsNotAllReviewed = "Every document must be reviewed before the case can be approved.";
     public const string VerificationDocumentRejectionReasonRequired = "A reason is required when rejecting a document.";

@@ -132,13 +132,63 @@ public class Payment : BaseEntity
     [DynamoDBGlobalSecondaryIndexHashKey("FlagWatch-index")]
     public string? FlagWatch
     {
+        // Refunding a flagged payment resolves it, so the marker goes with the
+        // status and the row leaves the queue. Keeping it would leave an admin
+        // looking at work they have already done.
         get => Status == PaymentStatus.Flagged ? FlaggedMarker : null;
         set { /* derived from Status — see remarks */ }
     }
 
+    // ── Refunds ─────────────────────────────────────────────────
+
+    /// <summary>Why the money was sent back. Required — a refund with no reason is unauditable.</summary>
+    public string? RefundReason { get; set; }
+
+    /// <summary>Which admin asked for it.</summary>
+    /// <remarks>
+    /// Recorded because this is the only action in the system that moves money out.
+    /// "Who refunded this and why" must be answerable from the row itself, not from
+    /// a log that rotates.
+    /// </remarks>
+    public Guid? RefundedByAdminId { get; set; }
+
+    public DateTime? RefundRequestedAt { get; set; }
+    public DateTime? RefundedAt { get; set; }
+
+    /// <summary>
+    /// What was actually sent back, in kobo.
+    /// </summary>
+    /// <remarks>
+    /// Not assumed to equal <see cref="AmountKobo"/>. A flagged payment is flagged
+    /// precisely because the confirmed amount differed from the amount asked for, and
+    /// refunding what we asked for rather than what arrived would send back the wrong
+    /// figure in the one case where it is most likely to matter.
+    /// </remarks>
+    public long? RefundAmountKobo { get; set; }
+
+    /// <summary>The provider's identifier for the refund itself, distinct from the charge.</summary>
+    public string? ProviderRefundReference { get; set; }
+
     /// <summary>True once the gateway has confirmed the money.</summary>
+    /// <remarks>
+    /// Deliberately narrow: only <see cref="PaymentStatus.Successful"/>. A refunded
+    /// payment is not settled, so the verification gate stops accepting it without
+    /// needing to know that refunds exist.
+    /// </remarks>
     [DynamoDBIgnore]
     public bool IsSettled => Status == PaymentStatus.Successful;
+
+    /// <summary>
+    /// True when this payment could be sent back.
+    /// </summary>
+    /// <remarks>
+    /// A flagged payment is included, and is usually the reason to refund at all —
+    /// money arrived, nothing was handed over, and returning it is the honest
+    /// resolution. A pending or failed payment has nothing to return.
+    /// </remarks>
+    [DynamoDBIgnore]
+    public bool IsRefundable =>
+        Status is PaymentStatus.Successful or PaymentStatus.Flagged;
 
     /// <summary>True when an identity check was bundled into this payment.</summary>
     [DynamoDBIgnore]
@@ -243,5 +293,88 @@ public class Payment : BaseEntity
         AuthorisationUrl = authorisationUrl;
         ProviderReference = providerReference;
         DateModified = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Records that a refund has been asked of the provider.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Called <b>before</b> the provider is contacted, and that ordering is the point.
+    /// If it were called after, two admins clicking at once — or one admin clicking
+    /// twice — would each see a refundable payment and each send a refund. Moving to
+    /// <see cref="PaymentStatus.RefundPending"/> first means the second attempt finds
+    /// a refund already in flight.
+    /// </para>
+    /// <para>
+    /// The cost of that ordering is the opposite failure: if the provider call then
+    /// fails, the payment is left pending a refund that was never asked for. That is
+    /// recoverable — see <see cref="TryAbandonRefund"/> — and it is the safer of the
+    /// two, because the recoverable state is the one where no money moved twice.
+    /// </para>
+    /// </remarks>
+    public RefundOutcome TryBeginRefund(long amountKobo, string reason, Guid adminId)
+    {
+        if (Status is PaymentStatus.RefundPending or PaymentStatus.Refunded)
+            return RefundOutcome.AlreadyInProgress;
+
+        if (!IsRefundable)
+            return RefundOutcome.NotRefundable;
+
+        Status = PaymentStatus.RefundPending;
+        RefundAmountKobo = amountKobo;
+        RefundReason = reason;
+        RefundedByAdminId = adminId;
+        RefundRequestedAt = DateTime.UtcNow;
+        DateModified = DateTime.UtcNow;
+        return RefundOutcome.Requested;
+    }
+
+    /// <summary>
+    /// Records the provider's confirmation that the money went back.
+    /// </summary>
+    /// <remarks>
+    /// Idempotent for the same reason settlement is: refund webhooks are retried,
+    /// and a second delivery must not restate the refund date or overwrite the
+    /// figure with a later event's.
+    /// </remarks>
+    public RefundOutcome TryCompleteRefund(long? amountKobo, string? providerRefundReference)
+    {
+        if (Status == PaymentStatus.Refunded)
+            return RefundOutcome.AlreadyInProgress;
+
+        // Allowed from Successful and Flagged as well as RefundPending: a refund
+        // issued directly in the provider's dashboard reaches us as a webhook
+        // without ever having passed through this application.
+        if (Status is not (PaymentStatus.RefundPending or PaymentStatus.Successful or PaymentStatus.Flagged))
+            return RefundOutcome.NotRefundable;
+
+        Status = PaymentStatus.Refunded;
+        RefundAmountKobo = amountKobo ?? RefundAmountKobo;
+        ProviderRefundReference = providerRefundReference ?? ProviderRefundReference;
+        RefundedAt = DateTime.UtcNow;
+        DateModified = DateTime.UtcNow;
+        return RefundOutcome.Completed;
+    }
+
+    /// <summary>
+    /// Puts a payment back where it was after a refund attempt failed.
+    /// </summary>
+    /// <remarks>
+    /// Restores <see cref="PaymentStatus.Flagged"/> rather than
+    /// <see cref="PaymentStatus.Successful"/> when there is a flag note, so a
+    /// flagged payment whose refund failed returns to the queue instead of quietly
+    /// reading as a normal completed payment.
+    /// </remarks>
+    public bool TryAbandonRefund(string? failureReason)
+    {
+        if (Status != PaymentStatus.RefundPending) return false;
+
+        Status = FlagNote is null ? PaymentStatus.Successful : PaymentStatus.Flagged;
+        RefundRequestedAt = null;
+        RefundAmountKobo = null;
+        FailureReason = failureReason ?? FailureReason;
+        DateModified = DateTime.UtcNow;
+        return true;
     }
 }

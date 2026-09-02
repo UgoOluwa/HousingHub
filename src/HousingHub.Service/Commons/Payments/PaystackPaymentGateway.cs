@@ -151,6 +151,60 @@ public class PaystackPaymentGateway : IPaymentGateway
         }
     }
 
+    public async Task<GatewayRefund> RefundAsync(
+        string transactionReference,
+        long amountKobo,
+        string? note,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured)
+        {
+            _logger.LogError("Paystack secret key is not configured; cannot refund");
+            return GatewayRefund.Failed("Refunds are not configured on this environment.");
+        }
+
+        try
+        {
+            var body = new
+            {
+                transaction = transactionReference,
+                amount = amountKobo,
+                // Paystack shows this on the refund record. Deliberately the reason
+                // an admin typed, so the provider's dashboard and our own row agree
+                // about why the money went back.
+                merchant_note = note,
+            };
+
+            using var response = await _http.PostAsJsonAsync("refund", body, JsonOptions, cancellationToken);
+            var payload = await response.Content.ReadFromJsonAsync<PaystackEnvelope<RefundData>>(JsonOptions, cancellationToken);
+
+            if (!response.IsSuccessStatusCode || payload is null || !payload.Status || payload.Data is null)
+            {
+                _logger.LogError(
+                    "Paystack refund failed for {Reference}: {StatusCode} {Message}",
+                    transactionReference, (int)response.StatusCode, payload?.Message);
+
+                return GatewayRefund.Failed("The payment provider would not accept that refund.");
+            }
+
+            // "processed" means the money is already back. Anything else — normally
+            // "pending" — means accepted and awaiting confirmation by webhook.
+            bool isComplete = string.Equals(payload.Data.Status, "processed", StringComparison.OrdinalIgnoreCase);
+
+            return new GatewayRefund(
+                IsSuccessful: true,
+                IsComplete: isComplete,
+                AmountKobo: payload.Data.Amount ?? amountKobo,
+                RefundReference: payload.Data.Id?.ToString(),
+                Error: null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Paystack refund threw for {Reference}", transactionReference);
+            return GatewayRefund.Failed("We could not reach the payment provider. Please try again.");
+        }
+    }
+
     /// <summary>
     /// HMAC-SHA512 of the raw body, keyed with the secret key, compared to the
     /// <c>x-paystack-signature</c> header.
@@ -236,6 +290,11 @@ public class PaystackPaymentGateway : IPaymentGateway
         [property: JsonPropertyName("authorization_url")] string AuthorizationUrl,
         [property: JsonPropertyName("access_code")] string? AccessCode,
         string? Reference);
+
+    private sealed record RefundData(
+        long? Id,
+        string? Status,
+        long? Amount);
 
     private sealed record VerifyData(
         long? Id,

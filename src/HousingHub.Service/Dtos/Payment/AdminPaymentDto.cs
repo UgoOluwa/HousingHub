@@ -47,4 +47,21 @@ public record AdminPaymentDto(
     /// over — the one state in this system that cannot be resolved by code and must
     /// be resolved by somebody reading it.
     /// </remarks>
-    string? FlagNote);
+    string? FlagNote,
+
+    // ── Refunds ─────────────────────────────────────────────────
+    // Who sent money back, why, when, and how much. Answerable from the row rather
+    // than from a log that rotates, because this is the only action in the system
+    // that moves money out.
+
+    string? RefundReason = null,
+    Guid? RefundedByAdminId = null,
+    DateTime? RefundRequestedAt = null,
+    DateTime? RefundedAt = null,
+
+    /// <summary>
+    /// What actually went back. Not assumed to equal <see cref="AmountKobo"/> — a
+    /// flagged payment is refunded for what arrived, not for what was asked.
+    /// </summary>
+    long? RefundAmountKobo = null,
+    string? ProviderRefundReference = null);

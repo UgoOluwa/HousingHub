@@ -2,6 +2,7 @@ using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
+using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.Payments;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -25,6 +26,7 @@ public class PaymentServiceTests
 
     private readonly Mock<IUnitOfWOrk> _unitOfWork;
     private readonly Mock<IPaymentGateway> _gateway;
+    private readonly Mock<IEmailService> _email = new();
     private readonly List<Payment> _inserted = [];
     private readonly List<Payment> _updated = [];
 
@@ -48,6 +50,14 @@ public class PaymentServiceTests
         _unitOfWork
             .Setup(u => u.PaymentQueries.QueryByIndexAsync(It.IsAny<string>(), It.IsAny<object>()))
             .ReturnsAsync(new List<Payment>());
+
+        // Settling sends a receipt, which reads the payer. Present by default so
+        // every webhook test does not have to arrange it.
+        _unitOfWork.Setup(u => u.CustomerQueries.GetByIdAsync(CustomerId)).ReturnsAsync(
+            new Customer("Jane", "Doe", "jane@test.com", "08000000000", CustomerType.HouseOwner, "hash")
+            {
+                Id = CustomerId,
+            });
     }
 
     private PaymentServiceImpl CreateSut(
@@ -73,6 +83,7 @@ public class PaymentServiceTests
             _unitOfWork.Object,
             _gateway.Object,
             new PaymentFeeCatalogue(configuration),
+            _email.Object,
             configuration,
             NullLogger<PaymentServiceImpl>.Instance);
     }
@@ -709,5 +720,167 @@ public class PaymentServiceTests
 
         Assert.True(result.IsSuccessful);
         Assert.True(result.Data!.IsAlreadyPaid);
+    }
+
+    // ── receipts ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Webhook_OnSettlement_SendsAReceipt()
+    {
+        var payment = GivenExistingPayment(PaymentStatus.Pending);
+        GivenAuthenticWebhook();
+        GivenGatewayReports(payment.Reference, GatewayTransactionStatus.Successful, payment.AmountKobo);
+
+        await CreateSut().HandleWebhookAsync(WebhookBody(payment.Reference), "sig");
+
+        _email.Verify(e => e.SendPaymentReceiptAsync(
+            "jane@test.com", "Jane", payment.Reference,
+            It.IsAny<string>(), payment.AmountKobo, IdentityFee, "card"), Times.Once);
+    }
+
+    /// <summary>Redelivery must not send a second receipt.</summary>
+    [Fact]
+    public async Task Webhook_DeliveredTwice_SendsOneReceipt()
+    {
+        var payment = GivenExistingPayment(PaymentStatus.Pending);
+        GivenAuthenticWebhook();
+        GivenGatewayReports(payment.Reference, GatewayTransactionStatus.Successful, payment.AmountKobo);
+        var sut = CreateSut();
+
+        await sut.HandleWebhookAsync(WebhookBody(payment.Reference), "sig");
+        await sut.HandleWebhookAsync(WebhookBody(payment.Reference), "sig");
+
+        _email.Verify(e => e.SendPaymentReceiptAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<string>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string>()), Times.Once);
+    }
+
+    /// <summary>
+    /// A flagged payment hands nothing over, so it must not produce a receipt saying
+    /// the request is with the review team.
+    /// </summary>
+    [Fact]
+    public async Task Webhook_ConfirmingTheWrongAmount_SendsNoReceipt()
+    {
+        var payment = GivenExistingPayment(PaymentStatus.Pending);
+        GivenAuthenticWebhook();
+        GivenGatewayReports(payment.Reference, GatewayTransactionStatus.Successful, amountKobo: 100);
+
+        await CreateSut().HandleWebhookAsync(WebhookBody(payment.Reference), "sig");
+
+        _email.Verify(e => e.SendPaymentReceiptAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<string>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string>()), Times.Never);
+    }
+
+    // ── refund webhooks ──────────────────────────────────────────
+
+    /// <summary>Refund events name the charge in `transaction_reference`, not `reference`.</summary>
+    private static string RefundWebhookBody(string transactionReference, string @event, long amount = 750000) =>
+        "{\"event\":\"" + @event + "\",\"data\":{\"id\":991,\"transaction_reference\":\""
+        + transactionReference + "\",\"reference\":\"refund_ref\",\"amount\":" + amount + "}}";
+
+    [Fact]
+    public async Task Webhook_ForAProcessedRefund_RecordsItAndTellsThePayer()
+    {
+        var payment = GivenExistingPayment(PaymentStatus.RefundPending);
+        payment.RefundReason = "Duplicate submission, refunded in full";
+        GivenAuthenticWebhook();
+
+        var handled = await CreateSut()
+            .HandleWebhookAsync(RefundWebhookBody(payment.Reference, "refund.processed"), "sig");
+
+        Assert.True(handled);
+        Assert.Equal(PaymentStatus.Refunded, payment.Status);
+        Assert.NotNull(payment.RefundedAt);
+
+        _email.Verify(e => e.SendPaymentRefundedAsync(
+            "jane@test.com", "Jane", payment.Reference, 750000,
+            "Duplicate submission, refunded in full"), Times.Once);
+    }
+
+    /// <summary>
+    /// A refund event reads the charge's reference from the right field. Taking
+    /// `reference` would look up the refund's own id and silently drop the event.
+    /// </summary>
+    [Fact]
+    public async Task Webhook_ForARefund_ResolvesThePaymentByTransactionReference()
+    {
+        var payment = GivenExistingPayment(PaymentStatus.RefundPending);
+        GivenAuthenticWebhook();
+
+        await CreateSut().HandleWebhookAsync(RefundWebhookBody(payment.Reference, "refund.processed"), "sig");
+
+        Assert.Equal(PaymentStatus.Refunded, payment.Status);
+    }
+
+    /// <summary>Refund webhooks are retried too, and must not refund twice in our records.</summary>
+    [Fact]
+    public async Task Webhook_ForAProcessedRefund_DeliveredTwice_RecordsOnce()
+    {
+        var payment = GivenExistingPayment(PaymentStatus.RefundPending);
+        GivenAuthenticWebhook();
+        var sut = CreateSut();
+
+        await sut.HandleWebhookAsync(RefundWebhookBody(payment.Reference, "refund.processed"), "sig");
+        var refundedAt = payment.RefundedAt;
+        await sut.HandleWebhookAsync(RefundWebhookBody(payment.Reference, "refund.processed"), "sig");
+
+        Assert.Equal(refundedAt, payment.RefundedAt);
+        _email.Verify(e => e.SendPaymentRefundedAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<long>(), It.IsAny<string>()), Times.Once);
+    }
+
+    /// <summary>
+    /// A failed refund goes back to where it was, so the payment is not stuck
+    /// pending a refund that will never arrive — and the payer is not told anything
+    /// went back when it did not.
+    /// </summary>
+    [Fact]
+    public async Task Webhook_ForAFailedRefund_RestoresThePaymentAndSendsNothing()
+    {
+        var payment = GivenExistingPayment(PaymentStatus.RefundPending);
+        GivenAuthenticWebhook();
+
+        var handled = await CreateSut()
+            .HandleWebhookAsync(RefundWebhookBody(payment.Reference, "refund.failed"), "sig");
+
+        Assert.True(handled);
+        Assert.Equal(PaymentStatus.Successful, payment.Status);
+
+        _email.Verify(e => e.SendPaymentRefundedAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<long>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Webhook_ForARefund_WithAnInvalidSignature_IsRejected()
+    {
+        var payment = GivenExistingPayment(PaymentStatus.RefundPending);
+        _gateway.Setup(g => g.IsWebhookAuthentic(It.IsAny<string>(), It.IsAny<string>())).Returns(false);
+
+        var handled = await CreateSut()
+            .HandleWebhookAsync(RefundWebhookBody(payment.Reference, "refund.processed"), "forged");
+
+        Assert.False(handled);
+        Assert.Equal(PaymentStatus.RefundPending, payment.Status);
+    }
+
+    /// <summary>A refunded payment no longer satisfies the verification gate.</summary>
+    [Fact]
+    public async Task IsSubjectPaidForAsync_WithARefundedPayment_IsFalse()
+    {
+        GivenExistingPayment(PaymentStatus.Refunded);
+
+        Assert.False(await CreateSut().IsSubjectPaidForAsync(CaseId));
+    }
+
+    [Fact]
+    public async Task IsSubjectPaidForAsync_WhileARefundIsInFlight_IsFalse()
+    {
+        GivenExistingPayment(PaymentStatus.RefundPending);
+
+        Assert.False(await CreateSut().IsSubjectPaidForAsync(CaseId));
     }
 }

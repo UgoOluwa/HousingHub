@@ -1,7 +1,7 @@
 # Payments — Phase 3
 
-Phase 3 of `transaction-lifecycle-plan.md`. **The rail, the checkout and the admin
-view are built and tested; nothing is charged yet.** `Payments:Enabled` is `false`, and while it is
+Phase 3 of `transaction-lifecycle-plan.md`. **Built and tested end to end — rail,
+checkout, receipts, refunds and the admin view. Nothing is charged yet.** `Payments:Enabled` is `false`, and while it is
 false every existing flow behaves exactly as it did.
 
 Provider is **Paystack**, chosen over Flutterwave for one reason that matters more
@@ -93,6 +93,13 @@ Paystack to confirm the wrong amount or to redeliver a webhook on demand.
 | A double-clicked initialise reuses the attempt in flight | Otherwise it is a double charge. |
 | A callback URL on an untrusted origin is dropped | Unchecked, it is an open redirect at the moment the payer expects a receipt. |
 | A settled payment stops offering its gateway link | Otherwise it invites paying twice. |
+| A refund needs a real reason, and refuses "n/a" | Six months on, the question is why money left the account. |
+| A refund sends back what **arrived**, not what was asked | On a flagged payment those differ, which is the main reason to refund. |
+| The payment is claimed before the provider is called | Two admins clicking at once would otherwise send two refunds. |
+| A refused refund releases the claim | Otherwise the payment sits forever pending a refund nobody accepted. |
+| A refunded payment stops satisfying the submission gate | Money returned is not money paid. |
+| A refund webhook resolves by `transaction_reference` | Reading `reference` would find the refund's own id and silently drop the event. |
+| A flagged payment sends no receipt | Nothing was handed over; a receipt would say otherwise. |
 
 The callback URL is validated against `Cors:AllowedOrigins` — that list already
 answers "is this one of our front ends", it is required in production, and a
@@ -199,15 +206,77 @@ wants a date-bucketed index and a cursor API.
 
 ---
 
+## Receipts
+
+Sent on settlement, after the payment is saved and never before it. The payment is
+the record; the receipt is a courtesy, and a failing mail provider must not cost
+somebody the thing they paid for. `SendAsync` swallows its own failures so this
+cannot throw into the webhook path.
+
+A flagged payment sends **no** receipt — nothing was handed over, so a receipt
+saying the request is with the review team would be false.
+
+The identity line appears only when it was charged, which makes the receipt the
+answer to "why was this more than the advertised price".
+
+## Refunds
+
+The only action in the system that moves money out, and the only write staff have
+over a payment. There is deliberately no endpoint to mark one successful, unflag
+one, or edit an amount — each would grant a paid service with no money moving, and
+the row would be indistinguishable from the genuine thing.
+
+**SuperAdmin only** (`SuperAdminOnly` policy), reason required, minimum ten
+characters. The reason is recorded against the payment with the admin's id and is
+sent both to the payer and to Paystack's own refund record, so all three agree
+about why the money went back.
+
+Three things it is careful about:
+
+- **The amount is the provider's, not ours.** The service re-verifies the charge and
+  refunds what actually arrived. On a flagged payment those differ by definition —
+  that is what "flagged" means — and refunding our own figure would send back an
+  amount nobody paid. An admin cannot choose the figure; partial refunds go through
+  Paystack's dashboard.
+- **The payment is claimed before the provider is contacted.** Two admins clicking
+  at once would otherwise each see a refundable payment and each send a refund. The
+  cost is the opposite failure — a payment left pending a refund that was never
+  accepted — which `TryAbandonRefund` recovers, and which is the safer of the two
+  because no money moved twice.
+- **A refunded payment is no longer settled.** `IsSettled` is true only for
+  `Successful`, so a refunded verification fee stops satisfying the submission gate
+  without the gate needing to know refunds exist.
+
+`refund.processed` and `refund.failed` webhooks finish the job. A refund issued
+directly in Paystack's dashboard is handled too — it arrives having never passed
+through this application, which is why `TryCompleteRefund` accepts a merely
+successful payment. A **failed** refund logs at error level and says the payer is
+still owed the money; a flagged payment returns to the admin queue, but one that was
+merely successful does not, so that log line is the only signal. Worth an alert.
+
+Refund events are taken at their signed word rather than re-verified, unlike
+charges. The risk runs the other way: accepting a forged charge would hand over a
+paid service, whereas accepting a forged refund would tell somebody their money is
+coming back when it is not. The signature stops both, and there is no entitlement
+being granted to re-verify against.
+
+## Consumer payment history
+
+`/payments`, in the account sidebar. Shown to an owner, who can be charged today,
+and to anyone who has actually paid — so a renter who paid once can still find the
+receipt without every renter carrying a permanently empty section.
+
+A pending attempt keeps its gateway link, so somebody who closed the tab can finish
+rather than start again — the server hands back the same attempt, so it is not a
+second charge.
+
 ## Not built
 
-- **Consumer payment history.** `GET /api/v1/Payment/mine` exists and the hook is
-  written, but no page lists a payer's receipts. Small, and worth having before
-  charging starts — a payer who cannot find what they paid emails support.
-- **Settlement email.** A payer gets no confirmation. The receipt data is all on
-  the payment row.
-- **Refunds.** No endpoint. Paystack's dashboard refunds manually, which is the
-  right answer at this volume, and it records against the transaction that exists.
+- **An alert on a failed refund.** It logs at error level and the payer is still
+  owed money. Sentry will carry it; nothing routes it to a person yet.
+- **Partial refunds.** Deliberate — Paystack's dashboard does them, recorded
+  against the transaction. Building it here would mean an admin choosing an amount,
+  which is the one thing this design keeps out of their hands.
 - **Paystack IP allowlisting.** The signature check is the real control; the
   allowlist is cheap defence in depth.
 - **Affordability and the renter-side bundle.** Phase 4.
