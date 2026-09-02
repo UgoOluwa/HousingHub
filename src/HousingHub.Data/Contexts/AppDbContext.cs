@@ -106,6 +106,17 @@ public class DynamoDbTableInitializer
         {
             CreateGsi("VerificationCaseId-index", "VerificationCaseId"),
         }),
+        ["Payments"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            // The gateway only ever knows our reference, so a webhook arrives with
+            // nothing else to find the row by.
+            CreateGsi("Reference-index", "Reference"),
+            // "My receipts."
+            CreateGsi("CustomerId-index", "CustomerId"),
+            // "Has this verification case been paid for." Asked on every submission,
+            // so it must not be a scan of every payment ever taken.
+            CreateGsi("SubjectId-index", "SubjectId"),
+        }),
     };
 
     public DynamoDbTableInitializer(

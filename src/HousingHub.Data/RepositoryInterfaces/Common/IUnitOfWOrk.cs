@@ -33,6 +33,8 @@ public interface IUnitOfWOrk : IDisposable
     IVerificationCaseQueryRepository VerificationCaseQueries { get; }
     IVerificationDocumentCommandRepository VerificationDocumentCommands { get; }
     IVerificationDocumentQueryRepository VerificationDocumentQueries { get; }
+    IPaymentCommandRepository PaymentCommands { get; }
+    IPaymentQueryRepository PaymentQueries { get; }
 
     Task SaveAsync();
 }

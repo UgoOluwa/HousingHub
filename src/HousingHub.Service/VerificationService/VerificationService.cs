@@ -38,6 +38,7 @@ public class VerificationService : IVerificationService
     private readonly IEmailService _emailService;
     private readonly IRealtimeNotifier _realtimeNotifier;
     private readonly ICacLookupService _cacLookup;
+    private readonly PaymentService.Interfaces.IPaymentService _payments;
     private readonly ILogger<VerificationService> _logger;
 
     /// <summary>
@@ -57,6 +58,7 @@ public class VerificationService : IVerificationService
         IEmailService emailService,
         IRealtimeNotifier realtimeNotifier,
         ICacLookupService cacLookup,
+        PaymentService.Interfaces.IPaymentService payments,
         ILogger<VerificationService> logger)
     {
         _unitOfWork = unitOfWork;
@@ -64,6 +66,7 @@ public class VerificationService : IVerificationService
         _emailService = emailService;
         _realtimeNotifier = realtimeNotifier;
         _cacLookup = cacLookup;
+        _payments = payments;
         _logger = logger;
     }
 
@@ -291,6 +294,16 @@ public class VerificationService : IVerificationService
                 return Fail<VerificationCaseDto>(
                     ResponseMessages.VerificationDocumentsMissing(missing.Select(DescribeDocumentType)));
             }
+
+            // Payment gate, after the document check and before the transition.
+            //
+            // In that order deliberately: somebody who has not finished assembling
+            // their documents should be told what is missing, not asked to pay and
+            // then told what is missing. Answers true whenever charging is switched
+            // off, so this reads the same either way and the flow is unchanged until
+            // Payments:Enabled is turned on.
+            if (!await _payments.IsSubjectPaidForAsync(verificationCase.Id))
+                return Fail<VerificationCaseDto>(ResponseMessages.VerificationPaymentRequired);
 
             if (!verificationCase.TrySubmit())
                 return Fail<VerificationCaseDto>(ResponseMessages.VerificationCaseAlreadySubmitted);

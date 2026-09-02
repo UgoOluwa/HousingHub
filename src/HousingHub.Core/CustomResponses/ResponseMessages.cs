@@ -75,6 +75,19 @@ public static class ResponseMessages
     public const string VerificationCaseNotEditable = "This verification request has already been submitted, so its documents can't be changed. Contact support if something needs correcting.";
     public const string VerificationCaseAlreadySubmitted = "This verification request has already been submitted.";
     public const string VerificationCaseNotAwaitingReview = "This verification request isn't awaiting a decision.";
+    public const string VerificationPaymentRequired = "This verification request hasn't been paid for yet. Complete the payment and it will go straight to our review team.";
+
+    // ── Payments ─────────────────────────────────────────────────
+    //
+    // None of these name the provider or describe our configuration. A payer who
+    // cannot pay needs to know what to do next, not which environment variable is
+    // missing — that goes to the log.
+
+    public const string PaymentsNotEnabled = "Payments aren't switched on yet.";
+    public const string PaymentsNotConfigured = "We can't take payments at the moment. Please try again shortly, or contact support if it persists.";
+    public const string PaymentCouldNotStart = "We couldn't start that payment. Please try again.";
+    public const string PaymentAlreadySettled = "This has already been paid for.";
+    public const string PaymentCaseNotPayable = "This verification request isn't awaiting payment.";
     public const string VerificationDecisionNoteRequired = "A reason is required so the applicant knows what to do next.";
     public const string VerificationDocumentsNotAllReviewed = "Every document must be reviewed before the case can be approved.";
     public const string VerificationDocumentRejectionReasonRequired = "A reason is required when rejecting a document.";

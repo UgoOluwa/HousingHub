@@ -90,6 +90,29 @@ public static class ConfigureServices
                            VerificationService.DeferToReviewerCacLookupService>();
         services.AddScoped<VerificationService.Interfaces.IVerificationExpiryService,
                            VerificationService.VerificationExpiryService>();
+
+        // ── Payments ────────────────────────────────────────────
+        //
+        // Fees owed to Housing Hub only — never custody of anyone else's money. The
+        // catalogue is a singleton because it holds no state, only configuration
+        // reads, and IsEnabled is off until prices are set.
+        services.AddSingleton<Commons.Payments.PaymentFeeCatalogue>();
+
+        // Typed client rather than a bare HttpClient: the base address and timeout
+        // belong in one place, and a socket-exhausting `new HttpClient()` inside a
+        // Lambda is a slow leak that only shows up under load.
+        services.AddHttpClient<Commons.Payments.IPaymentGateway, Commons.Payments.PaystackPaymentGateway>(
+            Commons.Payments.PaystackPaymentGateway.HttpClientName,
+            client =>
+            {
+                client.BaseAddress = new Uri("https://api.paystack.co/");
+                // Short on purpose. This runs inside a request a person is waiting
+                // on, and a gateway that has not answered in ten seconds is not
+                // about to.
+                client.Timeout = TimeSpan.FromSeconds(10);
+            });
+
+        services.AddScoped<PaymentService.Interfaces.IPaymentService, PaymentService.PaymentService>();
         services.AddSingleton<IUtilityService, UtilityService>();
 
         // AWS S3 File Storage

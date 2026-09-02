@@ -8,6 +8,7 @@ using HousingHub.Service.Dtos.Verification;
 using HousingHub.Service.NotificationService.Interfaces;
 using HousingHub.Service.VerificationService;
 using Microsoft.Extensions.Logging.Abstractions;
+using HousingHub.Service.PaymentService.Interfaces;
 using Moq;
 using PropertyEntity = HousingHub.Model.Entities.Property;
 using VerificationServiceImpl = HousingHub.Service.VerificationService.VerificationService;
@@ -53,7 +54,24 @@ public class VerificationOutcomeTests
             new Mock<IEmailService>().Object,
             new Mock<IRealtimeNotifier>().Object,
             new DeferToReviewerCacLookupService(NullLogger<DeferToReviewerCacLookupService>.Instance),
+            PaymentsSatisfied(),
             NullLogger<VerificationServiceImpl>.Instance);
+    }
+
+    /// <summary>
+    /// A payment service that reports everything as paid for.
+    /// </summary>
+    /// <remarks>
+    /// Which is what the real one does when <c>Payments:Enabled</c> is off — the
+    /// state these tests were written against. The payment gate has its own tests;
+    /// these are about the verification state machine and should not have to know
+    /// that payments exist.
+    /// </remarks>
+    private static IPaymentService PaymentsSatisfied()
+    {
+        var payments = new Mock<IPaymentService>();
+        payments.Setup(p => p.IsSubjectPaidForAsync(It.IsAny<Guid>())).ReturnsAsync(true);
+        return payments.Object;
     }
 
     private VerificationCase GivenCaseUnderReview(VerificationSubjectType subjectType, Guid subjectId)

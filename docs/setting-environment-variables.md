@@ -21,6 +21,7 @@ deploy-function`.
 | `Email:ResendApiKey` | `Email__ResendApiKey` |
 | `AdminJwt:Secret` | `AdminJwt__Secret` |
 | `Internal:WorkerSecret` | `Internal__WorkerSecret` |
+| `Payments:Paystack:SecretKey` | `Payments__Paystack__SecretKey` |
 
 ---
 

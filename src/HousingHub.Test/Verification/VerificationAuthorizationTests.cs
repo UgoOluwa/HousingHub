@@ -8,6 +8,8 @@ using HousingHub.Service.Dtos.Verification;
 using HousingHub.Service.NotificationService.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
+using HousingHub.Core.CustomResponses;
+using HousingHub.Service.PaymentService.Interfaces;
 using Moq;
 using PropertyEntity = HousingHub.Model.Entities.Property;
 using HousingHub.Service.VerificationService;
@@ -76,7 +78,21 @@ public class VerificationAuthorizationTests
             // behaviour these tests should run against.
             new DeferToReviewerCacLookupService(
                 NullLogger<DeferToReviewerCacLookupService>.Instance),
+            PaymentsSatisfied(),
             NullLogger<VerificationServiceImpl>.Instance);
+    }
+
+    /// <summary>
+    /// Everything reports as paid for by default — which is what the real service
+    /// does while <c>Payments:Enabled</c> is off, and the state these tests were
+    /// written against. One test below withholds it.
+    /// </summary>
+    private readonly Mock<IPaymentService> _payments = new();
+
+    private IPaymentService PaymentsSatisfied()
+    {
+        _payments.Setup(p => p.IsSubjectPaidForAsync(It.IsAny<Guid>())).ReturnsAsync(true);
+        return _payments.Object;
     }
 
     private VerificationCase GivenCaseOwnedBy(
@@ -392,4 +408,52 @@ public class VerificationAuthorizationTests
 
         Assert.False(result.IsSuccessful);
     }
+
+    // ── The payment gate ─────────────────────────────────────────
+
+    /// <summary>
+    /// A complete case that has not been paid for does not reach the review queue.
+    /// </summary>
+    [Fact]
+    public async Task SubmittingACompleteButUnpaidCase_IsRefused()
+    {
+        var verificationCase = GivenCaseOwnedBy(OwnerId);
+        GivenTheRequiredBusinessDocument();
+        _payments.Setup(p => p.IsSubjectPaidForAsync(It.IsAny<Guid>())).ReturnsAsync(false);
+
+        var result = await _sut.SubmitCaseAsync(OwnerId, CaseId);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.VerificationPaymentRequired, result.Message);
+
+        // Still the submitter's to edit, and still invisible to reviewers.
+        Assert.Equal(VerificationCaseStatus.Draft, verificationCase.Status);
+        _unitOfWork.Verify(u => u.VerificationCaseCommands.UpdateAsync(It.IsAny<VerificationCase>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Missing documents are reported before payment is asked for. Taking money and
+    /// then saying what is missing is the wrong order.
+    /// </summary>
+    [Fact]
+    public async Task SubmittingAnIncompleteCase_ReportsTheDocuments_WithoutAskingForPayment()
+    {
+        GivenCaseOwnedBy(OwnerId);
+        _payments.Setup(p => p.IsSubjectPaidForAsync(It.IsAny<Guid>())).ReturnsAsync(false);
+
+        var result = await _sut.SubmitCaseAsync(OwnerId, CaseId);
+
+        Assert.False(result.IsSuccessful);
+        Assert.NotEqual(ResponseMessages.VerificationPaymentRequired, result.Message);
+        _payments.Verify(p => p.IsSubjectPaidForAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    private void GivenTheRequiredBusinessDocument() =>
+        _unitOfWork
+            .Setup(u => u.VerificationDocumentQueries.GetAllAsync(
+                It.IsAny<Expression<Func<VerificationDocument, bool>>>()))
+            .ReturnsAsync(new List<VerificationDocument>
+            {
+                new(CaseId, VerificationDocumentType.CacCertificate, "k", "cac.pdf", "application/pdf", 10),
+            });
 }
