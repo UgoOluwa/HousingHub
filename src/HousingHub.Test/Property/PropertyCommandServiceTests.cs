@@ -1157,4 +1157,88 @@ public class PropertyCommandServiceTests
             .ReturnsAsync(true);
         _unitOfWorkMock.Setup(u => u.SaveAsync()).Returns(Task.CompletedTask);
     }
+
+    // ── Bedroom / bathroom counts ─────────────────────────────────────
+
+    [Fact]
+    public async Task CreateProperty_PersistsStatedRoomCounts()
+    {
+        SetupOwnerLookup(CreateOwner(CustomerType.HouseOwner));
+        SetupInsertSuccess();
+
+        var dto = CreateValidDto() with { Bedrooms = 3, Bathrooms = 2 };
+        var result = await _sut.CreateProperty(dto, OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(3, result.Data!.Property!.Bedrooms);
+        Assert.Equal(2, result.Data.Property.Bathrooms);
+    }
+
+    /// <summary>
+    /// Not stating a count must stay "not stated" rather than becoming zero — a
+    /// renter reads "0 Bedrooms" as a claim, and it would be one nobody made.
+    /// </summary>
+    [Fact]
+    public async Task CreateProperty_WithoutRoomCounts_LeavesThemUnstated()
+    {
+        SetupOwnerLookup(CreateOwner(CustomerType.HouseOwner));
+        SetupInsertSuccess();
+
+        var result = await _sut.CreateProperty(CreateValidDto(), OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Null(result.Data!.Property!.Bedrooms);
+        Assert.Null(result.Data.Property.Bathrooms);
+    }
+
+    [Fact]
+    public async Task UpdateProperty_UpdatesRoomCounts()
+    {
+        SetupOwnerLookup(CreateOwner(CustomerType.HouseOwner));
+        SetupPropertyLookup(new HousingHub.Model.Entities.Property
+        {
+            Id = PropertyId,
+            PropertyId = "PROP-TEST",
+            Title = "Title",
+            Description = "Desc",
+            OwnerId = OwnerId,
+            Bedrooms = 2,
+            Bathrooms = 1
+        });
+
+        var dto = new UpdatePropertyDto(PropertyId, null, null, null, null, null, null, null, null, null, null, null, null, null,
+            Bedrooms: 4, Bathrooms: 3);
+        var result = await _sut.UpdateProperty(dto, OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(4, result.Data!.Bedrooms);
+        Assert.Equal(3, result.Data.Bathrooms);
+    }
+
+    /// <summary>
+    /// Every field on an update is a patch: omitting one means "not supplied", not
+    /// "clear it". An edit that only changes the price must not wipe the room counts.
+    /// </summary>
+    [Fact]
+    public async Task UpdateProperty_WhenRoomCountsOmitted_LeavesStoredCounts()
+    {
+        SetupOwnerLookup(CreateOwner(CustomerType.HouseOwner));
+        SetupPropertyLookup(new HousingHub.Model.Entities.Property
+        {
+            Id = PropertyId,
+            PropertyId = "PROP-TEST",
+            Title = "Title",
+            Description = "Desc",
+            OwnerId = OwnerId,
+            Bedrooms = 2,
+            Bathrooms = 1
+        });
+
+        var dto = new UpdatePropertyDto(PropertyId, null, null, null, 900000m, null, null, null, null, null, null, null, null, null);
+        var result = await _sut.UpdateProperty(dto, OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(2, result.Data!.Bedrooms);
+        Assert.Equal(1, result.Data.Bathrooms);
+    }
 }

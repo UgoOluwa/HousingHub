@@ -155,6 +155,24 @@ public class VerificationController : ControllerBase
         return Ok(await _verification.SubmitCaseAsync(userId.Value, caseId));
     }
 
+    /// <summary>
+    /// Abandons a draft request and deletes the documents uploaded to it.
+    /// </summary>
+    /// <remarks>
+    /// Draft only. Once submitted the case belongs to the reviewer — allowing a
+    /// withdrawal mid-review would let someone pull a case back as soon as it began
+    /// going badly, which is precisely the case a reviewer most needs to finish.
+    /// </remarks>
+    [HttpDelete("cases/{caseId:guid}")]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CancelCase(Guid caseId)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId is null) return Unauthorized();
+
+        return Ok(await _verification.CancelCaseAsync(userId.Value, caseId));
+    }
+
     private Guid? GetAuthenticatedUserId()
     {
         var claim = User.FindFirst(JwtRegisteredClaimNames.Sub)

@@ -227,6 +227,53 @@ public class VerificationService : IVerificationService
         }
     }
 
+    public async Task<BaseResponse<bool>> CancelCaseAsync(Guid customerId, Guid caseId)
+    {
+        try
+        {
+            var (verificationCase, error) = await LoadOwnedCaseAsync(customerId, caseId);
+            if (verificationCase is null) return Fail<bool>(error!);
+
+            // Draft only. TryCancel enforces it too — this is here for the message,
+            // since "already submitted" is what the submitter needs to hear rather
+            // than a generic refusal.
+            if (!verificationCase.TryCancel())
+                return Fail<bool>(ResponseMessages.VerificationCaseNotCancellable);
+
+            var documents = await LoadDocumentsAsync(verificationCase.Id);
+
+            await _unitOfWork.VerificationCaseCommands.UpdateAsync(verificationCase);
+            foreach (var document in documents)
+                await _unitOfWork.VerificationDocumentCommands.DeleteAsync(document);
+            await _unitOfWork.SaveAsync();
+
+            // The case row survives as a Cancelled record; the uploaded documents do
+            // not. They are identity and title documents sitting in a private bucket
+            // for a request nobody will ever review, so keeping them is a liability
+            // with no purpose. Best-effort on storage for the same reason as
+            // RemoveDocumentAsync: an orphaned object costs cents, and failing here
+            // would leave the case cancelled with its documents apparently intact.
+            foreach (var document in documents)
+            {
+                try
+                {
+                    await _fileStorage.DeleteFileAsync(document.StorageKey);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not delete verification object {Key}", document.StorageKey);
+                }
+            }
+
+            return Ok<bool>(true, ResponseMessages.VerificationCaseCancelled);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in CancelCaseAsync for case {CaseId}", caseId);
+            return Fail<bool>(ResponseMessages.UnexpectedError);
+        }
+    }
+
     public async Task<BaseResponse<VerificationCaseDto>> SubmitCaseAsync(Guid customerId, Guid caseId)
     {
         try

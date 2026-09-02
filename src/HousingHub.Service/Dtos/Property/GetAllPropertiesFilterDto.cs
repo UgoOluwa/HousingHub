@@ -14,4 +14,5 @@ public record GetAllPropertiesFilterDto
     public string? City { get; init; }
     public string? State { get; init; }
     public int? Bedrooms { get; init; }
+    public int? Bathrooms { get; init; }
 }

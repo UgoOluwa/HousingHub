@@ -19,6 +19,26 @@ public class Property : BaseEntity
     public PropertyLeaseType PropertyLeaseType { get; set; }
     public PropertyFeature Features { get; set; } = PropertyFeature.None;
 
+    /// <summary>Number of bedrooms, or null when the lister did not state one.</summary>
+    /// <remarks>
+    /// <para>
+    /// Nullable rather than defaulting to 0, because 0 and "not stated" are different
+    /// answers and a renter reads them differently. Land genuinely has no bedrooms;
+    /// a listing created before this field existed simply never said. Defaulting to 0
+    /// would render both as "0 Bedrooms" and make the second one a false statement.
+    /// </para>
+    /// <para>
+    /// Every row written before this existed reads as null, and the bedroom filter
+    /// excludes them — a listing cannot match "3 bedrooms" when nobody said how many
+    /// it has. Owners fill this in by editing the listing.
+    /// </para>
+    /// </remarks>
+    public int? Bedrooms { get; set; }
+
+    /// <summary>Number of bathrooms, or null when the lister did not state one.</summary>
+    /// <remarks>Nullable for the same reason as <see cref="Bedrooms"/>.</remarks>
+    public int? Bathrooms { get; set; }
+
     // Contact person
     public string? ContactPersonName { get; set; }
     public string? ContactPersonEmail { get; set; }

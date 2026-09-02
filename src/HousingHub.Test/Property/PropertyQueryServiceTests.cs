@@ -687,4 +687,114 @@ public class PropertyQueryServiceTests
         var dto = Assert.Single(result.Data!.Items);
         Assert.Equal(0, dto.InspectionCount);
     }
+
+    // ── Bedroom / bathroom filtering ──────────────────────────────────
+
+    private void SetupPublishedProperties(params HousingHub.Model.Entities.Property[] properties)
+    {
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetAllAsync(It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
+            .ReturnsAsync(properties.ToList());
+        _unitOfWorkMock
+            .Setup(u => u.CustomerQueries.GetManyByAsync(
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, Guid>>>(),
+                It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(new List<HousingHub.Model.Entities.Customer>());
+    }
+
+    private static HousingHub.Model.Entities.Property CreatePropertyWithRooms(
+        string title, int? bedrooms, int? bathrooms = null)
+    {
+        var property = CreateSampleProperty(Guid.NewGuid(), $"PROP-{title}", title);
+        property.Bedrooms = bedrooms;
+        property.Bathrooms = bathrooms;
+        return property;
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesPaginatedAsync_FiltersByBedrooms()
+    {
+        SetupPublishedProperties(
+            CreatePropertyWithRooms("TwoBed", 2),
+            CreatePropertyWithRooms("ThreeBed", 3),
+            CreatePropertyWithRooms("SixBed", 6));
+
+        var result = await _sut.GetAllPropertiesPaginatedAsync(
+            new GetAllPropertiesFilterDto { PageNumber = 1, PageSize = 10, Bedrooms = 3 });
+
+        Assert.True(result.IsSuccessful);
+        var dto = Assert.Single(result.Data!.Items);
+        Assert.Equal("ThreeBed", dto.Title);
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesPaginatedAsync_FiltersByBathrooms()
+    {
+        SetupPublishedProperties(
+            CreatePropertyWithRooms("OneBath", 3, bathrooms: 1),
+            CreatePropertyWithRooms("TwoBath", 3, bathrooms: 2));
+
+        var result = await _sut.GetAllPropertiesPaginatedAsync(
+            new GetAllPropertiesFilterDto { PageNumber = 1, PageSize = 10, Bathrooms = 2 });
+
+        Assert.True(result.IsSuccessful);
+        var dto = Assert.Single(result.Data!.Items);
+        Assert.Equal("TwoBath", dto.Title);
+    }
+
+    /// <summary>
+    /// A listing whose owner never stated a bedroom count must not answer a search for
+    /// a specific one. Every listing created before the field existed reads as null, so
+    /// the alternative would be answering "3 bedrooms" with listings that never claimed
+    /// to have three.
+    /// </summary>
+    [Fact]
+    public async Task GetAllPropertiesPaginatedAsync_ExcludesListingsWithNoStatedBedroomCount()
+    {
+        SetupPublishedProperties(
+            CreatePropertyWithRooms("Unstated", null),
+            CreatePropertyWithRooms("ThreeBed", 3));
+
+        var result = await _sut.GetAllPropertiesPaginatedAsync(
+            new GetAllPropertiesFilterDto { PageNumber = 1, PageSize = 10, Bedrooms = 3 });
+
+        Assert.True(result.IsSuccessful);
+        var dto = Assert.Single(result.Data!.Items);
+        Assert.Equal("ThreeBed", dto.Title);
+    }
+
+    /// <summary>
+    /// The inverse: with no bedroom filter asked for, a listing that never stated a
+    /// count is still a listing and must still be returned.
+    /// </summary>
+    [Fact]
+    public async Task GetAllPropertiesPaginatedAsync_WithoutBedroomFilter_ReturnsListingsWithNoStatedCount()
+    {
+        SetupPublishedProperties(
+            CreatePropertyWithRooms("Unstated", null),
+            CreatePropertyWithRooms("ThreeBed", 3));
+
+        var result = await _sut.GetAllPropertiesPaginatedAsync(
+            new GetAllPropertiesFilterDto { PageNumber = 1, PageSize = 10 });
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(2, result.Data!.Items.Count);
+    }
+
+    [Fact]
+    public async Task GetPropertyAsync_CarriesRoomCountsThrough()
+    {
+        var property = CreateSampleProperty();
+        property.Bedrooms = 4;
+        property.Bathrooms = 3;
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid))
+            .ReturnsAsync(property);
+
+        var result = await _sut.GetPropertyAsync(PropertyGuid);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(4, result.Data!.Bedrooms);
+        Assert.Equal(3, result.Data.Bathrooms);
+    }
 }

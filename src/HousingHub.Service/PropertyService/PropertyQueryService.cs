@@ -303,11 +303,31 @@ public class PropertyQueryService : IPropertyQueryService
                 properties = properties.Where(x => x.Price <= filter.MaxPrice.Value);
             }
 
-            // Bedrooms filter (requires Bedrooms field on Property entity when added)
-            // if (filter.Bedrooms.HasValue)
-            // {
-            //     properties = properties.Where(x => x.Bedrooms == filter.Bedrooms.Value);
-            // }
+            // Bedroom and bathroom filters.
+            //
+            // The filter fields have existed on GetAllPropertiesFilterDto since it was
+            // written; the entity had nowhere to hold the answer, so this block sat
+            // commented out and a request carrying ?bedrooms=3 was accepted, ignored, and
+            // answered with every listing regardless. Silently returning the wrong set is
+            // worse than rejecting the parameter.
+            //
+            // Exact match, not "at least": a search for a 3-bedroom flat is not satisfied
+            // by a 6-bedroom one, at nearly double the rent.
+            //
+            // A listing whose owner never stated a count does not match either value, and
+            // that is deliberate — every listing created before this field existed reads
+            // as null, so filtering by bedrooms will exclude them until their owners edit
+            // them. Matching them anyway would answer "3 bedrooms" with listings that have
+            // made no such claim.
+            if (filter.Bedrooms.HasValue)
+            {
+                properties = properties.Where(x => x.Bedrooms == filter.Bedrooms.Value);
+            }
+
+            if (filter.Bathrooms.HasValue)
+            {
+                properties = properties.Where(x => x.Bathrooms == filter.Bathrooms.Value);
+            }
 
             // Location filter (by City/State)
             if (!string.IsNullOrWhiteSpace(filter.City) || !string.IsNullOrWhiteSpace(filter.State))

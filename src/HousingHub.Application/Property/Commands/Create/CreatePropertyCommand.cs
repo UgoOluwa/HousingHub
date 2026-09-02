@@ -26,4 +26,6 @@ public record
     // object when it was missing, so no address ever got saved on create).
     UpdatePropertyAddressDto? PropertyAddress,
     IList<IFormFile>? Files = null,
-    bool ConfirmDuplicate = false) : IRequest<BaseResponse<CreatePropertyResultDto?>>;
+    bool ConfirmDuplicate = false,
+    int? Bedrooms = null,
+    int? Bathrooms = null) : IRequest<BaseResponse<CreatePropertyResultDto?>>;

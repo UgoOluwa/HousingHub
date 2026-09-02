@@ -19,5 +19,15 @@ public class CreatePropertyCommandValidator : AbstractValidator<CreatePropertyCo
         RuleFor(x => x.PropertyLeaseType).IsInEnum()
             .WithMessage("Please choose whether this listing is for rent, lease or sale.");
         RuleFor(x => x.OwnerId).NotEmpty();
+
+        // Optional — an owner may not know or may not want to say, and Land has no
+        // bedrooms at all. Bounded so a typo ("300" for "3") can't be stored and then
+        // shown to renters as fact.
+        RuleFor(x => x.Bedrooms).InclusiveBetween(0, 50)
+            .When(x => x.Bedrooms.HasValue)
+            .WithMessage("Please enter a number of bedrooms between 0 and 50.");
+        RuleFor(x => x.Bathrooms).InclusiveBetween(0, 50)
+            .When(x => x.Bathrooms.HasValue)
+            .WithMessage("Please enter a number of bathrooms between 0 and 50.");
     }
 }
