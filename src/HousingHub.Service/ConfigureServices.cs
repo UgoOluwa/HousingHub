@@ -113,6 +113,8 @@ public static class ConfigureServices
             });
 
         services.AddScoped<PaymentService.Interfaces.IPaymentService, PaymentService.PaymentService>();
+        services.AddScoped<PaymentService.Interfaces.IAdminPaymentQueryService,
+                           PaymentService.AdminPaymentQueryService>();
         services.AddSingleton<IUtilityService, UtilityService>();
 
         // AWS S3 File Storage

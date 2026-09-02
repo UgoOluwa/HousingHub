@@ -88,6 +88,18 @@ public class PaymentService : IPaymentService
             var (verificationCase, customer, error) = await LoadOwnedCaseAsync(customerId, caseId);
             if (verificationCase is null || customer is null) return Fail<PaymentQuoteDto>(error!);
 
+            // Ownership is still checked before answering, even when nothing is
+            // charged — the reply says whether this case needs paying for, which is
+            // not a question a stranger should be able to ask about it.
+            if (!_fees.IsEnabled)
+            {
+                return Ok(new PaymentQuoteDto(
+                    PaymentPurpose.IdentityVerification, 0, 0, 0, _fees.Currency,
+                    IncludesIdentityVerification: false,
+                    IsAlreadyPaid: false,
+                    IsPaymentRequired: false));
+            }
+
             if (!TryPrice(verificationCase.SubjectType, customer, out var pricing, out var priceError))
                 return Fail<PaymentQuoteDto>(priceError!);
 
@@ -100,7 +112,8 @@ public class PaymentService : IPaymentService
                 pricing.PurposeFeeKobo + pricing.IdentityFeeKobo,
                 _fees.Currency,
                 pricing.IdentityFeeKobo > 0,
-                alreadyPaid));
+                alreadyPaid,
+                IsPaymentRequired: true));
         }
         catch (Exception ex)
         {

@@ -116,6 +116,10 @@ public class DynamoDbTableInitializer
             // "Has this verification case been paid for." Asked on every submission,
             // so it must not be a scan of every payment ever taken.
             CreateGsi("SubjectId-index", "SubjectId"),
+            // Sparse: only flagged payments carry the attribute, so the admin's
+            // "needs a human" queue reads exactly those rather than scanning past
+            // every successful payment. See Payment.FlagWatch.
+            CreateGsi("FlagWatch-index", "FlagWatch"),
         }),
     };
 

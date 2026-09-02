@@ -1,7 +1,7 @@
 # Payments — Phase 3
 
-Phase 3 of `transaction-lifecycle-plan.md`. **The backend rail is built and
-tested; nothing is charged yet.** `Payments:Enabled` is `false`, and while it is
+Phase 3 of `transaction-lifecycle-plan.md`. **The rail, the checkout and the admin
+view are built and tested; nothing is charged yet.** `Payments:Enabled` is `false`, and while it is
 false every existing flow behaves exactly as it did.
 
 Provider is **Paystack**, chosen over Flutterwave for one reason that matters more
@@ -119,20 +119,30 @@ Nothing here can be done from the codebase.
    `Payments__Fees__IdentityVerification`, `__BusinessVerification`,
    `__PropertyVerification`. `500000` is five thousand naira. A price written as
    naira with a decimal point is a rounding bug waiting to happen.
-5. **State the refund position in the copy before payment.** The provider bills us
+5. **Rewrite the terms first.** `Housing-Hub-FE/src/app/terms/page.tsx` currently
+   says Housing Hub *"is not a payment processor. We do not currently process
+   payments or hold funds"* — and then tells users to **treat any request to pay
+   Housing Hub as fraudulent and report it.** That is correct today and exactly
+   backwards the moment this flag flips. It also needs to name the legal entity
+   that is being paid; the page currently contracts as "Housing Hub", which is not
+   a legal person. **Do this before step 6, not after.**
+
+6. **State the refund position in the copy before payment.** The provider bills us
    whether the applicant passes or not, and UK referencing companies treat fees as
    non-refundable because the work was performed. Whatever is chosen, it has to be
    said in plain words up front — chargebacks on a young merchant account cost out
    of all proportion to the amount disputed.
-6. **Set `Payments__Enabled=true`.** Dev first. Walk a full case end to end against
+7. **Set `Payments__Enabled=true`.** Dev first. Walk a full case end to end against
    test keys before production.
 
 ### The new table
 
 `Payments` is added to `DynamoDbTableInitializer`, so it is created on next start
-with three indexes — `Reference-index` (a webhook arrives knowing nothing else),
-`CustomerId-index`, and `SubjectId-index` (asked on every submission, so it must
-not be a scan).
+with four indexes — `Reference-index` (a webhook arrives knowing nothing else),
+`CustomerId-index`, `SubjectId-index` (asked on every submission, so it must not be
+a scan), and `FlagWatch-index`, which is sparse: only flagged payments carry the
+attribute, so the admin queue reads exactly the rows needing a person and does not
+grow with successful ones.
 
 **Enable PITR and deletion protection on `prod_Payments` once it exists.** The
 other sixteen production tables have both; a new one does not inherit them. This
@@ -140,17 +150,64 @@ is the table where "we lost a row" means "somebody paid and got nothing".
 
 ---
 
+## Front end
+
+### Consumer — checkout on the verification request
+
+`VerificationCheckout` is the primary action on a draft request, and **which
+action it is comes from the server, not from a build-time flag.** The quote
+reports whether charging is on at all and whether this case is already paid for,
+so the same component renders a free environment and a paid one.
+
+The price is broken down before payment, with the identity check as its own line —
+shown only when it is actually being charged, so somebody who was verified last
+year sees no identity line rather than a total they cannot account for.
+
+**Returning from the gateway is treated as a hint, not as proof.** Paystack
+appends `?reference=` to the callback URL, and the payer controls that redirect, so
+the component asks the server about the payment and polls until the server says the
+signed webhook has settled it. Polling stops on any settled state and gives up
+after two minutes with a message that says what is true — the payment may still
+complete — rather than an error implying it failed.
+
+Once settled it submits the case automatically, guarded by a ref so a poll tick
+cannot fire a second submission.
+
+`Flagged` is deliberately **not** worded as a failure. Money may have left the
+payer's account, and telling them it failed would be wrong in the direction that
+loses trust, at the worst possible moment.
+
+### Admin — the flagged queue
+
+`/admin/payments`. Read-only, matching the API: an admin who could mark a payment
+successful could grant paid services with no money moving, and the row would be
+indistinguishable from a real settlement.
+
+**"Needs checking" is the first tab, and the count is in the navbar**, polled every
+minute. That is the whole reason this screen exists — before it, a flagged payment
+appeared only in a log line, which is nowhere anybody looks. It is also the only
+queue here where nobody noticing costs a *customer* money rather than us.
+
+Each flagged row shows the reason in full on its own line, and both references —
+ours, which appears in our logs and the payer's receipt, and Paystack's, which is
+what their dashboard search accepts. Reconciling means looking it up there, so both
+are one click to copy.
+
+The general list reads the whole table and pages in memory; the flagged queue reads
+a sparse index. Fine at this volume — past a few thousand payments the general list
+wants a date-bucketed index and a cursor API.
+
+---
+
 ## Not built
 
-- **Front-end checkout.** No UI calls any of this yet. Next piece of work.
-- **Notification on settlement.** A payer gets no email confirming payment. Worth
-  having before beta; the receipt data is all on the payment row.
-- **Refunds.** No endpoint. Paystack's dashboard can refund manually, which is the
-  right first answer at this volume.
-- **Admin visibility.** No admin endpoint lists payments or shows flagged ones. A
-  `Flagged` payment currently surfaces only as a logged error — it needs somewhere
-  a person will actually look before charging starts.
-- **Paystack IP allowlisting.** Paystack publishes the addresses its webhooks come
-  from. The signature check is the real control, but the allowlist is cheap
-  defence in depth.
+- **Consumer payment history.** `GET /api/v1/Payment/mine` exists and the hook is
+  written, but no page lists a payer's receipts. Small, and worth having before
+  charging starts — a payer who cannot find what they paid emails support.
+- **Settlement email.** A payer gets no confirmation. The receipt data is all on
+  the payment row.
+- **Refunds.** No endpoint. Paystack's dashboard refunds manually, which is the
+  right answer at this volume, and it records against the transaction that exists.
+- **Paystack IP allowlisting.** The signature check is the real control; the
+  allowlist is cheap defence in depth.
 - **Affordability and the renter-side bundle.** Phase 4.

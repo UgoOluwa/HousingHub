@@ -652,4 +652,62 @@ public class PaymentServiceTests
         _gateway
             .Setup(g => g.GetTransactionAsync(reference, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new GatewayTransaction(reference, status, amountKobo, "pstk_1", "card", null));
+
+    // ── quoting ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// With charging off the quote says so plainly, rather than failing and leaving
+    /// the client to guess whether that meant "free" or "broken".
+    /// </summary>
+    [Fact]
+    public async Task Quote_WhenChargingIsOff_SaysNoPaymentIsRequired()
+    {
+        GivenDraftCaseOwnedByCustomer();
+
+        var result = await CreateSut(paymentsEnabled: false)
+            .QuoteVerificationCaseAsync(CustomerId, CaseId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.False(result.Data!.IsPaymentRequired);
+        Assert.Equal(0, result.Data.TotalKobo);
+    }
+
+    /// <summary>Ownership is checked even when nothing is charged.</summary>
+    [Fact]
+    public async Task Quote_ForSomebodyElsesCase_IsRefused_EvenWhenChargingIsOff()
+    {
+        GivenDraftCaseOwnedByCustomer();
+
+        var result = await CreateSut(paymentsEnabled: false)
+            .QuoteVerificationCaseAsync(Guid.NewGuid(), CaseId);
+
+        Assert.False(result.IsSuccessful);
+    }
+
+    [Fact]
+    public async Task Quote_ShowsTheBundleBrokenDown()
+    {
+        GivenDraftCaseOwnedByCustomer(isKycVerified: false);
+
+        var result = await CreateSut().QuoteVerificationCaseAsync(CustomerId, CaseId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.True(result.Data!.IsPaymentRequired);
+        Assert.Equal(BusinessFee, result.Data.PurposeFeeKobo);
+        Assert.Equal(IdentityFee, result.Data.IdentityFeeKobo);
+        Assert.Equal(BusinessFee + IdentityFee, result.Data.TotalKobo);
+        Assert.False(result.Data.IsAlreadyPaid);
+    }
+
+    [Fact]
+    public async Task Quote_ReportsWhenItHasAlreadyBeenPaid()
+    {
+        GivenDraftCaseOwnedByCustomer();
+        GivenExistingPayment(PaymentStatus.Successful);
+
+        var result = await CreateSut().QuoteVerificationCaseAsync(CustomerId, CaseId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.True(result.Data!.IsAlreadyPaid);
+    }
 }

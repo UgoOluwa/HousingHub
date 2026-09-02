@@ -41,4 +41,15 @@ public record PaymentQuoteDto(
     long TotalKobo,
     string Currency,
     bool IncludesIdentityVerification,
-    bool IsAlreadyPaid);
+    bool IsAlreadyPaid,
+    /// <summary>
+    /// False when charging is switched off entirely, in which case every other
+    /// figure here is zero and the case can be submitted without paying.
+    /// </summary>
+    /// <remarks>
+    /// Answered here rather than left for the client to infer from a failed quote.
+    /// A client that had to read "we can't take payments" as "you don't need to pay"
+    /// would be unable to tell that apart from a real outage — and would show a
+    /// payment wall on an environment where verification is free.
+    /// </remarks>
+    bool IsPaymentRequired = true);

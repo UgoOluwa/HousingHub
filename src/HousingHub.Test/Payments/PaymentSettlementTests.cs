@@ -179,4 +179,47 @@ public class PaymentSettlementTests
         Assert.Equal(PaymentStatus.Abandoned, payment.Status);
         Assert.Equal("left the page", payment.FailureReason);
     }
+
+    // ── The sparse flagged index ─────────────────────────────────
+
+    /// <summary>
+    /// Only a flagged payment enters the admin queue's index. A pending or
+    /// successful one carrying the marker would put every payment ever taken into
+    /// an index meant to hold the handful needing a person.
+    /// </summary>
+    [Fact]
+    public void FlagWatch_IsSetOnlyWhileFlagged()
+    {
+        var payment = CreatePayment();
+        Assert.Null(payment.FlagWatch);
+
+        payment.TrySettle(100, "pstk_1", "card");
+
+        Assert.Equal(PaymentStatus.Flagged, payment.Status);
+        Assert.Equal(Payment.FlaggedMarker, payment.FlagWatch);
+    }
+
+    [Fact]
+    public void FlagWatch_IsAbsentOnASettledPayment()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(payment.AmountKobo, "pstk_1", "card");
+
+        Assert.Null(payment.FlagWatch);
+    }
+
+    /// <summary>
+    /// The setter discards its argument, so the marker cannot disagree with the
+    /// status it is derived from — including when the object mapper assigns
+    /// properties in an order nothing specifies.
+    /// </summary>
+    [Fact]
+    public void FlagWatch_CannotBeSetIndependentlyOfStatus()
+    {
+        var payment = CreatePayment();
+        payment.FlagWatch = Payment.FlaggedMarker;
+
+        Assert.Null(payment.FlagWatch);
+        Assert.Equal(PaymentStatus.Pending, payment.Status);
+    }
 }

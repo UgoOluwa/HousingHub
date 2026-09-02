@@ -108,6 +108,34 @@ public class Payment : BaseEntity
     /// <summary>Why this was flagged for a person to look at. Set with <see cref="PaymentStatus.Flagged"/>.</summary>
     public string? FlagNote { get; set; }
 
+    /// <summary>Attribute value written for a flagged payment. Absent otherwise.</summary>
+    public const string FlaggedMarker = "FLAGGED";
+
+    /// <summary>
+    /// Index key mirroring <see cref="PaymentStatus.Flagged"/>, so "payments needing
+    /// a human" is a Query rather than a scan of every payment ever taken.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Sparse by design, the same shape as <c>VerificationCase.ReviewQueueStatus</c>:
+    /// only flagged payments carry the attribute, so DynamoDB's index holds exactly
+    /// the rows an admin is looking for and does not grow with successful ones.
+    /// </para>
+    /// <para>
+    /// <b>The setter discards its argument.</b> The value derives from
+    /// <see cref="Status"/>, which is the single source of truth; a setter exists
+    /// only because the object mapper needs one to deserialize. Storing what comes
+    /// back would let the two disagree, and would depend on the order the mapper
+    /// happens to assign properties in — which is not specified.
+    /// </para>
+    /// </remarks>
+    [DynamoDBGlobalSecondaryIndexHashKey("FlagWatch-index")]
+    public string? FlagWatch
+    {
+        get => Status == PaymentStatus.Flagged ? FlaggedMarker : null;
+        set { /* derived from Status — see remarks */ }
+    }
+
     /// <summary>True once the gateway has confirmed the money.</summary>
     [DynamoDBIgnore]
     public bool IsSettled => Status == PaymentStatus.Successful;
