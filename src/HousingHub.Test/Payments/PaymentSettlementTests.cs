@@ -433,4 +433,83 @@ public class PaymentSettlementTests
 
         Assert.Null(payment.FlagWatch);
     }
+
+    // ── A refund that failed after being accepted ────────────────
+
+    /// <summary>
+    /// Keeps the evidence. Who asked, why and for how much is what whoever picks
+    /// this up needs; clearing it would leave a flagged payment with no explanation
+    /// of how it got that way.
+    /// </summary>
+    [Fact]
+    public void TryFlagFailedRefund_FlagsAndKeepsTheAttempt()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(payment.AmountKobo, "pstk_1", "card");
+        payment.TryBeginRefund(payment.AmountKobo, Reason, AdminId);
+
+        Assert.True(payment.TryFlagFailedRefund("provider timed out"));
+
+        Assert.Equal(PaymentStatus.Flagged, payment.Status);
+        Assert.Equal(Payment.FlaggedMarker, payment.FlagWatch);
+        Assert.Equal(Reason, payment.RefundReason);
+        Assert.Equal(AdminId, payment.RefundedByAdminId);
+        Assert.Equal(payment.AmountKobo, payment.RefundAmountKobo);
+        Assert.NotNull(payment.RefundRequestedAt);
+
+        // Not refunded — that is the whole problem.
+        Assert.Null(payment.RefundedAt);
+    }
+
+    [Fact]
+    public void TryFlagFailedRefund_NamesTheAmountStillOwed()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(100, "pstk_1", "card");
+        payment.TryBeginRefund(100, Reason, AdminId);
+
+        payment.TryFlagFailedRefund(null);
+
+        Assert.Contains("100 kobo", payment.FlagNote);
+    }
+
+    [Fact]
+    public void TryFlagFailedRefund_LeavesThePaymentRefundableForARetry()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(payment.AmountKobo, "pstk_1", "card");
+        payment.TryBeginRefund(payment.AmountKobo, Reason, AdminId);
+        payment.TryFlagFailedRefund(null);
+
+        Assert.True(payment.IsRefundable);
+        Assert.Equal(RefundOutcome.Requested, payment.TryBeginRefund(payment.AmountKobo, "Second attempt at the refund", AdminId));
+    }
+
+    [Fact]
+    public void TryFlagFailedRefund_WithNoRefundInFlight_DoesNothing()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(payment.AmountKobo, "pstk_1", "card");
+
+        Assert.False(payment.TryFlagFailedRefund("nope"));
+        Assert.Equal(PaymentStatus.Successful, payment.Status);
+        Assert.Null(payment.FlagNote);
+    }
+
+    /// <summary>
+    /// A synchronous refusal is different: no money moved and the admin is looking
+    /// at the error, so it releases quietly rather than filling the queue.
+    /// </summary>
+    [Fact]
+    public void TryAbandonRefund_DoesNotFlagAPaymentThatWasNeverFlagged()
+    {
+        var payment = CreatePayment();
+        payment.TrySettle(payment.AmountKobo, "pstk_1", "card");
+        payment.TryBeginRefund(payment.AmountKobo, Reason, AdminId);
+
+        payment.TryAbandonRefund("provider refused");
+
+        Assert.Equal(PaymentStatus.Successful, payment.Status);
+        Assert.Null(payment.FlagWatch);
+    }
 }

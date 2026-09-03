@@ -126,13 +126,13 @@ Nothing here can be done from the codebase.
    `Payments__Fees__IdentityVerification`, `__BusinessVerification`,
    `__PropertyVerification`. `500000` is five thousand naira. A price written as
    naira with a decimal point is a rounding bug waiting to happen.
-5. **Rewrite the terms first.** `Housing-Hub-FE/src/app/terms/page.tsx` currently
-   says Housing Hub *"is not a payment processor. We do not currently process
-   payments or hold funds"* — and then tells users to **treat any request to pay
-   Housing Hub as fraudulent and report it.** That is correct today and exactly
-   backwards the moment this flag flips. It also needs to name the legal entity
-   that is being paid; the page currently contracts as "Housing Hub", which is not
-   a legal person. **Do this before step 6, not after.**
+5. **Finish the operator details.** The terms and privacy policy have been
+   rewritten for a platform that charges — section 3 covers fees, non-refundability
+   and refunds, and both pages now name the operating company as the party you
+   contract with and the data controller. What is still missing is
+   `Housing-Hub-FE/src/lib/operator.ts`: **the CAC registration number and
+   registered address are blank.** Both render only when set, so nothing shows a
+   placeholder to users, but a published agreement should carry them.
 
 6. **State the refund position in the copy before payment.** The provider bills us
    whether the applicant passes or not, and UK referencing companies treat fees as
@@ -247,6 +247,28 @@ Three things it is careful about:
   `Successful`, so a refunded verification fee stops satisfying the submission gate
   without the gate needing to know refunds exist.
 
+### When a refund fails after being accepted
+
+The worst state this system can reach quietly: somebody was told their money was
+coming back, and hours later — long after the admin who pressed the button stopped
+watching — it did not arrive.
+
+It is therefore **flagged**, not quietly restored. The payment goes to `Flagged`
+with a note naming the amount still owed, which puts it straight into the admin
+queue through the sparse index, and it stays refundable so retrying is the obvious
+next action. The attempt is deliberately kept — who asked, why, when, for how much —
+because clearing it would leave a flagged payment with no explanation of how it got
+that way.
+
+It is also still logged at error level, which is what reaches Sentry
+(`MinimumEventLevel = LogLevel.Error`). The queue tells whoever handles money; the
+log tells whoever handles the system. They are not the same person and both need to
+know.
+
+A **synchronous** refusal is different and does not flag: no money moved, and the
+admin who asked is looking at the error. Filling the queue with those would make it
+noise.
+
 `refund.processed` and `refund.failed` webhooks finish the job. A refund issued
 directly in Paystack's dashboard is handled too — it arrives having never passed
 through this application, which is why `TryCompleteRefund` accepts a merely
@@ -272,8 +294,6 @@ second charge.
 
 ## Not built
 
-- **An alert on a failed refund.** It logs at error level and the payer is still
-  owed money. Sentry will carry it; nothing routes it to a person yet.
 - **Partial refunds.** Deliberate — Paystack's dashboard does them, recorded
   against the transaction. Building it here would mean an admin choosing an amount,
   which is the one thing this design keeps out of their hands.

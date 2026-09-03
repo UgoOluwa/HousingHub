@@ -358,13 +358,25 @@ public class Payment : BaseEntity
     }
 
     /// <summary>
-    /// Puts a payment back where it was after a refund attempt failed.
+    /// Releases a refund claim the provider refused outright.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// For a <b>synchronous</b> refusal only — the provider declined the request
+    /// there and then, no money moved, and the admin who asked is looking at the
+    /// error. Nothing is owed and nothing needs queueing, so the payment goes back
+    /// to what it was and the attempt is forgotten.
+    /// </para>
+    /// <para>
     /// Restores <see cref="PaymentStatus.Flagged"/> rather than
-    /// <see cref="PaymentStatus.Successful"/> when there is a flag note, so a
-    /// flagged payment whose refund failed returns to the queue instead of quietly
-    /// reading as a normal completed payment.
+    /// <see cref="PaymentStatus.Successful"/> when there is already a flag note, so
+    /// a flagged payment whose refund was refused returns to the queue instead of
+    /// quietly reading as a normal completed payment.
+    /// </para>
+    /// <para>
+    /// A refund that failed <i>later</i>, asynchronously, is a different thing
+    /// entirely — see <see cref="TryFlagFailedRefund"/>.
+    /// </para>
     /// </remarks>
     public bool TryAbandonRefund(string? failureReason)
     {
@@ -374,6 +386,45 @@ public class Payment : BaseEntity
         RefundRequestedAt = null;
         RefundAmountKobo = null;
         FailureReason = failureReason ?? FailureReason;
+        DateModified = DateTime.UtcNow;
+        return true;
+    }
+
+    /// <summary>
+    /// Records that a refund the provider accepted has since failed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Always flags.</b> This arrives by webhook, minutes or hours after an admin
+    /// pressed the button and stopped watching, and it means a specific thing: we
+    /// told somebody their money was coming back and it did not. Nobody finds that
+    /// out unless it is put somewhere a person looks.
+    /// </para>
+    /// <para>
+    /// <see cref="PaymentStatus.Flagged"/> rather than a new state, because the
+    /// existing one already means exactly this — money is involved, code cannot
+    /// resolve it, and a human has to. It also puts the row straight into the admin
+    /// queue through <see cref="FlagWatch"/>, and leaves it refundable so the
+    /// obvious next action is available.
+    /// </para>
+    /// <para>
+    /// The attempt is deliberately <i>not</i> cleared the way
+    /// <see cref="TryAbandonRefund"/> clears it. Who asked, why, when, and for how
+    /// much are the evidence for whoever picks this up, and losing them would leave
+    /// a flagged payment with no explanation of how it got that way.
+    /// </para>
+    /// </remarks>
+    public bool TryFlagFailedRefund(string? providerReason)
+    {
+        if (Status != PaymentStatus.RefundPending) return false;
+
+        long owedKobo = RefundAmountKobo ?? AmountKobo;
+
+        Status = PaymentStatus.Flagged;
+        FailureReason = providerReason ?? FailureReason;
+        FlagNote =
+            $"A refund of {owedKobo} kobo was accepted by the provider and then failed. "
+            + "The payer has NOT had their money back. Check the transaction with the provider and retry the refund.";
         DateModified = DateTime.UtcNow;
         return true;
     }

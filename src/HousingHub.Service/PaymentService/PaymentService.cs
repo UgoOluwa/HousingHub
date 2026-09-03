@@ -434,18 +434,23 @@ public class PaymentService : IPaymentService
 
         if (eventName == "refund.failed")
         {
-            if (payment.TryAbandonRefund("The payment provider could not complete the refund."))
+            long owedKobo = payment.RefundAmountKobo ?? payment.AmountKobo;
+
+            // Flags rather than quietly restoring. This arrives long after the admin
+            // stopped watching, and it means we told somebody their money was coming
+            // back and it did not — so it goes into the queue a person actually
+            // reads, not only into the log.
+            if (payment.TryFlagFailedRefund("The payment provider could not complete the refund."))
             {
                 await _unitOfWork.PaymentCommands.UpdateAsync(payment);
                 await _unitOfWork.SaveAsync();
 
-                // Loud, because nobody is watching for this and the customer is
-                // still owed money. A flagged payment returns to the admin queue;
-                // one that was merely successful does not, which is why this line
-                // is the only signal.
+                // And still logged at error level, which is what reaches Sentry.
+                // The queue tells whoever handles money; this tells whoever handles
+                // the system. They are not the same person and both need to know.
                 _logger.LogError(
-                    "Refund FAILED for payment {Reference} ({AmountKobo} kobo). The payer is still owed this money.",
-                    payment.Reference, payment.RefundAmountKobo ?? payment.AmountKobo);
+                    "Refund FAILED for payment {Reference} ({AmountKobo} kobo). The payer is still owed this money and it has been flagged for review.",
+                    payment.Reference, owedKobo);
             }
 
             return true;

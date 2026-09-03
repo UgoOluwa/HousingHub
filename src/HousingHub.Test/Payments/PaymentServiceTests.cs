@@ -833,12 +833,13 @@ public class PaymentServiceTests
     }
 
     /// <summary>
-    /// A failed refund goes back to where it was, so the payment is not stuck
-    /// pending a refund that will never arrive — and the payer is not told anything
-    /// went back when it did not.
+    /// A refund that the provider accepted and then failed is the worst state this
+    /// system can reach quietly: somebody was told their money was coming back and
+    /// it did not, hours after the admin who pressed the button stopped watching.
+    /// It goes into the queue a person reads, not only into the log.
     /// </summary>
     [Fact]
-    public async Task Webhook_ForAFailedRefund_RestoresThePaymentAndSendsNothing()
+    public async Task Webhook_ForAFailedRefund_FlagsItForAPerson()
     {
         var payment = GivenExistingPayment(PaymentStatus.RefundPending);
         GivenAuthenticWebhook();
@@ -847,11 +848,43 @@ public class PaymentServiceTests
             .HandleWebhookAsync(RefundWebhookBody(payment.Reference, "refund.failed"), "sig");
 
         Assert.True(handled);
-        Assert.Equal(PaymentStatus.Successful, payment.Status);
+        Assert.Equal(PaymentStatus.Flagged, payment.Status);
+
+        // In the admin queue, via the sparse index.
+        Assert.Equal(Payment.FlaggedMarker, payment.FlagWatch);
+
+        // And the note says what is actually owed, not just that something failed.
+        Assert.NotNull(payment.FlagNote);
+        Assert.Contains("NOT had their money back", payment.FlagNote);
+    }
+
+    /// <summary>The payer is not told anything went back when it did not.</summary>
+    [Fact]
+    public async Task Webhook_ForAFailedRefund_TellsThePayerNothing()
+    {
+        var payment = GivenExistingPayment(PaymentStatus.RefundPending);
+        GivenAuthenticWebhook();
+
+        await CreateSut().HandleWebhookAsync(RefundWebhookBody(payment.Reference, "refund.failed"), "sig");
 
         _email.Verify(e => e.SendPaymentRefundedAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<long>(), It.IsAny<string>()), Times.Never);
+    }
+
+    /// <summary>
+    /// A flagged failed refund stays refundable, so retrying is the obvious next
+    /// action rather than something an admin has to arrange elsewhere.
+    /// </summary>
+    [Fact]
+    public async Task AFailedRefund_LeavesThePaymentRefundableAgain()
+    {
+        var payment = GivenExistingPayment(PaymentStatus.RefundPending);
+        GivenAuthenticWebhook();
+
+        await CreateSut().HandleWebhookAsync(RefundWebhookBody(payment.Reference, "refund.failed"), "sig");
+
+        Assert.True(payment.IsRefundable);
     }
 
     [Fact]
