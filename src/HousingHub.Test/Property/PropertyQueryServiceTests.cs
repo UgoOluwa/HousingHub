@@ -797,4 +797,186 @@ public class PropertyQueryServiceTests
         Assert.Equal(4, result.Data!.Bedrooms);
         Assert.Equal(3, result.Data.Bathrooms);
     }
+
+    // ── The public projection ────────────────────────────────────
+    //
+    // A pen test found /Property/all, /Property/{id}, /Property/trending and
+    // /Property/nearby — all anonymous, because this is a public listings site —
+    // handing out the lister's email address and phone number along with
+    // UnpublishReason, IsFlaggedDuplicate and PossibleDuplicateOfPropertyId.
+
+    private static HousingHub.Model.Entities.Property CreatePropertyWithPrivateFields()
+    {
+        var property = CreateSampleProperty();
+        property.ContactPersonName = "Agent Smith";
+        property.ContactPersonEmail = "smith@agency.com";
+        property.ContactPersonPhoneNumber = "08099887766";
+        property.UnpublishReason = "Photos did not match the address";
+        property.IsFlaggedDuplicate = true;
+        property.PossibleDuplicateOfPropertyId = Guid.NewGuid();
+        return property;
+    }
+
+    private static void AssertRedacted(PropertyDto dto)
+    {
+        Assert.Null(dto.ContactPersonEmail);
+        Assert.Null(dto.ContactPersonPhoneNumber);
+        Assert.Null(dto.UnpublishReason);
+        Assert.False(dto.IsFlaggedDuplicate);
+        Assert.Null(dto.PossibleDuplicateOfPropertyId);
+    }
+
+    private static void AssertNotRedacted(PropertyDto dto)
+    {
+        Assert.Equal("smith@agency.com", dto.ContactPersonEmail);
+        Assert.Equal("08099887766", dto.ContactPersonPhoneNumber);
+        Assert.Equal("Photos did not match the address", dto.UnpublishReason);
+        Assert.True(dto.IsFlaggedDuplicate);
+        Assert.NotNull(dto.PossibleDuplicateOfPropertyId);
+    }
+
+    [Fact]
+    public async Task GetPropertyAsync_ForAnAnonymousReader_RedactsContactAndModerationFields()
+    {
+        var property = CreatePropertyWithPrivateFields();
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid)).ReturnsAsync(property);
+
+        var result = await _sut.GetPropertyAsync(PropertyGuid);
+
+        Assert.True(result.IsSuccessful);
+        AssertRedacted(result.Data!);
+
+        // Still identifiable as a listing: the owner id drives the consumer app's
+        // "are these my controls" check, and the name is who is offering it.
+        Assert.Equal(OwnerId, result.Data!.OwnerId);
+        Assert.Equal("Agent Smith", result.Data.ContactPersonName);
+    }
+
+    [Fact]
+    public async Task GetPropertyAsync_ForALoggedInStranger_StillRedacts()
+    {
+        var property = CreatePropertyWithPrivateFields();
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid)).ReturnsAsync(property);
+
+        var result = await _sut.GetPropertyAsync(PropertyGuid, requesterId: Guid.NewGuid());
+
+        Assert.True(result.IsSuccessful);
+        AssertRedacted(result.Data!);
+    }
+
+    [Fact]
+    public async Task GetPropertyAsync_ForTheOwner_ReturnsTheirOwnDetails()
+    {
+        var property = CreatePropertyWithPrivateFields();
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid)).ReturnsAsync(property);
+
+        var result = await _sut.GetPropertyAsync(PropertyGuid, requesterId: OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        AssertNotRedacted(result.Data!);
+    }
+
+    /// <summary>
+    /// includeUnpublished is only ever set by the admin API. An admin reviewing a
+    /// listing needs the contact details and the duplicate flag — the dashboard
+    /// renders both.
+    /// </summary>
+    [Fact]
+    public async Task GetPropertyAsync_ForAnAdmin_ReturnsEverything()
+    {
+        var property = CreatePropertyWithPrivateFields();
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByIdAsync(PropertyGuid)).ReturnsAsync(property);
+
+        var result = await _sut.GetPropertyAsync(PropertyGuid, includeUnpublished: true);
+
+        Assert.True(result.IsSuccessful);
+        AssertNotRedacted(result.Data!);
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesPaginatedAsync_RedactsEveryRow()
+    {
+        SetupPublishedProperties(CreatePropertyWithPrivateFields());
+
+        var result = await _sut.GetAllPropertiesPaginatedAsync(
+            new GetAllPropertiesFilterDto { PageNumber = 1, PageSize = 10 });
+
+        Assert.True(result.IsSuccessful);
+        AssertRedacted(Assert.Single(result.Data!.Items));
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesAsync_Publicly_Redacts()
+    {
+        SetupPublishedProperties(CreatePropertyWithPrivateFields());
+
+        var result = await _sut.GetAllPropertiesAsync();
+
+        Assert.True(result.IsSuccessful);
+        AssertRedacted(Assert.Single(result.Data!));
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesAsync_ForAnAdmin_ReturnsEverything()
+    {
+        var property = CreatePropertyWithPrivateFields();
+        SetupPublishedProperties(property);
+
+        // The admin path reads every row rather than the published-only predicate,
+        // so it goes through the parameterless overload.
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetAllAsync())
+            .ReturnsAsync(new List<HousingHub.Model.Entities.Property> { property });
+
+        var result = await _sut.GetAllPropertiesAsync(includeUnpublished: true);
+
+        Assert.True(result.IsSuccessful);
+        AssertNotRedacted(Assert.Single(result.Data!));
+    }
+
+    [Fact]
+    public async Task GetTrendingPropertiesAsync_Redacts()
+    {
+        SetupPublishedProperties(CreatePropertyWithPrivateFields());
+
+        var result = await _sut.GetTrendingPropertiesAsync();
+
+        Assert.True(result.IsSuccessful);
+        AssertRedacted(Assert.Single(result.Data!));
+    }
+
+    [Fact]
+    public async Task GetNewPropertiesAsync_Redacts()
+    {
+        SetupPublishedProperties(CreatePropertyWithPrivateFields());
+
+        var result = await _sut.GetNewPropertiesAsync();
+
+        Assert.True(result.IsSuccessful);
+        AssertRedacted(Assert.Single(result.Data!));
+    }
+
+    /// <summary>
+    /// The owner's own list. The unpublish reason in particular is the point — an
+    /// owner has to be told why their listing was taken down.
+    /// </summary>
+    [Fact]
+    public async Task GetPropertiesByOwnerAsync_ReturnsTheirOwnDetails()
+    {
+        var property = CreatePropertyWithPrivateFields();
+        _unitOfWorkMock
+            .Setup(u => u.PropertyQueries.GetAllAsync(
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Property, bool>>>()))
+            .ReturnsAsync(new List<HousingHub.Model.Entities.Property> { property });
+        _unitOfWorkMock
+            .Setup(u => u.CustomerQueries.GetManyByAsync(
+                It.IsAny<Expression<Func<HousingHub.Model.Entities.Customer, Guid>>>(),
+                It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(new List<HousingHub.Model.Entities.Customer>());
+
+        var result = await _sut.GetPropertiesByOwnerAsync(OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        AssertNotRedacted(Assert.Single(result.Data!));
+    }
 }

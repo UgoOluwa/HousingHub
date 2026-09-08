@@ -210,7 +210,10 @@ public class PropertyCommandService : IPropertyCommandService
 
             await _unitOfWOrk.SaveAsync();
 
-            PropertyDto propertyDto = _mapper.Map<PropertyDto>(property);
+            // The owner reading back what they just created. The public projection
+            // strips the contact details they supplied a moment ago, which would be
+            // absurd to hand back blank.
+            PropertyDto propertyDto = _mapper.Map<PropertyDto>(property).WithPrivilegedFields(property);
             return new BaseResponse<CreatePropertyResultDto>(
                 new CreatePropertyResultDto(propertyDto, null), true, string.Empty, ResponseMessages.SetCreationSuccessMessage(ClassName));
         }
@@ -423,7 +426,8 @@ public class PropertyCommandService : IPropertyCommandService
 
             property.Files = (await _unitOfWOrk.PropertyFileQueries.GetAllAsync(x => x.PropertyId == property.Id)).ToList();
 
-            PropertyDto response = _mapper.Map<PropertyDto>(property);
+            // Same: the owner reading back their own edit.
+            PropertyDto response = _mapper.Map<PropertyDto>(property).WithPrivilegedFields(property);
             return new BaseResponse<PropertyDto>(response, true, string.Empty, ResponseMessages.SetUpdateSuccessMessage(ClassName));
         }
         catch (Exception ex)

@@ -816,4 +816,81 @@ public class AuthServiceTests
         Assert.False(result.IsSuccessful);
         Assert.Equal(ResponseMessages.InvalidCredentials, result.Message);
     }
+
+    // ── Sign-in as an account-existence oracle ───────────────────
+    //
+    // A pen test reported this endpoint as distinguishing a registered address from
+    // an unregistered one. The messages were already identical; the work was not.
+
+    /// <summary>
+    /// An unknown address still pays for a password hash, so the response time does
+    /// not answer the question the message refuses to.
+    /// </summary>
+    [Fact]
+    public async Task Login_WithAnUnknownAddress_StillDoesPasswordWork()
+    {
+        _unitOfWorkMock
+            .Setup(u => u.CustomerQueries.GetByEmailOrPhoneAsync(It.IsAny<string>()))
+            .ReturnsAsync((HousingHub.Model.Entities.Customer?)null);
+
+        var result = await _sut.Login(new LoginCustomerDto("nobody@test.com", "SomePassword1"));
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.InvalidCredentials, result.Message);
+        _passwordHasherMock.Verify(p => p.Hash(It.IsAny<string>()), Times.Once);
+    }
+
+    /// <summary>
+    /// And so does a Google-only account, which has no password to check but must
+    /// not answer faster than one that does.
+    /// </summary>
+    [Fact]
+    public async Task Login_AgainstAnAccountWithNoPassword_StillDoesPasswordWork()
+    {
+        var customer = new HousingHub.Model.Entities.Customer(
+            "Jane", "Doe", "jane@test.com", "08000000000", CustomerType.Customer, string.Empty)
+        {
+            Id = Guid.NewGuid(),
+            PasswordHash = string.Empty,
+            EmailVerified = true,
+        };
+        _unitOfWorkMock
+            .Setup(u => u.CustomerQueries.GetByEmailOrPhoneAsync(It.IsAny<string>()))
+            .ReturnsAsync(customer);
+
+        var result = await _sut.Login(new LoginCustomerDto("jane@test.com", "SomePassword1"));
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.InvalidCredentials, result.Message);
+        _passwordHasherMock.Verify(p => p.Hash(It.IsAny<string>()), Times.Once);
+    }
+
+    /// <summary>
+    /// The three failure modes are indistinguishable from the response body: no such
+    /// account, no password on the account, and the wrong password.
+    /// </summary>
+    [Fact]
+    public async Task Login_ReturnsTheSameMessage_ForEveryCredentialFailure()
+    {
+        _unitOfWorkMock
+            .Setup(u => u.CustomerQueries.GetByEmailOrPhoneAsync(It.IsAny<string>()))
+            .ReturnsAsync((HousingHub.Model.Entities.Customer?)null);
+        var unknown = await _sut.Login(new LoginCustomerDto("nobody@test.com", "SomePassword1"));
+
+        var customer = new HousingHub.Model.Entities.Customer(
+            "Jane", "Doe", "jane@test.com", "08000000000", CustomerType.Customer, TestPasswordHash)
+        {
+            Id = Guid.NewGuid(),
+            PasswordHash = TestPasswordHash,
+            EmailVerified = true,
+        };
+        _unitOfWorkMock
+            .Setup(u => u.CustomerQueries.GetByEmailOrPhoneAsync(It.IsAny<string>()))
+            .ReturnsAsync(customer);
+        _passwordHasherMock.Setup(p => p.Verify("nope", TestPasswordHash)).Returns(false);
+        var wrongPassword = await _sut.Login(new LoginCustomerDto("jane@test.com", "nope"));
+
+        Assert.Equal(unknown.Message, wrongPassword.Message);
+        Assert.Equal(unknown.IsSuccessful, wrongPassword.IsSuccessful);
+    }
 }
