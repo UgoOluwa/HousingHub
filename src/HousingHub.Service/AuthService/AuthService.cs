@@ -150,6 +150,28 @@ public class AuthService : IAuthService
         }
     }
 
+    /// <summary>
+    /// Spends roughly the same effort a real password check would, and throws the
+    /// result away.
+    /// </summary>
+    /// <remarks>
+    /// Only reachable when there is nothing to check against. Wrapped because a
+    /// failure here must not turn a failed sign-in into a 500 — the caller is
+    /// returning "invalid credentials" either way, and the timing defence is not
+    /// worth an outage.
+    /// </remarks>
+    private void BurnPasswordWork(string? password)
+    {
+        try
+        {
+            _passwordHasher.Hash(password ?? string.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Timing-equalisation hash failed during sign-in");
+        }
+    }
+
     public async Task<BaseResponse<LoginCustomerResponseDto>> Login(LoginCustomerDto request)
     {
         try
@@ -158,7 +180,23 @@ public class AuthService : IAuthService
             var customer = await _unitOfWork.CustomerQueries.GetByEmailOrPhoneAsync(emailOrPhone);
 
             if (customer == null)
+            {
+                // Same message as a wrong password, and now the same cost.
+                //
+                // The message was already uniform, but the work was not: an unknown
+                // address returned immediately while a known one paid for a password
+                // verification. That difference is measurable from outside — a pen
+                // test reported this endpoint as an account-existence oracle — and a
+                // uniform message with a non-uniform response time still answers the
+                // question, just more slowly.
+                //
+                // Hash rather than Verify, so this does not depend on keeping a
+                // dummy hash in the hasher's current format. Both are deliberately
+                // expensive by the same construction, which is the property that
+                // matters; the result is discarded.
+                BurnPasswordWork(request.Password);
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidCredentials);
+            }
 
             // Whether a sign-in method is available is decided by the credentials the
             // account actually holds, not by which provider created it — an account can
@@ -169,8 +207,13 @@ public class AuthService : IAuthService
             // attacker, and not something a legitimate user needs at this point. The
             // reset flow handles adding a password and says so in its own copy.
             if (string.IsNullOrEmpty(customer.PasswordHash))
+            {
+                // Same reasoning: a Google-only account must not answer faster than
+                // one with a password.
+                BurnPasswordWork(request.Password);
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty,
                     ResponseMessages.InvalidCredentials);
+            }
 
             if (!_passwordHasher.Verify(request.Password, customer.PasswordHash))
                 return new BaseResponse<LoginCustomerResponseDto>(null, false, string.Empty, ResponseMessages.InvalidCredentials);

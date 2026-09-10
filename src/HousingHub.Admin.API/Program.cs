@@ -100,6 +100,11 @@ public static class Program
             .WriteTo.Console());
 
         builder.Services.AddAdminRateLimiting();
+        // Kestrel announces itself in a Server header on every response. Free
+        // fingerprinting, and no client needs it. Only in effect outside Lambda,
+        // where Kestrel is what serves requests.
+        builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
+
         builder.Services.AddHealthChecks();
         builder.Services.AddTransient<ExceptionHandlingMiddleware>();
 

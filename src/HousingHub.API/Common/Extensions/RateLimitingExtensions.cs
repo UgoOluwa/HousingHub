@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Threading.RateLimiting;
+using HousingHub.Core.Security;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace HousingHub.API.Common.Extensions;
@@ -101,11 +102,11 @@ public static class RateLimitingExtensions
     /// Partitions by authenticated user where possible, falling back to client IP.
     /// </summary>
     /// <remarks>
-    /// Behind API Gateway or a load balancer, <c>RemoteIpAddress</c> is the proxy
-    /// unless forwarded headers are honoured, which would collapse every anonymous
-    /// caller into one bucket and lock everyone out together. X-Forwarded-For is read
-    /// directly for that reason. It is client-controlled and therefore spoofable —
-    /// another reason this is a speed bump rather than a control.
+    /// Behind API Gateway, <c>RemoteIpAddress</c> is the gateway rather than the
+    /// caller, which would collapse every anonymous request into one bucket and lock
+    /// everyone out together. X-Forwarded-For is therefore read — but see
+    /// <see cref="ClientAddress"/> for which part of it, because reading the wrong
+    /// end made the limiter trivially bypassable.
     /// </remarks>
     private static string PartitionKey(HttpContext httpContext)
     {
@@ -115,11 +116,12 @@ public static class RateLimitingExtensions
 
         if (!string.IsNullOrEmpty(userId)) return $"user:{userId}";
 
-        var forwarded = httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        var ip = string.IsNullOrWhiteSpace(forwarded)
-            ? httpContext.Connection.RemoteIpAddress?.ToString()
-            : forwarded.Split(',')[0].Trim();
+        // Resolved in Core so the rule can be unit tested — see ClientAddressResolver
+        // for why the rightmost hop is the only trustworthy one.
+        var address = ClientAddressResolver.Resolve(
+            httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault(),
+            httpContext.Connection.RemoteIpAddress?.ToString());
 
-        return $"ip:{ip ?? "unknown"}";
+        return $"ip:{address ?? "unknown"}";
     }
 }
