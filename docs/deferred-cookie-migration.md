@@ -12,7 +12,7 @@ safely until the API is served from a subdomain of the app's domain.
 
 | | Current |
 |---|---|
-| App | `housinghub.ng` (Netlify) |
+| App | `housinghub.ng` (Vercel) |
 | Consumer API | `pk1wr06fr1.execute-api.af-south-1.amazonaws.com` |
 | Admin API | `3tgjb2crdf.execute-api.af-south-1.amazonaws.com` |
 
@@ -43,6 +43,14 @@ A stolen refresh token is still usable until one of those fires, which is the ga
 cookies would close. But the window is now bounded by an action the user or an
 admin can actually take, rather than running the full 30 days unconditionally.
 
+**Since then, the other half of the risk has been reduced.** A token in
+`localStorage` only matters if script can run in the page, and `script-src` no
+longer allows `'unsafe-inline'` — middleware issues a per-request nonce, so an
+injected inline script is refused rather than executed. That attacks the likelihood
+rather than the impact, and the two are multiplicative: this is no longer a
+one-XSS-away exposure. It does not make cookies unnecessary, but it does change the
+urgency.
+
 ---
 
 ## Unblocking it
@@ -60,11 +68,18 @@ DNS record.
 An earlier branch already pointed the frontend at `api.housinghub.ng`, so this
 may already be planned.
 
-**The alternative** is enabling the existing Next.js proxy
-(`NEXT_PUBLIC_ENABLE_PROXY=true`, rewrite already present in `next.config.ts`),
-which makes calls same-origin. It works, but routes every API call through a
-Netlify function — added latency and cost on every request, to solve a problem
-DNS solves once.
+**Do not re-enable the old Next.js proxy.** This document used to name it as the
+alternative. It has since been removed: `/api/proxy/:path*` forwarded any path and
+any method to the API, which made the app's origin an open unauthenticated relay
+into it, and the September 2026 pen test reported it as an authentication bypass on
+Property CRUD. See `pentest-2026-09-05-remediation.md`.
+
+A *scoped* version of the same idea is still viable and is the fallback if DNS is
+slow: a route handler that proxies **only** `POST /api/v1/Auth/refresh-token` and
+`POST /api/v1/Auth/logout`, reading the cookie server-side. That is a first-party
+cookie on the app's own origin and needs no DNS change. It is a narrow surface
+rather than a blanket rewrite — but it is still more moving parts than a DNS record,
+so try DNS first.
 
 ---
 

@@ -202,6 +202,11 @@ public class PropertyQueryService : IPropertyQueryService
                     ownerTask.Result is { } o2 ? OwnerVerification.From(o2).Tier : VerificationTier.Unverified)
             };
 
+            // The lister's own read, or an admin's. Everyone else gets the public
+            // projection, which is what the mapper produced above.
+            if (property.OwnerId == requesterId || includeUnpublished)
+                dto = dto.WithPrivilegedFields(property);
+
             return new BaseResponse<PropertyDto?>(dto, true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
@@ -257,8 +262,23 @@ public class PropertyQueryService : IPropertyQueryService
 
             await AttachFilesAsync(properties);
 
-            return new BaseResponse<List<PropertyDto>>(
-                await MapWithOwnerVerificationAsync(properties), true, string.Empty, ResponseMessages.Successful);
+            var dtos = await MapWithOwnerVerificationAsync(properties);
+
+            // includeUnpublished is only ever set by the admin API — the consumer API
+            // has no route that passes it. An admin reviewing listings needs the
+            // contact details and the duplicate flag; the admin dashboard renders
+            // both.
+            if (includeUnpublished)
+            {
+                var byId = properties.ToDictionary(p => p.Id);
+                dtos = dtos
+                    .Select(dto => byId.TryGetValue(dto.Id, out var entity)
+                        ? dto.WithPrivilegedFields(entity)
+                        : dto)
+                    .ToList();
+            }
+
+            return new BaseResponse<List<PropertyDto>>(dtos, true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
         {
@@ -383,8 +403,15 @@ public class PropertyQueryService : IPropertyQueryService
 
             await AttachFilesAsync(properties);
 
-            return new BaseResponse<List<PropertyDto>>(
-                await MapWithOwnerVerificationAsync(properties), true, string.Empty, ResponseMessages.Successful);
+            // Filtered by ownerId, so every row is the caller's own.
+            var byId = properties.ToDictionary(p => p.Id);
+            var dtos = (await MapWithOwnerVerificationAsync(properties))
+                .Select(dto => byId.TryGetValue(dto.Id, out var entity)
+                    ? dto.WithPrivilegedFields(entity)
+                    : dto)
+                .ToList();
+
+            return new BaseResponse<List<PropertyDto>>(dtos, true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
         {
@@ -416,8 +443,18 @@ public class PropertyQueryService : IPropertyQueryService
 
             // GetPagedAsync hands back IEnumerable; materialise once rather than
             // enumerating it again for the mapper.
-            var mappedItems = (await MapWithOwnerVerificationAsync(properties.ToList()))
+            // Every row here belongs to the caller — the read is filtered by ownerId —
+            // so the contact details and moderation fields are theirs to see. The
+            // unpublish reason in particular is the whole point: an owner has to be
+            // told why their listing was taken down.
+            var propertyList = properties.ToList();
+            var byId = propertyList.ToDictionary(p => p.Id);
+
+            var mappedItems = (await MapWithOwnerVerificationAsync(propertyList))
                 .Select(dto => dto with { InspectionCount = inspectionCountByProperty.GetValueOrDefault(dto.Id, 0) })
+                .Select(dto => byId.TryGetValue(dto.Id, out var entity)
+                    ? dto.WithPrivilegedFields(entity)
+                    : dto)
                 .ToList();
             var paginatedResult = new PaginatedResult<PropertyDto>(mappedItems, totalCount, filter.PageNumber, filter.PageSize);
 

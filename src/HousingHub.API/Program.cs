@@ -6,7 +6,7 @@ using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.Runtime;
 using Asp.Versioning;
-using HealthChecks.UI.Client;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using HousingHub.API.Common;
 using HousingHub.API.Common.Extensions;
 using HousingHub.API.Hubs;
@@ -127,6 +127,12 @@ namespace HousingHub.API
             });
 
             builder.Services.AddAppRateLimiting();
+            // Kestrel announces itself in a Server header on every response. It is
+            // free fingerprinting — a pen test picked the stack up from it — and no
+            // client needs it. Only in effect outside Lambda, where Kestrel is what
+            // serves requests; API Gateway sets its own headers in front.
+            builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
+
             builder.Services.AddHealthChecks();
             builder.Services.AddControllers(options =>
             {
@@ -361,7 +367,24 @@ namespace HousingHub.API
             // and container health probes receive 401 and mark the target unhealthy.
             app.MapHealthChecks("/health", new HealthCheckOptions
             {
-                ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+                // Deliberately not UIResponseWriter.WriteHealthCheckUIResponse.
+                //
+                // That writer emits per-check names, durations, exception detail and
+                // the version of the health-check package — to an anonymous caller,
+                // because a health probe cannot authenticate. A pen test picked it up
+                // as fingerprinting the backend, which is exactly what it does: it
+                // names the stack and reports which dependency is unwell, which is a
+                // map for anybody deciding what to attack next.
+                //
+                // A probe only needs the status code. The body here is a fixed word so
+                // a human curl gets something readable; the useful detail is in the
+                // logs, where it belongs.
+                ResponseWriter = static async (context, report) =>
+                {
+                    context.Response.ContentType = "application/json";
+                    await context.Response.WriteAsync(
+                        report.Status == HealthStatus.Healthy ? "{\"status\":\"healthy\"}" : "{\"status\":\"unhealthy\"}");
+                }
             }).AllowAnonymous();
 
             if (!isLambda)

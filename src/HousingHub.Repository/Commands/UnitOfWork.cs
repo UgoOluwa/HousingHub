@@ -34,6 +34,8 @@ public class UnitOfWork : IUnitOfWOrk
     public IVerificationCaseQueryRepository VerificationCaseQueries { get; }
     public IVerificationDocumentCommandRepository VerificationDocumentCommands { get; }
     public IVerificationDocumentQueryRepository VerificationDocumentQueries { get; }
+    public IPaymentCommandRepository PaymentCommands { get; }
+    public IPaymentQueryRepository PaymentQueries { get; }
 
     public UnitOfWork(
         ICustomerAddressCommandRepository customerAddressCommands,
@@ -63,7 +65,9 @@ public class UnitOfWork : IUnitOfWOrk
         IVerificationCaseCommandRepository verificationCaseCommands,
         IVerificationCaseQueryRepository verificationCaseQueries,
         IVerificationDocumentCommandRepository verificationDocumentCommands,
-        IVerificationDocumentQueryRepository verificationDocumentQueries)
+        IVerificationDocumentQueryRepository verificationDocumentQueries,
+        IPaymentCommandRepository paymentCommands,
+        IPaymentQueryRepository paymentQueries)
     {
         CustomerAddressCommands = customerAddressCommands;
         CustomerAddressQueries = customerAddressQueries;
@@ -93,6 +97,8 @@ public class UnitOfWork : IUnitOfWOrk
         VerificationCaseQueries = verificationCaseQueries;
         VerificationDocumentCommands = verificationDocumentCommands;
         VerificationDocumentQueries = verificationDocumentQueries;
+        PaymentCommands = paymentCommands;
+        PaymentQueries = paymentQueries;
     }
 
     public Task SaveAsync()

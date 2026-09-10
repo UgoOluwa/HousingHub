@@ -670,4 +670,97 @@ internal sealed class ResendEmailService : IEmailService
             return false;
         }
     }
+
+    // ── Payments ────────────────────────────────────────────────
+
+    /// <summary>Kobo to naira, for display in a receipt.</summary>
+    /// <remarks>
+    /// Amounts are stored and transported as whole kobo. This is the only place in
+    /// the email layer that divides by a hundred, for the same reason the front ends
+    /// keep it to one helper: a receipt showing a figure a hundred times too small
+    /// is the single most alarming email this system could send.
+    /// </remarks>
+    private static string Naira(long kobo)
+    {
+        decimal naira = kobo / 100m;
+        return naira == decimal.Truncate(naira)
+            ? $"&#8358;{naira:N0}"
+            : $"&#8358;{naira:N2}";
+    }
+
+    public async Task<bool> SendPaymentReceiptAsync(
+        string toEmail,
+        string firstName,
+        string reference,
+        string purposeDescription,
+        long amountKobo,
+        long identityFeeKobo,
+        string? channel)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        // The identity line appears only when it was actually charged. Somebody who
+        // was verified last year should not see a line for something they were not
+        // billed for, and somebody who was should be able to account for the total.
+        string identityLine = identityFeeKobo > 0
+            ? DetailRow("Includes one-off identity check", $"{Naira(identityFeeKobo)} &mdash; charged once, reused for any future verification at no cost")
+            : string.Empty;
+
+        string channelLine = string.IsNullOrWhiteSpace(channel)
+            ? string.Empty
+            : DetailRow("Paid by", channel.Replace("_", " "));
+
+        string body = $"""
+            {P($"Hi {firstName},")}
+            {P("Thanks &mdash; your payment has gone through and your verification request is now with our review team. Keep this email as your receipt.")}
+            {DetailRow("Amount paid", Naira(amountKobo))}
+            {DetailRow("For", purposeDescription)}
+            {identityLine}
+            {channelLine}
+            {DetailRow("Reference", reference)}
+            {P("This paid for the review itself, so it isn't refundable once we've started &mdash; including if your documents aren't approved. We'll email you as soon as there's a decision.")}
+            {P("<strong>We never ask for payment by email, phone or bank transfer.</strong> If anyone contacts you asking for money outside the Housing Hub website, it isn't us &mdash; please report it.")}
+            {Button("View your requests", $"{baseUrl}/verification")}
+            """;
+
+        string html = WrapInLayout("Your Housing Hub receipt", body, Hero("&#10003;", "Payment received"));
+
+        string text =
+            $"Hi {firstName}, we've received your payment of {amountKobo / 100m:N2} NGN for {purposeDescription}. "
+            + $"Reference {reference}. Your verification request is now with our review team. "
+            + "This paid for the review itself and isn't refundable once started. "
+            + "We never ask for payment by email, phone or bank transfer.";
+
+        return await SendAsync(toEmail, "Your Housing Hub Payment Receipt", text, html);
+    }
+
+    public async Task<bool> SendPaymentRefundedAsync(
+        string toEmail,
+        string firstName,
+        string reference,
+        long amountKobo,
+        string reason)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        string body = $"""
+            {P($"Hi {firstName},")}
+            {P("We've refunded your payment. You don't need to do anything.")}
+            {DetailRow("Amount refunded", Naira(amountKobo))}
+            {DetailRow("Reason", reason)}
+            {DetailRow("Original reference", reference)}
+            {P("Refunds are sent back to the card or account you paid from. Your bank decides when it appears on your statement, which is usually a few working days and occasionally longer &mdash; it isn't something we can speed up from our end.")}
+            {P("If it hasn't arrived after ten working days, reply to this email with the reference above and we'll chase it with our payment provider.")}
+            {Button("Go to Housing Hub", $"{baseUrl}/dashboard")}
+            """;
+
+        string html = WrapInLayout("Your Housing Hub refund", body, Hero("&#8635;", "Payment refunded"));
+
+        string text =
+            $"Hi {firstName}, we've refunded {amountKobo / 100m:N2} NGN against reference {reference}. "
+            + $"Reason: {reason}. Refunds go back to the card or account you paid from and usually appear "
+            + "within a few working days. If it hasn't arrived after ten working days, reply with the reference and we'll chase it.";
+
+        return await SendAsync(toEmail, "Your Housing Hub Refund", text, html);
+    }
 }
