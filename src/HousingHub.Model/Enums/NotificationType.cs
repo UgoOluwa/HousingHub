@@ -45,5 +45,23 @@ public enum NotificationType
     /// it drops is telling them too late.
     /// </summary>
     [Description("Verification Expiring Soon")]
-    VerificationExpiringSoon = 10
+    VerificationExpiringSoon = 10,
+
+    /// <summary>
+    /// An owner has chosen this person for a property.
+    /// </summary>
+    /// <remarks>
+    /// The one notification in this list that changes somebody's housing situation,
+    /// so it goes out in-app and by email rather than relying on them opening the app.
+    /// </remarks>
+    [Description("Selected For Property")]
+    TenancyCandidateSelected = 11,
+
+    /// <summary>The owner pulled out before the let completed.</summary>
+    [Description("Selection Withdrawn")]
+    TenancyWithdrawn = 12,
+
+    /// <summary>The candidate is no longer interested. Sent to the owner.</summary>
+    [Description("Candidate Declined")]
+    TenancyDeclinedByCandidate = 13
 }

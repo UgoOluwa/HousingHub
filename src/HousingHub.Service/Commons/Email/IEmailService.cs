@@ -105,4 +105,18 @@ public interface IEmailService
         string reference,
         long amountKobo,
         string reason);
+
+    /// <summary>
+    /// Tells somebody an owner has chosen them for a property.
+    /// </summary>
+    /// <remarks>
+    /// Emailed as well as shown in-app because it is the one message in this product
+    /// that changes where somebody is going to live. Carries the rent so the figure
+    /// they were chosen at is on the record from the start.
+    /// </remarks>
+    Task<bool> SendTenancyCandidateSelectedAsync(
+        string toEmail,
+        string firstName,
+        string propertyTitle,
+        long agreedRentKobo);
 }

@@ -121,6 +121,15 @@ public class DynamoDbTableInitializer
             // every successful payment. See Payment.FlagWatch.
             CreateGsi("FlagWatch-index", "FlagWatch"),
         }),
+        ["Tenancies"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            // "Is this property taken, and by whom." Asked before every selection.
+            CreateGsi("PropertyId-index", "PropertyId"),
+            // "Everything I am letting." The owner or managing agent's view.
+            CreateGsi("LandlordCustomerId-index", "LandlordCustomerId"),
+            // "Everywhere I am the tenant."
+            CreateGsi("TenantCustomerId-index", "TenantCustomerId"),
+        }),
     };
 
     public DynamoDbTableInitializer(

@@ -117,6 +117,8 @@ public static class ConfigureServices
                            PaymentService.AdminPaymentQueryService>();
         services.AddScoped<PaymentService.Interfaces.IAdminPaymentCommandService,
                            PaymentService.AdminPaymentCommandService>();
+
+        services.AddScoped<TenancyService.Interfaces.ITenancyService, TenancyService.TenancyService>();
         services.AddSingleton<IUtilityService, UtilityService>();
 
         // AWS S3 File Storage

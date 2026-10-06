@@ -763,4 +763,34 @@ internal sealed class ResendEmailService : IEmailService
 
         return await SendAsync(toEmail, "Your Housing Hub Refund", text, html);
     }
+
+    // ── Tenancies ───────────────────────────────────────────────
+
+    public async Task<bool> SendTenancyCandidateSelectedAsync(
+        string toEmail,
+        string firstName,
+        string propertyTitle,
+        long agreedRentKobo)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        string body = $"""
+            {P($"Hi {firstName},")}
+            {P($"Good news &mdash; the owner of <strong>{propertyTitle}</strong> has chosen you.")}
+            {DetailRow("Property", propertyTitle)}
+            {DetailRow("Rent", Naira(agreedRentKobo))}
+            {P("Nothing is agreed yet. The next step is the paperwork: the owner will send you the documents they need, and you'll see every cost in full before you're asked to sign or pay anything.")}
+            {P("<strong>We will never ask you to pay rent or a deposit by email, phone call or bank transfer.</strong> Everything happens on the Housing Hub website. If anyone contacts you asking for money another way, it isn't us &mdash; please report it.")}
+            {Button("View your property", $"{baseUrl}/dashboard")}
+            """;
+
+        string html = WrapInLayout("You've been chosen for a property", body, Hero("&#127969;", "You've been chosen"));
+
+        string text =
+            $"Hi {firstName}, the owner of {propertyTitle} has chosen you. Rent is {agreedRentKobo / 100m:N2} NGN. "
+            + "Nothing is agreed yet \u2014 the owner will send the documents they need next, and you will see every cost "
+            + "before signing or paying. We never ask for payment by email, phone or bank transfer.";
+
+        return await SendAsync(toEmail, "You've Been Chosen For A Property", text, html);
+    }
 }

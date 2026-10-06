@@ -89,6 +89,16 @@ public static class ResponseMessages
     public const string PaymentAlreadySettled = "This has already been paid for.";
     public const string PaymentCaseNotPayable = "This verification request isn't awaiting payment.";
 
+    // ── Tenancies ────────────────────────────────────────────────
+
+    public const string TenancyCandidateNotInspected = "You can only choose someone who has completed an inspection for this property.";
+    public const string TenancyAlreadyLive = "You've already chosen someone for this property. Withdraw that first if you want to pick somebody else.";
+    public const string TenancyPriceNotSet = "Set a price on this listing before choosing a tenant — it's what the agreement and the payment are based on.";
+    public const string TenancyNotCancellable = "This can no longer be cancelled from here.";
+    public const string TenancyCandidateSelected = "Chosen. We've let them know, and the listing is now marked under offer.";
+    public const string TenancyWithdrawn = "Withdrawn. The listing is available again and we've told them.";
+    public const string TenancyDeclined = "You've let them know you're not going ahead.";
+
     // Refunds. Shown to staff rather than customers, so these can name the actual
     // obstacle — an admin who is told "something went wrong" cannot act on it.
     public const string RefundReasonRequired = "Give a reason of at least ten characters. It is recorded against the refund and is what explains the money leaving months from now.";
