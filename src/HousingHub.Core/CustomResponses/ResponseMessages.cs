@@ -99,6 +99,25 @@ public static class ResponseMessages
     public const string TenancyWithdrawn = "Withdrawn. The listing is available again and we've told them.";
     public const string TenancyDeclined = "You've let them know you're not going ahead.";
 
+    // ── Tenancy documents ────────────────────────────────────────
+
+    public const string TenancyNotComposing = "This request has already been sent. You can't change what's being asked for.";
+    public const string TenancyAgreementRequired = "Add the tenancy agreement before sending — every let needs one.";
+    public const string TenancyOneAgreementOnly = "There can only be one tenancy agreement in a request.";
+    public const string TenancySignDocumentMissingFile = "Upload the document you want them to sign.";
+    public const string TenancyUploadDocumentHasFile = "You don't attach a file to a document you're asking them to provide.";
+    public const string TenancyNoDocumentsRequested = "Add at least the tenancy agreement before sending.";
+    public const string TenancyDocumentNotYours = "We couldn't find that document.";
+    public const string TenancyDocumentNotAwaitingYou = "That document isn't waiting on you.";
+    public const string TenancyDocumentNotAwaitingReview = "That document isn't waiting for a decision.";
+    public const string TenancyRejectionReasonRequired = "Give a reason. It's the only thing telling them what to change.";
+    public const string TenancyCannotESignThisLease = "A lease of this kind can't be signed electronically in Nigeria. Ask them to download it, sign it and send it back.";
+    public const string TenancyDocumentsSent = "Sent. They've been emailed and can start straight away.";
+    public const string TenancyDocumentSubmitted = "Sent to the owner for review.";
+    public const string TenancyDocumentAccepted = "Accepted.";
+    public const string TenancyDocumentRejected = "Sent back with your reason.";
+    public const string TenancyAllDocumentsAccepted = "Everything's agreed. The next step is payment.";
+
     // Refunds. Shown to staff rather than customers, so these can name the actual
     // obstacle — an admin who is told "something went wrong" cannot act on it.
     public const string RefundReasonRequired = "Give a reason of at least ten characters. It is recorded against the refund and is what explains the money leaving months from now.";

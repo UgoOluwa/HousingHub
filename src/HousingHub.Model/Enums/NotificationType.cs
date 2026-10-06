@@ -63,5 +63,31 @@ public enum NotificationType
 
     /// <summary>The candidate is no longer interested. Sent to the owner.</summary>
     [Description("Candidate Declined")]
-    TenancyDeclinedByCandidate = 13
+    TenancyDeclinedByCandidate = 13,
+
+    /// <summary>The owner has sent the documents they need. Emailed as well.</summary>
+    [Description("Documents Requested")]
+    TenancyDocumentsRequested = 14,
+
+    /// <summary>The tenant has returned or signed a document. Sent to the owner.</summary>
+    [Description("Document Submitted")]
+    TenancyDocumentSubmitted = 15,
+
+    /// <summary>The owner accepted a document.</summary>
+    [Description("Document Accepted")]
+    TenancyDocumentAccepted = 16,
+
+    /// <summary>
+    /// The owner sent a document back.
+    /// </summary>
+    /// <remarks>
+    /// Held apart from an acceptance because it is the one the tenant has to act on,
+    /// and the reason travels with it.
+    /// </remarks>
+    [Description("Document Returned")]
+    TenancyDocumentRejected = 17,
+
+    /// <summary>Every document has been accepted. The next step is payment.</summary>
+    [Description("Documents Complete")]
+    TenancyDocumentsComplete = 18
 }

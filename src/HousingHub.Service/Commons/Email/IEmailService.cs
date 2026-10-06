@@ -119,4 +119,19 @@ public interface IEmailService
         string firstName,
         string propertyTitle,
         long agreedRentKobo);
+
+    /// <summary>
+    /// Tells the tenant the owner has sent the paperwork.
+    /// </summary>
+    /// <remarks>
+    /// Carries the total — rent plus every fee — because the whole point of showing
+    /// fees before signing is that nobody meets a number for the first time at the
+    /// payment step.
+    /// </remarks>
+    Task<bool> SendTenancyDocumentsRequestedAsync(
+        string toEmail,
+        string firstName,
+        string propertyTitle,
+        int documentCount,
+        long totalKobo);
 }

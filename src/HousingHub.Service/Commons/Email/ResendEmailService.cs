@@ -793,4 +793,38 @@ internal sealed class ResendEmailService : IEmailService
 
         return await SendAsync(toEmail, "You've Been Chosen For A Property", text, html);
     }
+
+    public async Task<bool> SendTenancyDocumentsRequestedAsync(
+        string toEmail,
+        string firstName,
+        string propertyTitle,
+        int documentCount,
+        long totalKobo)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        string what = documentCount == 1
+            ? "a document to complete"
+            : $"{documentCount} documents to complete";
+
+        string body = $"""
+            {P($"Hi {firstName},")}
+            {P($"The owner of <strong>{propertyTitle}</strong> has sent you {what}.")}
+            {DetailRow("Total to pay, once everything is agreed", Naira(totalKobo))}
+            {P("That total is the rent plus every fee the owner has listed, each one named and explained in the app. <strong>Check it before you sign anything</strong> &mdash; you won't be asked to pay until all the paperwork is agreed, and nothing will be added after this.")}
+            {P("Some documents you upload yourself; some you sign. Anything that can't be signed online you can download, sign on paper and send back.")}
+            {P("<strong>We will never ask you to pay by email, phone call or bank transfer.</strong> Payment happens on the Housing Hub website and nowhere else.")}
+            {Button("Open your documents", $"{baseUrl}/dashboard")}
+            """;
+
+        string html = WrapInLayout("Your documents are ready", body, Hero("&#128196;", "Your documents are ready"));
+
+        string text =
+            $"Hi {firstName}, the owner of {propertyTitle} has sent you {what}. "
+            + $"The total once everything is agreed is {totalKobo / 100m:N2} NGN, which is the rent plus every fee the owner listed. "
+            + "You will not be asked to pay until all the paperwork is agreed. "
+            + "We never ask for payment by email, phone or bank transfer.";
+
+        return await SendAsync(toEmail, "Your Housing Hub Documents Are Ready", text, html);
+    }
 }

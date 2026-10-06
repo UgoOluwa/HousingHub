@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Asp.Versioning;
 using HousingHub.Core.CustomResponses;
+using HousingHub.Core.Security;
 using HousingHub.Service.Dtos.Tenancy;
 using HousingHub.Service.TenancyService.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -33,10 +34,12 @@ namespace HousingHub.API.Controllers.V1;
 public class TenancyController : ControllerBase
 {
     private readonly ITenancyService _tenancies;
+    private readonly ITenancyDocumentService _documents;
 
-    public TenancyController(ITenancyService tenancies)
+    public TenancyController(ITenancyService tenancies, ITenancyDocumentService documents)
     {
         _tenancies = tenancies;
+        _documents = documents;
     }
 
     /// <summary>
@@ -130,6 +133,151 @@ public class TenancyController : ControllerBase
         if (userId is null) return Unauthorized();
 
         return Ok(await _tenancies.GetAsync(tenancyId, userId.Value));
+    }
+
+    // ─── Documents and fees ──────────────────────────────────────
+
+    /// <summary>
+    /// Everything asked for, every fee, and the total. Either party.
+    /// </summary>
+    /// <remarks>
+    /// One response on purpose: the fees exist to be seen before anything is signed,
+    /// and a second call is how a client ends up rendering the documents without them.
+    /// </remarks>
+    [HttpGet("{tenancyId:guid}/documents")]
+    [ProducesResponseType(typeof(BaseResponse<TenancyDocumentPackDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDocuments(Guid tenancyId)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId is null) return Unauthorized();
+
+        return Ok(await _documents.GetPackAsync(tenancyId, userId.Value));
+    }
+
+    /// <summary>
+    /// Adds a document to a request still being composed. Owner only.
+    /// </summary>
+    /// <remarks>
+    /// Multipart, because a document the tenant has to sign arrives with the file
+    /// attached. A document the tenant supplies themselves carries no file, and
+    /// attaching one is refused rather than ignored.
+    /// </remarks>
+    [HttpPost("{tenancyId:guid}/documents")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(BaseResponse<TenancyDocumentDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> AddDocument(Guid tenancyId, [FromForm] AddTenancyDocumentDto request)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId is null) return Unauthorized();
+
+        return Ok(await _documents.AddDocumentAsync(tenancyId, request, userId.Value));
+    }
+
+    /// <summary>Removes one, while the request is still being composed. Owner only.</summary>
+    [HttpDelete("{tenancyId:guid}/documents/{documentId:guid}")]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RemoveDocument(Guid tenancyId, Guid documentId)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId is null) return Unauthorized();
+
+        return Ok(await _documents.RemoveDocumentAsync(tenancyId, documentId, userId.Value));
+    }
+
+    /// <summary>Replaces the fee list wholesale. Owner only, while composing.</summary>
+    [HttpPut("{tenancyId:guid}/fees")]
+    [ProducesResponseType(typeof(BaseResponse<IReadOnlyList<TenancyFeeDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SetFees(Guid tenancyId, SetTenancyFeesDto request)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId is null) return Unauthorized();
+
+        return Ok(await _documents.SetFeesAsync(tenancyId, request, userId.Value));
+    }
+
+    /// <summary>
+    /// Sends the whole request to the tenant. Owner only, and only once.
+    /// </summary>
+    /// <remarks>
+    /// Refused without a tenancy agreement in the set — every let has one. Emails the
+    /// tenant with the total so no figure appears for the first time at payment.
+    /// </remarks>
+    [HttpPost("{tenancyId:guid}/documents/send")]
+    [ProducesResponseType(typeof(BaseResponse<TenancyDocumentPackDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SendDocuments(Guid tenancyId)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId is null) return Unauthorized();
+
+        return Ok(await _documents.SendRequestAsync(tenancyId, userId.Value));
+    }
+
+    /// <summary>The tenant returns a file — their own document, or a signed scan.</summary>
+    [HttpPost("{tenancyId:guid}/documents/{documentId:guid}/submit")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(BaseResponse<TenancyDocumentDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SubmitDocument(Guid tenancyId, Guid documentId, IFormFile file)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId is null) return Unauthorized();
+
+        return Ok(await _documents.SubmitDocumentAsync(tenancyId, documentId, file, userId.Value));
+    }
+
+    /// <summary>
+    /// The tenant signs in the app.
+    /// </summary>
+    /// <remarks>
+    /// The address and user agent are taken from the request rather than the body —
+    /// they are the audit trail, and a signer supplying their own would be attesting
+    /// to whatever they liked. Refused for anything Nigerian law will not let be
+    /// signed electronically.
+    /// </remarks>
+    [HttpPost("{tenancyId:guid}/documents/{documentId:guid}/sign")]
+    [ProducesResponseType(typeof(BaseResponse<TenancyDocumentDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SignDocument(Guid tenancyId, Guid documentId)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId is null) return Unauthorized();
+
+        return Ok(await _documents.SignDocumentAsync(
+            tenancyId,
+            documentId,
+            userId.Value,
+            ClientAddressResolver.Resolve(
+                Request.Headers["X-Forwarded-For"].FirstOrDefault(),
+                HttpContext.Connection.RemoteIpAddress?.ToString()),
+            Request.Headers.UserAgent.FirstOrDefault()));
+    }
+
+    /// <summary>The owner accepts a document or sends it back with a reason.</summary>
+    [HttpPut("{tenancyId:guid}/documents/{documentId:guid}/review")]
+    [ProducesResponseType(typeof(BaseResponse<TenancyDocumentDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ReviewDocument(
+        Guid tenancyId, Guid documentId, ReviewTenancyDocumentDto request)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId is null) return Unauthorized();
+
+        return Ok(await _documents.ReviewDocumentAsync(tenancyId, documentId, request, userId.Value));
+    }
+
+    /// <summary>
+    /// A short-lived link to a document's file.
+    /// </summary>
+    /// <remarks>
+    /// Treat the URL as a credential rather than an address: anyone holding it can
+    /// read the document until it expires. Fetch it on click and discard it.
+    /// </remarks>
+    [HttpGet("{tenancyId:guid}/documents/{documentId:guid}/url")]
+    [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDocumentUrl(
+        Guid tenancyId, Guid documentId, [FromQuery] bool submitted = false)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId is null) return Unauthorized();
+
+        return Ok(await _documents.GetDocumentUrlAsync(tenancyId, documentId, submitted, userId.Value));
     }
 
     private Guid? GetAuthenticatedUserId()

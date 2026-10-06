@@ -37,6 +37,10 @@ public interface IUnitOfWOrk : IDisposable
     IPaymentQueryRepository PaymentQueries { get; }
     ITenancyCommandRepository TenancyCommands { get; }
     ITenancyQueryRepository TenancyQueries { get; }
+    ITenancyDocumentCommandRepository TenancyDocumentCommands { get; }
+    ITenancyDocumentQueryRepository TenancyDocumentQueries { get; }
+    ITenancyFeeCommandRepository TenancyFeeCommands { get; }
+    ITenancyFeeQueryRepository TenancyFeeQueries { get; }
 
     Task SaveAsync();
 }

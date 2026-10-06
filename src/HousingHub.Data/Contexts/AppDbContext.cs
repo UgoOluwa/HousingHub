@@ -130,6 +130,15 @@ public class DynamoDbTableInitializer
             // "Everywhere I am the tenant."
             CreateGsi("TenantCustomerId-index", "TenantCustomerId"),
         }),
+        ["TenancyDocuments"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            // "Everything asked for on this tenancy." The only way these are read.
+            CreateGsi("TenancyId-index", "TenancyId"),
+        }),
+        ["TenancyFees"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            CreateGsi("TenancyId-index", "TenancyId"),
+        }),
     };
 
     public DynamoDbTableInitializer(
