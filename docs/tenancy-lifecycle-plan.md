@@ -121,7 +121,7 @@ to `Available`.
 
 The spine. Nothing else can proceed without it, and it is small.
 
-### B — Documents and fees *(done, bar the stamped PDF)*
+### B — Documents and fees *(done)*
 
 The owner composes one request: the compulsory agreement plus any number of
 custom-named documents, each in one of three modes —
@@ -146,11 +146,14 @@ reusing the entity.
 Built: the entities and their transitions, the service, the API, both consumer
 screens, and a read-only staff view carrying the signature trail.
 
-**Not built — an in-app signature produces no stamped PDF.** The artefact today is
-the source document plus a signature record (time, address, device, hash), which is
-defensible evidence but is not what somebody expects to download and send to a bank.
-Until that exists, prefer download-sign-reupload for anything that may need to leave
-the platform.
+Signing in the app produces one stamped PDF: every page of the original footer-
+stamped with who signed it and when, and a certificate page carrying the signer, the
+time in WAT and UTC, the IP, the device and the SHA-256 the signature was taken
+against. Built with PDFsharp against the base-14 Helvetica, so no font is embedded
+and none is resolved from the system — the Lambda image has none installed.
+
+Because of that, a sign-in-app document has to be a PDF or a photo. Anything else
+uses download-sign-reupload.
 
 **Outstanding before this reaches real users:** a Nigerian property lawyer has to
 review the signing — not the agreement template, which we do not supply, but the
