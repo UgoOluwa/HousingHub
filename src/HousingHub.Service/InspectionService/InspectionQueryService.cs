@@ -53,6 +53,7 @@ public class InspectionQueryService : IInspectionQueryService
                 PropertyImageUrl = imageUrl,
                 PropertyOwnerId = property?.OwnerId,
                 CustomerName = customer != null ? $"{customer.FirstName} {customer.LastName}" : null,
+                CustomerLocation = await ResolveCustomerLocationAsync(inspection.CustomerId),
                 PropertyOwnerName = owner != null ? $"{owner.FirstName} {owner.LastName}" : null,
                 AssignedStaffName = assignedStaffName
             };
@@ -64,6 +65,28 @@ public class InspectionQueryService : IInspectionQueryService
             _logger.LogError(ex, "An error occurred in GetInspectionAsync: {Message}", ex.Message);
             return new BaseResponse<InspectionDto?>(null, false, string.Empty, ResponseMessages.UnexpectedError);
         }
+    }
+
+    /// <summary>
+    /// City and state, never the street.
+    /// </summary>
+    /// <remarks>
+    /// Resolved only on the two single-inspection reads. Doing it on the list
+    /// endpoints would be one address lookup per row, and a list is not where you
+    /// decide whether to meet somebody.
+    /// </remarks>
+    private async Task<string?> ResolveCustomerLocationAsync(Guid customerId)
+    {
+        var address = await _unitOfWOrk.CustomerAddressQueries.GetByAsync(x => x.CustomerId == customerId);
+        if (address is null) return null;
+
+        var parts = new[] { address.City, address.State }
+            .Where(part => !string.IsNullOrWhiteSpace(part))
+            .ToArray();
+
+        // Nothing rather than an empty string: the client renders the row only when
+        // there is something to put in it, and "" would render an empty label.
+        return parts.Length == 0 ? null : string.Join(", ", parts);
     }
 
     private async Task<string?> ResolveStaffNameAsync(Guid? staffId)
@@ -93,6 +116,7 @@ public class InspectionQueryService : IInspectionQueryService
                 PropertyImageUrl = imageUrl,
                 PropertyOwnerId = property?.OwnerId,
                 CustomerName = customer != null ? $"{customer.FirstName} {customer.LastName}" : null,
+                CustomerLocation = await ResolveCustomerLocationAsync(inspection.CustomerId),
                 PropertyOwnerName = owner != null ? $"{owner.FirstName} {owner.LastName}" : null,
                 AssignedStaffName = assignedStaffName
             };

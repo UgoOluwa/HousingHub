@@ -22,6 +22,17 @@ public record InspectionDto(
     string? PropertyImageUrl = null,
     Guid? PropertyOwnerId = null,
     string? CustomerName = null,
+
+    /// <summary>
+    /// Where the person coming to view is based — city and state, nothing finer.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not the street address. The viewing happens at the owner's
+    /// property, so how far somebody is travelling is useful and where they live is
+    /// not; handing over a home address before either party has agreed to anything
+    /// is a leak rather than a feature. Null when they have not set an address.
+    /// </remarks>
+    string? CustomerLocation = null,
     string? PropertyOwnerName = null,
     DateTime? HandedOffAt = null,
     Guid? AssignedStaffId = null,

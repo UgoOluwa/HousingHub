@@ -45,5 +45,49 @@ public enum NotificationType
     /// it drops is telling them too late.
     /// </summary>
     [Description("Verification Expiring Soon")]
-    VerificationExpiringSoon = 10
+    VerificationExpiringSoon = 10,
+
+    /// <summary>
+    /// An owner has chosen this person for a property.
+    /// </summary>
+    /// <remarks>
+    /// The one notification in this list that changes somebody's housing situation,
+    /// so it goes out in-app and by email rather than relying on them opening the app.
+    /// </remarks>
+    [Description("Selected For Property")]
+    TenancyCandidateSelected = 11,
+
+    /// <summary>The owner pulled out before the let completed.</summary>
+    [Description("Selection Withdrawn")]
+    TenancyWithdrawn = 12,
+
+    /// <summary>The candidate is no longer interested. Sent to the owner.</summary>
+    [Description("Candidate Declined")]
+    TenancyDeclinedByCandidate = 13,
+
+    /// <summary>The owner has sent the documents they need. Emailed as well.</summary>
+    [Description("Documents Requested")]
+    TenancyDocumentsRequested = 14,
+
+    /// <summary>The tenant has returned or signed a document. Sent to the owner.</summary>
+    [Description("Document Submitted")]
+    TenancyDocumentSubmitted = 15,
+
+    /// <summary>The owner accepted a document.</summary>
+    [Description("Document Accepted")]
+    TenancyDocumentAccepted = 16,
+
+    /// <summary>
+    /// The owner sent a document back.
+    /// </summary>
+    /// <remarks>
+    /// Held apart from an acceptance because it is the one the tenant has to act on,
+    /// and the reason travels with it.
+    /// </remarks>
+    [Description("Document Returned")]
+    TenancyDocumentRejected = 17,
+
+    /// <summary>Every document has been accepted. The next step is payment.</summary>
+    [Description("Documents Complete")]
+    TenancyDocumentsComplete = 18
 }
