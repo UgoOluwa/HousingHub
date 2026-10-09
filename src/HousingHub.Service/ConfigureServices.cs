@@ -57,6 +57,13 @@ public static class ConfigureServices
         services.AddHttpClient<ResendEmailService>();
         services.AddScoped<IEmailService, ResendEmailService>();
 
+        // The accessor is registered here rather than in each API, so the resolver's
+        // own dependency travels with it. In a host with no HTTP pipeline it simply
+        // hands back a null context, which is the background-job path.
+        services.AddHttpContextAccessor();
+        services.AddScoped<Commons.Email.IFrontEndBaseUrlResolver,
+                           Commons.Email.FrontEndBaseUrlResolver>();
+
         // Geocoding (Nominatim/OpenStreetMap)
         services.AddHttpClient<NominatimGeocodingService>();
         services.AddScoped<IGeocodingService, NominatimGeocodingService>();

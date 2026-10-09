@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HousingHub.Core.CustomResponses;
+using HousingHub.Core.Security;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
@@ -625,19 +626,10 @@ public class PaymentService : IPaymentService
 
         var allowed = _configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 
-        foreach (var origin in allowed)
-        {
-            if (!Uri.TryCreate(origin, UriKind.Absolute, out var trusted)) continue;
-
-            // Scheme, host and port must all match. Comparing the string prefix
-            // instead would let "https://housinghub.ng.attacker.example" through.
-            if (candidate.Scheme == trusted.Scheme
-                && string.Equals(candidate.Host, trusted.Host, StringComparison.OrdinalIgnoreCase)
-                && candidate.Port == trusted.Port)
-            {
-                return requested;
-            }
-        }
+        // Scheme, host and port all have to match, and the rule lives in one place —
+        // see TrustedOrigins. The whole URL is returned rather than the matched
+        // origin, because the gateway needs the path the caller asked for.
+        if (TrustedOrigins.IsTrusted(requested, allowed)) return requested;
 
         _logger.LogWarning(
             "Discarded a payment callback URL for untrusted origin {Origin}", candidate.GetLeftPart(UriPartial.Authority));

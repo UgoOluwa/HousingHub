@@ -9,18 +9,24 @@ internal sealed class ResendEmailService : IEmailService
 {
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
+    private readonly IFrontEndBaseUrlResolver _baseUrls;
     private readonly ILogger<ResendEmailService> _logger;
 
-    public ResendEmailService(HttpClient httpClient, IConfiguration configuration, ILogger<ResendEmailService> logger)
+    public ResendEmailService(
+        HttpClient httpClient,
+        IConfiguration configuration,
+        IFrontEndBaseUrlResolver baseUrls,
+        ILogger<ResendEmailService> logger)
     {
         _httpClient = httpClient;
         _configuration = configuration;
+        _baseUrls = baseUrls;
         _logger = logger;
     }
 
     public async Task<bool> SendEmailVerificationAsync(string toEmail, string firstName, string verificationToken)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
         string verifyLink = $"{baseUrl}/verify-email?email={Uri.EscapeDataString(toEmail)}&token={verificationToken}";
 
         string body = $"""
@@ -40,7 +46,7 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendPasswordResetAsync(string toEmail, string firstName, string resetToken)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
         string resetLink = $"{baseUrl}/create-new-password?email={Uri.EscapeDataString(toEmail)}&token={resetToken}";
 
         string body = $"""
@@ -60,7 +66,7 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendRegistrationAttemptOnExistingAccountAsync(string toEmail, string firstName)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         string body = $"""
             {P($"Hi {firstName},")}
@@ -81,7 +87,7 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendPasswordChangedAsync(string toEmail, string firstName)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         string body = $"""
             {P($"Hi {firstName},")}
@@ -98,7 +104,7 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendInspectionScheduledAsync(string ownerEmail, string ownerName, string customerName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime, string? note)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
         string noteSection = string.IsNullOrWhiteSpace(note) ? "" : DetailRow("Note from customer", note);
 
         string body = $"""
@@ -119,7 +125,7 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendInspectionBookingConfirmationAsync(string customerEmail, string customerName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime, string? note)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
         string noteSection = string.IsNullOrWhiteSpace(note) ? "" : DetailRow("Your note", note);
 
         string body = $"""
@@ -140,7 +146,7 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendInspectionResponseAsync(string customerEmail, string customerName, string ownerName, string propertyTitle, string action, string? note, DateTime? rescheduledDate, TimeSpan? rescheduledTime)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
         string noteSection = string.IsNullOrWhiteSpace(note) ? "" : DetailRow("Note from owner", note);
         string rescheduleSection = rescheduledDate.HasValue
             ? DetailRow("New date &amp; time", $"{rescheduledDate.Value:dddd, d MMMM yyyy} &middot; {rescheduledTime!.Value:hh\\:mm}")
@@ -172,7 +178,7 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendNewMessageAsync(string recipientEmail, string recipientName, string senderName, string messagePreview)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         string body = $"""
             {P($"Hi {recipientName},")}
@@ -195,7 +201,7 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendInspectionReminderAsync(string recipientEmail, string recipientName, string otherPartyName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         string body = $"""
             {P($"Hi {recipientName},")}
@@ -238,7 +244,7 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendKycApprovedAsync(string toEmail, string firstName)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         string body = $"""
             {P($"Hi {firstName},")}
@@ -255,7 +261,7 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendKycRejectedAsync(string toEmail, string firstName, string reason)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         string body = $"""
             {P($"Hi {firstName},")}
@@ -273,7 +279,7 @@ internal sealed class ResendEmailService : IEmailService
     public async Task<bool> SendVerificationApprovedAsync(
         string toEmail, string firstName, string subjectDescription)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         string body = $"""
             {P($"Hi {firstName},")}
@@ -291,7 +297,7 @@ internal sealed class ResendEmailService : IEmailService
     public async Task<bool> SendVerificationRejectedAsync(
         string toEmail, string firstName, string subjectDescription, string reason)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         // The reviewer's note is the whole point of this email. Everything else is
         // packaging — if the applicant cannot tell what to fix, they will email
@@ -313,7 +319,7 @@ internal sealed class ResendEmailService : IEmailService
     public async Task<bool> SendVerificationExpiredAsync(
         string toEmail, string firstName, string subjectDescription)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         // Careful not to sound like a rejection. Nothing was wrong with what they
         // sent; a date passed. The instruction is "upload a current one", not
@@ -335,7 +341,7 @@ internal sealed class ResendEmailService : IEmailService
     public async Task<bool> SendVerificationExpiringSoonAsync(
         string toEmail, string firstName, string subjectDescription, int daysRemaining, DateTime expiresAt)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
         string dayWord = daysRemaining == 1 ? "day" : "days";
 
         // Concrete and actionable. The date is spelled out as well as the countdown,
@@ -357,7 +363,7 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendAccountReactivatedAsync(string toEmail, string firstName)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         string body = $"""
             {P($"Hi {firstName},")}
@@ -373,7 +379,7 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendPropertyVerifiedAsync(string ownerEmail, string ownerName, string propertyTitle)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         string body = $"""
             {P($"Hi {ownerName},")}
@@ -391,7 +397,7 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendPropertyUnpublishedAsync(string ownerEmail, string ownerName, string propertyTitle, string reason)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         string body = $"""
             {P($"Hi {ownerName},")}
@@ -463,7 +469,7 @@ internal sealed class ResendEmailService : IEmailService
 
     public async Task<bool> SendPropertyAlertMatchAsync(string customerEmail, string customerFirstName, string propertyTitle, string propertyAddress, decimal price)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         string body = $"""
             {P($"Hi {customerFirstName},")}
@@ -697,7 +703,7 @@ internal sealed class ResendEmailService : IEmailService
         long identityFeeKobo,
         string? channel)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         // The identity line appears only when it was actually charged. Somebody who
         // was verified last year should not see a line for something they were not
@@ -741,7 +747,7 @@ internal sealed class ResendEmailService : IEmailService
         long amountKobo,
         string reason)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         string body = $"""
             {P($"Hi {firstName},")}
@@ -772,7 +778,7 @@ internal sealed class ResendEmailService : IEmailService
         string propertyTitle,
         long agreedRentKobo)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         string body = $"""
             {P($"Hi {firstName},")}
@@ -801,7 +807,7 @@ internal sealed class ResendEmailService : IEmailService
         int documentCount,
         long totalKobo)
     {
-        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+        string baseUrl = _baseUrls.Resolve();
 
         string what = documentCount == 1
             ? "a document to complete"

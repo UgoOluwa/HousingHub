@@ -108,6 +108,30 @@ origin. Worth removing the hardcode even if you never add prod.
 | `Verification:ShowTitleBadge` | ✅ | `false` | `false` until legal signs off |
 | `Internal:EnableSuperAdminBootstrap` | ✅ | `false` | `true` for one deploy, then `false` |
 
+### Email links follow the caller, but only if the origin is allowlisted
+
+`Email:BaseUrl` is no longer the only thing deciding where a verification or
+password-reset link points. The API now reads the request's `Origin` (falling back
+to `Referer`), matches it against `Cors:AllowedOrigins`, and builds the link on that
+— so a reset started on the Vercel preview stays on the preview instead of landing
+the tester in production, where the token does not exist and the failure reads as
+"this link has expired".
+
+**The match is against the allowlist, never reflected.** An unchecked `Origin` here
+is an account takeover: ask for a reset against somebody else's address with
+`Origin: https://evil.example`, and we mail that person a genuine Housing Hub link
+carrying their own token to a site the attacker owns.
+
+Two consequences for configuration:
+
+- **Every front end that should receive working email links must be in
+  `Cors:AllowedOrigins`** — including preview deployments. An origin that is missing
+  silently falls back to `Email:BaseUrl`, which is exactly the bug this replaced. The
+  resolver logs a warning naming the unrecognised origin when that happens.
+- **`Email:BaseUrl` is now the fallback, not the answer.** It is what mail sent from
+  a background job uses — expiry warnings and settlement notices have no request to
+  read — so it should still be the environment's own front end.
+
 Two rows there are quiet wins:
 
 **`UsePublishedIndex` can be true in production immediately.** It is false in

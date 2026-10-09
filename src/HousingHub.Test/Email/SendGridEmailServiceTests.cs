@@ -28,6 +28,18 @@ public class ResendEmailServiceTests
             .Build();
     }
 
+    /// <summary>
+    /// Stands in for the request-aware resolver, answering what the configured
+    /// default would. These tests are about what the emails say, not about which
+    /// front end asked for them — that rule has its own tests.
+    /// </summary>
+    private static readonly IFrontEndBaseUrlResolver FixedBaseUrl = new StubBaseUrl("https://housinghub.com");
+
+    private sealed class StubBaseUrl(string baseUrl) : IFrontEndBaseUrlResolver
+    {
+        public string Resolve() => baseUrl;
+    }
+
     private ResendEmailService BuildSut(HttpStatusCode statusCode, string? responseBody = null)
     {
         var response = new HttpResponseMessage(statusCode);
@@ -43,7 +55,7 @@ public class ResendEmailServiceTests
             .ReturnsAsync(response);
 
         var httpClient = new HttpClient(_handlerMock.Object);
-        return new ResendEmailService(httpClient, _configuration, NullLogger<ResendEmailService>.Instance);
+        return new ResendEmailService(httpClient, _configuration, FixedBaseUrl, NullLogger<ResendEmailService>.Instance);
     }
 
     // ─── SendEmailVerificationAsync ───────────────────────────────────
@@ -76,7 +88,7 @@ public class ResendEmailServiceTests
             .ThrowsAsync(new HttpRequestException("Network error"));
 
         var httpClient = new HttpClient(_handlerMock.Object);
-        var sut = new ResendEmailService(httpClient, _configuration, NullLogger<ResendEmailService>.Instance);
+        var sut = new ResendEmailService(httpClient, _configuration, FixedBaseUrl, NullLogger<ResendEmailService>.Instance);
 
         bool result = await sut.SendEmailVerificationAsync("user@test.com", "John", "abc123token");
         Assert.False(result);
@@ -96,7 +108,7 @@ public class ResendEmailServiceTests
             .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK));
 
         var httpClient = new HttpClient(_handlerMock.Object);
-        var sut = new ResendEmailService(httpClient, _configuration, NullLogger<ResendEmailService>.Instance);
+        var sut = new ResendEmailService(httpClient, _configuration, FixedBaseUrl, NullLogger<ResendEmailService>.Instance);
 
         await sut.SendEmailVerificationAsync("user@test.com", "John", "verify-token-123");
 
@@ -126,7 +138,7 @@ public class ResendEmailServiceTests
             .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK));
 
         var httpClient = new HttpClient(_handlerMock.Object);
-        var sut = new ResendEmailService(httpClient, _configuration, NullLogger<ResendEmailService>.Instance);
+        var sut = new ResendEmailService(httpClient, _configuration, FixedBaseUrl, NullLogger<ResendEmailService>.Instance);
 
         await sut.SendEmailVerificationAsync("user+test@test.com", "Jane", "token");
 
@@ -166,7 +178,7 @@ public class ResendEmailServiceTests
             .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK));
 
         var httpClient = new HttpClient(_handlerMock.Object);
-        var sut = new ResendEmailService(httpClient, _configuration, NullLogger<ResendEmailService>.Instance);
+        var sut = new ResendEmailService(httpClient, _configuration, FixedBaseUrl, NullLogger<ResendEmailService>.Instance);
 
         await sut.SendPasswordResetAsync("user@test.com", "John", "reset-token-789");
 
@@ -199,7 +211,12 @@ public class ResendEmailServiceTests
             .Callback<HttpRequestMessage, CancellationToken>((req, _) => captured = req)
             .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK));
 
-        var sut = new ResendEmailService(new HttpClient(_handlerMock.Object), config, NullLogger<ResendEmailService>.Instance);
+        // The service builds links on whatever the resolver gives it and owns no
+        // fallback of its own any more — choosing the base URL has moved to
+        // FrontEndBaseUrlResolver, which has its own tests for the rule.
+        var sut = new ResendEmailService(
+            new HttpClient(_handlerMock.Object), config,
+            new StubBaseUrl("https://localhost"), NullLogger<ResendEmailService>.Instance);
 
         await sut.SendEmailVerificationAsync("user@test.com", "Jane", "token");
 
@@ -228,7 +245,7 @@ public class ResendEmailServiceTests
             .Callback<HttpRequestMessage, CancellationToken>((req, _) => captured = req)
             .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK));
 
-        var sut = new ResendEmailService(new HttpClient(_handlerMock.Object), config, NullLogger<ResendEmailService>.Instance);
+        var sut = new ResendEmailService(new HttpClient(_handlerMock.Object), config, FixedBaseUrl, NullLogger<ResendEmailService>.Instance);
 
         await sut.SendEmailVerificationAsync("user@test.com", "Jane", "token");
 

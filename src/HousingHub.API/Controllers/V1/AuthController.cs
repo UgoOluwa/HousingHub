@@ -1,3 +1,4 @@
+using HousingHub.Core.Security;
 using System.Security.Claims;
 using Asp.Versioning;
 using HousingHub.Application.Auth.Commands.ChangePassword;
@@ -295,18 +296,7 @@ public class AuthController : ControllerBase
     /// A returnUrl is only accepted when its origin is in Cors:AllowedOrigins.
     /// Without this the endpoint is an open redirect that leaks a valid JWT.
     /// </summary>
-    private bool IsAllowedReturnUrl(string? returnUrl)
-    {
-        if (string.IsNullOrWhiteSpace(returnUrl)) return false;
-        if (!Uri.TryCreate(returnUrl, UriKind.Absolute, out var uri)) return false;
-        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return false;
-
-        var allowed = _configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
-
-        return allowed.Any(origin =>
-            Uri.TryCreate(origin, UriKind.Absolute, out var allowedUri) &&
-            string.Equals(allowedUri.Scheme, uri.Scheme, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(allowedUri.Host, uri.Host, StringComparison.OrdinalIgnoreCase) &&
-            allowedUri.Port == uri.Port);
-    }
+    private bool IsAllowedReturnUrl(string? returnUrl) =>
+        TrustedOrigins.IsTrusted(
+            returnUrl, _configuration.GetSection("Cors:AllowedOrigins").Get<string[]>());
 }
