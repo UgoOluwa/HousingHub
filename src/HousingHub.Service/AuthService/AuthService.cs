@@ -333,12 +333,39 @@ public class AuthService : IAuthService
             // Same response as an invalid token, so this cannot be used to test whether
             // an address is registered.
             if (customer == null)
+            {
+                _logger.LogWarning("Password reset refused: no account for the address given");
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.PasswordResetFailed);
+            }
 
-            if (!FixedTimeEquals(customer.PasswordResetToken, request.Token)
-                || customer.PasswordResetTokenExpiry == null
-                || customer.PasswordResetTokenExpiry < DateTime.UtcNow)
+            // One response for every failure, but three distinct causes — and until
+            // this was logged there was no way to tell a customer with an old link
+            // from one hitting a bug. Logged, never returned: the distinction is
+            // exactly what an attacker enumerating addresses would want.
+            if (customer.PasswordResetToken is null)
+            {
+                _logger.LogWarning(
+                    "Password reset refused for {CustomerId}: no reset is outstanding — already used, or never requested",
+                    customer.Id);
                 return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.PasswordResetFailed);
+            }
+
+            if (!FixedTimeEquals(customer.PasswordResetToken, request.Token))
+            {
+                _logger.LogWarning(
+                    "Password reset refused for {CustomerId}: the link does not match the outstanding one — "
+                    + "most likely an older email, superseded when a newer link was requested",
+                    customer.Id);
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.PasswordResetFailed);
+            }
+
+            if (customer.PasswordResetTokenExpiry is not { } expiry || expiry < DateTime.UtcNow)
+            {
+                _logger.LogWarning(
+                    "Password reset refused for {CustomerId}: the link expired at {Expiry}",
+                    customer.Id, customer.PasswordResetTokenExpiry);
+                return new BaseResponse<bool>(false, false, string.Empty, ResponseMessages.PasswordResetFailed);
+            }
 
             customer.PasswordHash = _passwordHasher.Hash(request.NewPassword);
             customer.PasswordResetToken = null;

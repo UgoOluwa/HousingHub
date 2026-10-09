@@ -22,16 +22,37 @@ public static class ResponseMessages
     public const string EmailAlreadyVerified = "Email is already verified.";
     public const string EmailNotVerified = "Please verify your email before logging in.";
     public const string EmailVerificationSuccess = "Email verified successfully.";
-    public const string EmailVerificationFailed = "Invalid or expired verification token.";
-    public const string PasswordResetTokenSent = "If an account with that email exists, a password reset token has been generated.";
+    /// <summary>
+    /// Covers a wrong link, an expired one and an already-used one alike.
+    /// </summary>
+    /// <remarks>
+    /// One message for all three on purpose — telling somebody which it was tells
+    /// anybody who asks which addresses are registered. The action is the same in
+    /// every case, so the sentence names the action.
+    /// </remarks>
+    public const string EmailVerificationFailed = "That link has expired or has already been used. Sign in and we'll send you a new one.";
+    /// <summary>
+    /// Says the same thing whether the address is registered, not registered, or
+    /// asked a moment ago — the three cases this endpoint must not distinguish.
+    /// </summary>
+    /// <remarks>
+    /// The second sentence earns its place: a second request inside the cooldown
+    /// sends no new email, so somebody waiting for one needs to know the link they
+    /// already have is the one to use.
+    /// </remarks>
+    public const string PasswordResetTokenSent = "If that email is registered, we've sent a link to it. If you asked a moment ago, use the link we already sent — it's still the right one.";
     public const string PasswordResetSuccess = "Password reset successfully.";
-    public const string PasswordResetFailed = "Invalid or expired reset token.";
+    /// <summary>
+    /// The commonest cause is an older email: asking for a second link retires the
+    /// first, so the newest message in the inbox is the one that works.
+    /// </summary>
+    public const string PasswordResetFailed = "This link has expired, has already been used, or has been replaced by a newer one. Check for a more recent email, or ask for a new link.";
     public const string PasswordChangeSuccess = "Password changed successfully.";
     public const string CurrentPasswordIncorrect = "Current password is incorrect.";
-    public const string GoogleSignInFailed = "Google sign-in failed. Invalid token.";
-    public const string InvalidRefreshToken = "Invalid or expired refresh token. Please log in again.";
+    public const string GoogleSignInFailed = "We couldn't sign you in with Google. Please try again.";
+    public const string InvalidRefreshToken = "Your session has ended. Please sign in again.";
     public const string OtpSent = "If that email is registered, a login code has been sent.";
-    public const string OtpInvalidOrExpired = "Invalid or expired code. Please check the code or request a new one.";
+    public const string OtpInvalidOrExpired = "That code is wrong or has expired. Check it again, or ask for a new one.";
     public const string OtpTooManyAttempts = "Too many incorrect attempts. Please request a new code.";
     public const string AccountUsesGoogleAuth = "This account uses Google sign-in. Please use Google to log in.";
     public const string AccountUsesLocalAuth = "This account uses email/password sign-in. Please log in with your password.";
