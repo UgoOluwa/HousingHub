@@ -560,7 +560,7 @@ public class TenancyDocumentService : ITenancyDocumentService
     {
         try
         {
-            var notification = new Notification(recipientId, subjectId, type, title, body);
+            var notification = Notification.ForTenancy(recipientId, subjectId, type, title, body);
             await _unitOfWork.NotificationCommands.InsertAsync(notification);
             await _unitOfWork.SaveAsync();
 
@@ -569,7 +569,7 @@ public class TenancyDocumentService : ITenancyDocumentService
                 new NotificationDto(
                     notification.Id, notification.DateCreated, notification.RecipientId,
                     notification.InspectionId, notification.Type, notification.Title,
-                    notification.Message, notification.IsRead));
+                    notification.Message, notification.IsRead, null, notification.TenancyId));
         }
         catch (Exception ex)
         {

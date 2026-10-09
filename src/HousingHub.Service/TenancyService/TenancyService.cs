@@ -356,7 +356,7 @@ public class TenancyService : ITenancyService
     {
         try
         {
-            var notification = new Notification(recipientId, subjectId, type, title, body);
+            var notification = Notification.ForTenancy(recipientId, subjectId, type, title, body);
             await _unitOfWork.NotificationCommands.InsertAsync(notification);
             await _unitOfWork.SaveAsync();
 
@@ -370,7 +370,9 @@ public class TenancyService : ITenancyService
                     notification.Type,
                     notification.Title,
                     notification.Message,
-                    notification.IsRead));
+                    notification.IsRead,
+                    null,
+                    notification.TenancyId));
         }
         catch (Exception ex)
         {
