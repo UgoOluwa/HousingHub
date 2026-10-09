@@ -112,7 +112,7 @@ later, and that review is not optional when they do.
 
 Four increments, each shippable.
 
-### A — Selection
+### A — Selection *(done)*
 
 Owner sees completed inspections for a property and picks a candidate. Creates the
 `Tenancy` record; candidate notified in-app and by email. Property moves to
@@ -121,7 +121,7 @@ to `Available`.
 
 The spine. Nothing else can proceed without it, and it is small.
 
-### B — Documents and fees *(≈4–5 weeks)*
+### B — Documents and fees *(done, bar the stamped PDF)*
 
 The owner composes one request: the compulsory agreement plus any number of
 custom-named documents, each in one of three modes —
@@ -142,6 +142,19 @@ document store with its hashes.
 This is structurally the `VerificationCase` pipeline with a different reviewer. Copy
 the shape — the `TryX()` transitions, the sparse review-queue index — rather than
 reusing the entity.
+
+Built: the entities and their transitions, the service, the API, both consumer
+screens, and a read-only staff view carrying the signature trail.
+
+**Not built — an in-app signature produces no stamped PDF.** The artefact today is
+the source document plus a signature record (time, address, device, hash), which is
+defensible evidence but is not what somebody expects to download and send to a bank.
+Until that exists, prefer download-sign-reupload for anything that may need to leave
+the platform.
+
+**Outstanding before this reaches real users:** a Nigerian property lawyer has to
+review the signing — not the agreement template, which we do not supply, but the
+audit trail and the words shown to a tenant immediately before they sign.
 
 ### C — Payment *(≈3–4 weeks)*
 
