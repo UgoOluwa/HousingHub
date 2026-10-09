@@ -35,5 +35,26 @@ public interface IFileStorageService
     /// <param name="lifetime">How long the URL stays valid. Keep this short.</param>
     Task<string> GetPresignedUrlAsync(string key, TimeSpan lifetime);
 
+    /// <summary>
+    /// Reads a private object back into memory.
+    /// </summary>
+    /// <remarks>
+    /// A byte array rather than a stream: callers hash or re-encode the whole thing,
+    /// the size ceiling is already enforced at upload, and a returned stream is one
+    /// more thing a caller can forget to dispose. Null when the object is not there.
+    /// </remarks>
+    Task<byte[]?> ReadPrivateFileAsync(string key);
+
+    /// <summary>
+    /// Stores bytes we generated ourselves, rather than a file somebody uploaded.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="UploadPrivateFileAsync"/> because the safety rules
+    /// differ: an uploaded file needs its name discarded and its type verified from
+    /// the bytes, while this content is ours and its type is known by construction.
+    /// </remarks>
+    Task<string> UploadPrivateBytesAsync(
+        byte[] content, string subDirectory, string extension, string contentType);
+
     Task DeleteFileAsync(string fileUrlOrKey);
 }

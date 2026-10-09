@@ -19,6 +19,18 @@ public record TenancyDocumentDto(
     TenancyDocumentStatus Status,
     bool HasSourceFile,
     bool HasSubmittedFile,
+
+    /// <summary>
+    /// Whether there is a stamped PDF to download.
+    /// </summary>
+    /// <remarks>
+    /// Not the same as being signed. The signature is the record; this is a
+    /// convenience built from it, and it can be absent on a perfectly valid
+    /// signature — so the client gates the download button on this and everything
+    /// else on <see cref="SignedAt"/>.
+    /// </remarks>
+    bool HasSignedPdf,
+
     DateTime? SubmittedAt,
     DateTime? ReviewedAt,
     string? RejectionReason,

@@ -110,6 +110,18 @@ public class TenancyDocument : BaseEntity
     /// </remarks>
     public string? SignedDocumentHash { get; set; }
 
+    /// <summary>
+    /// The stamped PDF produced when the signature was made.
+    /// </summary>
+    /// <remarks>
+    /// Evidence for a person rather than for the system: the document with a footer
+    /// on every page and a certificate appended, which is what somebody expects to
+    /// download and send to a bank. Null when generation was not possible, and that
+    /// is survivable — <see cref="SignedDocumentHash"/> and the fields above are
+    /// what the signature actually rests on.
+    /// </remarks>
+    public string? SignedPdfKey { get; set; }
+
     /// <summary>True once the owner has accepted it and nothing more is needed.</summary>
     [DynamoDBIgnore]
     public bool IsSettled => Status == TenancyDocumentStatus.Accepted;
@@ -174,8 +186,10 @@ public class TenancyDocument : BaseEntity
     /// </summary>
     /// <remarks>
     /// The hash is of the source document as served, so what was agreed is pinned to
-    /// bytes rather than to a file name. No new file is produced here — the signed
-    /// artefact is the source plus this record.
+    /// bytes rather than to a file name. The stamped PDF is assembled afterwards by
+    /// the service and attached through <see cref="AttachSignedPdf"/>; it is not
+    /// produced here, because a signature that could fail on a PDF writer would be a
+    /// signature at the mercy of a PDF writer.
     /// </remarks>
     public bool TrySign(string documentHash, string? ipAddress, string? userAgent)
     {
@@ -232,6 +246,32 @@ public class TenancyDocument : BaseEntity
         SignerIpAddress = null;
         SignerUserAgent = null;
 
+        // Including the stamped PDF. It says on its face that this was signed, so
+        // leaving it downloadable would hand the tenant a document contradicting the
+        // status next to it.
+        SignedPdfKey = null;
+
+        DateModified = DateTime.UtcNow;
+        return true;
+    }
+
+    /// <summary>
+    /// Attaches the stamped PDF to a signature that has already been made.
+    /// </summary>
+    /// <remarks>
+    /// Refused unless the document is signed and waiting on the owner. Assembly
+    /// happens after the signature is committed, so by the time it finishes the
+    /// owner may already have accepted or returned the document — and in the
+    /// returned case the signature has been cleared, which must not be quietly
+    /// undone by a file arriving late.
+    /// </remarks>
+    public bool AttachSignedPdf(string fileKey)
+    {
+        if (SignedAt is null) return false;
+        if (Status != TenancyDocumentStatus.Submitted) return false;
+        if (string.IsNullOrWhiteSpace(fileKey)) return false;
+
+        SignedPdfKey = fileKey;
         DateModified = DateTime.UtcNow;
         return true;
     }

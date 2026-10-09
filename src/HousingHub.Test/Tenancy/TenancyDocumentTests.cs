@@ -228,4 +228,74 @@ public class TenancyDocumentTests
         Assert.True(document.TryAccept());
         Assert.True(document.IsSettled);
     }
+
+    // ── the stamped PDF ──────────────────────────────────────────
+
+    [Fact]
+    public void AStampedPdf_AttachesToASignatureAwaitingReview()
+    {
+        var document = Agreement();
+        document.TrySign(Hash, "102.89.3.11", "iPhone");
+
+        Assert.True(document.AttachSignedPdf("private/tenancies/x/signed/a.pdf"));
+        Assert.Equal("private/tenancies/x/signed/a.pdf", document.SignedPdfKey);
+    }
+
+    /// <summary>
+    /// Assembly happens after the signature is committed, so by the time it finishes
+    /// the owner may have decided. Nothing should appear on an unsigned document.
+    /// </summary>
+    [Fact]
+    public void AStampedPdf_WillNotAttachToSomethingUnsigned()
+    {
+        var document = Agreement();
+
+        Assert.False(document.AttachSignedPdf("a.pdf"));
+        Assert.Null(document.SignedPdfKey);
+    }
+
+    [Fact]
+    public void AStampedPdf_WillNotAttachAfterTheOwnerHasAccepted()
+    {
+        var document = Agreement();
+        document.TrySign(Hash, null, null);
+        document.TryAccept();
+
+        Assert.False(document.AttachSignedPdf("a.pdf"));
+        Assert.Null(document.SignedPdfKey);
+    }
+
+    /// <summary>
+    /// It says on its face that the document was signed, so leaving it downloadable
+    /// would hand the tenant a file contradicting the status next to it.
+    /// </summary>
+    [Fact]
+    public void RejectingADocument_TakesTheStampedPdfWithTheSignature()
+    {
+        var document = Agreement();
+        document.TrySign(Hash, "102.89.3.11", "iPhone");
+        document.AttachSignedPdf("private/tenancies/x/signed/a.pdf");
+
+        Assert.True(document.TryReject("Wrong version"));
+
+        Assert.Null(document.SignedPdfKey);
+        Assert.Null(document.SignedAt);
+        Assert.Null(document.SignedDocumentHash);
+    }
+
+    /// <summary>
+    /// Signing again after a rejection must not resurrect the old file: it was built
+    /// from the version the owner refused.
+    /// </summary>
+    [Fact]
+    public void SigningAgainAfterARejection_StartsWithNoStampedPdf()
+    {
+        var document = Agreement();
+        document.TrySign(Hash, null, null);
+        document.AttachSignedPdf("first.pdf");
+        document.TryReject("Wrong version");
+
+        Assert.True(document.TrySign(Hash, null, null));
+        Assert.Null(document.SignedPdfKey);
+    }
 }

@@ -1,4 +1,5 @@
 using HousingHub.Core.CustomResponses;
+using HousingHub.Model.Enums;
 using HousingHub.Service.Dtos.Tenancy;
 using Microsoft.AspNetCore.Http;
 
@@ -37,13 +38,7 @@ public interface ITenancyDocumentService
     Task<BaseResponse<TenancyDocumentDto>> ReviewDocumentAsync(
         Guid tenancyId, Guid documentId, ReviewTenancyDocumentDto request, Guid authenticatedUserId);
 
-    /// <summary>
-    /// A short-lived link to one of a document's files.
-    /// </summary>
-    /// <param name="submitted">
-    /// True for what the tenant returned, false for what the owner supplied to be
-    /// signed.
-    /// </param>
+    /// <summary>A short-lived link to one of a document's three files.</summary>
     Task<BaseResponse<string>> GetDocumentUrlAsync(
-        Guid tenancyId, Guid documentId, bool submitted, Guid authenticatedUserId);
+        Guid tenancyId, Guid documentId, TenancyDocumentFile file, Guid authenticatedUserId);
 }

@@ -3,6 +3,7 @@ using HousingHub.Core.CustomResponses;
 using HousingHub.Data.RepositoryInterfaces.Common;
 using HousingHub.Model.Entities;
 using HousingHub.Model.Enums;
+using HousingHub.Service.Commons.Documents;
 using HousingHub.Service.Commons.Email;
 using HousingHub.Service.Commons.FileStorage;
 using HousingHub.Service.Dtos.Notification;
@@ -40,6 +41,13 @@ public class TenancyDocumentService : ITenancyDocumentService
     private const string TenancyIndex = "TenancyId-index";
 
     /// <summary>
+    /// What a sign-in-app document may be, which is narrower than what the uploader
+    /// accepts — these are the types <see cref="ISignedDocumentBuilder"/> can carry
+    /// into a stamped PDF.
+    /// </summary>
+    private static readonly string[] SignableExtensions = [".pdf", ".png", ".jpg", ".jpeg"];
+
+    /// <summary>
     /// How long a document link lives.
     /// </summary>
     /// <remarks>
@@ -53,6 +61,7 @@ public class TenancyDocumentService : ITenancyDocumentService
     private readonly IFileStorageService _fileStorage;
     private readonly IEmailService _emailService;
     private readonly IRealtimeNotifier _realtimeNotifier;
+    private readonly ISignedDocumentBuilder _signedDocuments;
     private readonly ILogger<TenancyDocumentService> _logger;
 
     public TenancyDocumentService(
@@ -60,12 +69,14 @@ public class TenancyDocumentService : ITenancyDocumentService
         IFileStorageService fileStorage,
         IEmailService emailService,
         IRealtimeNotifier realtimeNotifier,
+        ISignedDocumentBuilder signedDocuments,
         ILogger<TenancyDocumentService> logger)
     {
         _unitOfWork = unitOfWork;
         _fileStorage = fileStorage;
         _emailService = emailService;
         _realtimeNotifier = realtimeNotifier;
+        _signedDocuments = signedDocuments;
         _logger = logger;
     }
 
@@ -118,6 +129,14 @@ public class TenancyDocumentService : ITenancyDocumentService
             // tenant has been told they can sign in the app.
             if (request.Mode == TenancyDocumentMode.SignInApp && tenancy.LeaseType != PropertyLeaseType.Rent)
                 return FailDoc(ResponseMessages.TenancyCannotESignThisLease);
+
+            // A document signed in the app comes back out as a stamped PDF, and only
+            // some of what the uploader accepts can be carried into one. Refused at
+            // compose time rather than discovered at signing, where the tenant would
+            // be the one to find out.
+            if (request.Mode == TenancyDocumentMode.SignInApp
+                && !SignableExtensions.Contains(Path.GetExtension(request.File!.FileName), StringComparer.OrdinalIgnoreCase))
+                return FailDoc(ResponseMessages.TenancySignDocumentUnsupportedType);
 
             var existing = await LoadDocumentsAsync(tenancyId);
 
@@ -351,6 +370,11 @@ public class TenancyDocumentService : ITenancyDocumentService
                 "Tenancy document {DocumentId} signed by {CustomerId} against hash {Hash}",
                 document.Id, authenticatedUserId, document.SignedDocumentHash);
 
+            // After the signature is committed, never before. The signature is the
+            // thing of record; the PDF is a convenience built from it, and a tenant
+            // must not fail to sign because a PDF writer had a bad day.
+            await AttachSignedPdfAsync(tenancy, document);
+
             await NotifyAsync(
                 tenancy.LandlordCustomerId, tenancy.Id,
                 NotificationType.TenancyDocumentSubmitted,
@@ -441,7 +465,7 @@ public class TenancyDocumentService : ITenancyDocumentService
     }
 
     public async Task<BaseResponse<string>> GetDocumentUrlAsync(
-        Guid tenancyId, Guid documentId, bool submitted, Guid authenticatedUserId)
+        Guid tenancyId, Guid documentId, TenancyDocumentFile file, Guid authenticatedUserId)
     {
         try
         {
@@ -450,7 +474,13 @@ public class TenancyDocumentService : ITenancyDocumentService
                 return new BaseResponse<string>(null, false, string.Empty, ResponseMessages.SetNotFoundMessage("tenancy"));
 
             var document = (await LoadDocumentsAsync(tenancyId)).FirstOrDefault(d => d.Id == documentId);
-            var key = submitted ? document?.SubmittedFileKey : document?.SourceFileKey;
+
+            var key = file switch
+            {
+                TenancyDocumentFile.Submitted => document?.SubmittedFileKey,
+                TenancyDocumentFile.Signed => document?.SignedPdfKey,
+                _ => document?.SourceFileKey,
+            };
 
             if (document is null || string.IsNullOrWhiteSpace(key))
                 return new BaseResponse<string>(null, false, string.Empty, ResponseMessages.TenancyDocumentNotYours);
@@ -505,6 +535,88 @@ public class TenancyDocumentService : ITenancyDocumentService
             .OrderByDescending(d => d.IsAgreement)
             .ThenBy(d => d.DateCreated)
             .ToList();
+    }
+
+    /// <summary>
+    /// Assembles the stamped PDF and attaches it to a document already signed.
+    /// </summary>
+    /// <remarks>
+    /// Every failure here is swallowed. The signature stands on its own record and
+    /// the parties can still read the source document, so the worst case is a
+    /// missing download button — which is a great deal better than a tenant being
+    /// told their signature failed when it did not.
+    /// </remarks>
+    private async Task AttachSignedPdfAsync(Tenancy tenancy, TenancyDocument document)
+    {
+        try
+        {
+            var source = await _fileStorage.ReadPrivateFileAsync(document.SourceFileKey!);
+            if (source is null)
+            {
+                _logger.LogWarning(
+                    "Signed document {DocumentId} but its source file was not in storage", document.Id);
+                return;
+            }
+
+            var tenant = await _unitOfWork.CustomerQueries.GetByIdAsync(tenancy.TenantCustomerId);
+            var landlord = await _unitOfWork.CustomerQueries.GetByIdAsync(tenancy.LandlordCustomerId);
+            var property = await _unitOfWork.PropertyQueries.GetByIdAsync(tenancy.PropertyId);
+
+            var pdf = _signedDocuments.Build(
+                source,
+                Path.GetExtension(document.SourceFileKey!).ToLowerInvariant(),
+                new SignatureCertificate(
+                    tenancy.Id,
+                    document.Id,
+                    document.Name,
+                    property?.Title,
+                    FullName(landlord),
+                    // Falls back to the signature's own audit fields rather than to
+                    // "Unknown": a certificate naming nobody is worse than one
+                    // naming an id, because only one of the two can be traced.
+                    FullName(tenant) ?? tenancy.TenantCustomerId.ToString(),
+                    document.SignedAt!.Value,
+                    document.SignerIpAddress,
+                    document.SignerUserAgent,
+                    document.SignedDocumentHash!));
+
+            if (pdf is null) return;
+
+            var key = await _fileStorage.UploadPrivateBytesAsync(
+                pdf, $"tenancies/{tenancy.Id}/signed", ".pdf", "application/pdf");
+
+            // Re-read rather than reuse the instance we signed. Assembling and
+            // uploading takes long enough for the owner to have reviewed it, and if
+            // they returned it the signature has been cleared — attaching to the
+            // stale copy would write that cleared signature back.
+            var current = (await LoadDocumentsAsync(tenancy.Id)).FirstOrDefault(d => d.Id == document.Id);
+
+            if (current is null || !current.AttachSignedPdf(key))
+            {
+                _logger.LogInformation(
+                    "Discarded a signed PDF for {DocumentId}: the document moved on while it was building",
+                    document.Id);
+                return;
+            }
+
+            await _unitOfWork.TenancyDocumentCommands.UpdateAsync(current);
+            await _unitOfWork.SaveAsync();
+
+            // So the response the tenant gets reports the file that now exists.
+            document.SignedPdfKey = current.SignedPdfKey;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not attach a signed PDF to document {DocumentId}", document.Id);
+        }
+    }
+
+    private static string? FullName(Customer? customer)
+    {
+        if (customer is null) return null;
+
+        var name = $"{customer.FirstName} {customer.LastName}".Trim();
+        return string.IsNullOrWhiteSpace(name) ? null : name;
     }
 
     private async Task<TenancyDocumentPackDto> BuildPackAsync(Tenancy tenancy)
@@ -582,6 +694,7 @@ public class TenancyDocumentService : ITenancyDocumentService
         d.Id, d.TenancyId, d.Name, d.Instructions, d.Mode, d.IsAgreement, d.Status,
         !string.IsNullOrWhiteSpace(d.SourceFileKey),
         !string.IsNullOrWhiteSpace(d.SubmittedFileKey),
+        !string.IsNullOrWhiteSpace(d.SignedPdfKey),
         d.SubmittedAt, d.ReviewedAt, d.RejectionReason, d.SignedAt, d.DateCreated);
 
     private static TenancyFeeDto ToDto(TenancyFee f) => new(f.Id, f.Name, f.Description, f.AmountKobo);

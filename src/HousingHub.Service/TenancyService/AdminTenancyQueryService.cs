@@ -96,12 +96,19 @@ public class AdminTenancyQueryService : IAdminTenancyQueryService
         }
     }
 
-    public async Task<BaseResponse<string>> GetDocumentUrlAsync(Guid tenancyId, Guid documentId, bool submitted)
+    public async Task<BaseResponse<string>> GetDocumentUrlAsync(
+        Guid tenancyId, Guid documentId, TenancyDocumentFile file)
     {
         try
         {
             var document = (await LoadDocumentsAsync(tenancyId)).FirstOrDefault(d => d.Id == documentId);
-            var key = submitted ? document?.SubmittedFileKey : document?.SourceFileKey;
+
+            var key = file switch
+            {
+                TenancyDocumentFile.Submitted => document?.SubmittedFileKey,
+                TenancyDocumentFile.Signed => document?.SignedPdfKey,
+                _ => document?.SourceFileKey,
+            };
 
             if (document is null || string.IsNullOrWhiteSpace(key))
                 return Fail<string>(ResponseMessages.SetNotFoundMessage("document"));
@@ -109,8 +116,8 @@ public class AdminTenancyQueryService : IAdminTenancyQueryService
             // Logged at information, not debug. Reading somebody's tenancy paperwork
             // is a thing we should be able to account for afterwards.
             _logger.LogInformation(
-                "Admin opened {Which} file of document {DocumentId} on tenancy {TenancyId}",
-                submitted ? "the submitted" : "the source", documentId, tenancyId);
+                "Admin opened the {Which} file of document {DocumentId} on tenancy {TenancyId}",
+                file, documentId, tenancyId);
 
             var url = await _fileStorage.GetPresignedUrlAsync(key, DocumentLinkLifetime);
             return Ok(url);
@@ -211,6 +218,7 @@ public class AdminTenancyQueryService : IAdminTenancyQueryService
         d.Status,
         !string.IsNullOrWhiteSpace(d.SourceFileKey),
         !string.IsNullOrWhiteSpace(d.SubmittedFileKey),
+        !string.IsNullOrWhiteSpace(d.SignedPdfKey),
         d.SubmittedAt,
         d.ReviewedAt,
         d.RejectionReason,

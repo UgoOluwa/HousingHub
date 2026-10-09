@@ -30,5 +30,6 @@ public interface IAdminTenancyQueryService
     /// papers — an employment letter, a reference, a signed agreement — and the
     /// reason to open one is a dispute, not curiosity.
     /// </remarks>
-    Task<BaseResponse<string>> GetDocumentUrlAsync(Guid tenancyId, Guid documentId, bool submitted);
+    Task<BaseResponse<string>> GetDocumentUrlAsync(
+        Guid tenancyId, Guid documentId, TenancyDocumentFile file);
 }

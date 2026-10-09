@@ -246,7 +246,7 @@ public class AdminTenancyQueryServiceTests
             .Setup(f => f.GetPresignedUrlAsync("private/tenancies/x/submitted/letter.pdf", It.IsAny<TimeSpan>()))
             .ReturnsAsync("https://signed.example/letter.pdf");
 
-        var result = await _sut.GetDocumentUrlAsync(tenancy.Id, document.Id, submitted: true);
+        var result = await _sut.GetDocumentUrlAsync(tenancy.Id, document.Id, TenancyDocumentFile.Submitted);
 
         Assert.True(result.IsSuccessful);
         Assert.Equal("https://signed.example/letter.pdf", result.Data);
@@ -268,7 +268,7 @@ public class AdminTenancyQueryServiceTests
 
         Setup([tenancy], documents: [document]);
 
-        var result = await _sut.GetDocumentUrlAsync(tenancy.Id, document.Id, submitted: true);
+        var result = await _sut.GetDocumentUrlAsync(tenancy.Id, document.Id, TenancyDocumentFile.Submitted);
 
         Assert.False(result.IsSuccessful);
         _fileStorage.Verify(

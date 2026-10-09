@@ -123,6 +123,8 @@ public static class ConfigureServices
                            TenancyService.TenancyDocumentService>();
         services.AddScoped<TenancyService.Interfaces.IAdminTenancyQueryService,
                            TenancyService.AdminTenancyQueryService>();
+        services.AddScoped<Commons.Documents.ISignedDocumentBuilder,
+                           Commons.Documents.SignedDocumentBuilder>();
         services.AddSingleton<IUtilityService, UtilityService>();
 
         // AWS S3 File Storage

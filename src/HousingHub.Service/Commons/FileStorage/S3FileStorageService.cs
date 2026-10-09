@@ -54,6 +54,46 @@ public class S3FileStorageService : IFileStorageService
         return _s3Client.GetPreSignedURLAsync(request);
     }
 
+    public async Task<byte[]?> ReadPrivateFileAsync(string key)
+    {
+        try
+        {
+            using var response = await _s3Client.GetObjectAsync(_bucketName, key);
+            using var buffer = new MemoryStream();
+            await response.ResponseStream.CopyToAsync(buffer);
+            return buffer.ToArray();
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // Not an error worth throwing over. A caller asking for a file that is
+            // gone gets null and decides what that means; several of them carry on
+            // perfectly well without it.
+            _logger.LogWarning("No object in S3 at key: {Key}", key);
+            return null;
+        }
+    }
+
+    public async Task<string> UploadPrivateBytesAsync(
+        byte[] content, string subDirectory, string extension, string contentType)
+    {
+        var key = $"{PrivatePrefix}/{subDirectory}/{Guid.NewGuid():N}{extension}";
+
+        using var stream = new MemoryStream(content);
+
+        await _s3Client.PutObjectAsync(new PutObjectRequest
+        {
+            BucketName = _bucketName,
+            Key = key,
+            InputStream = stream,
+            ContentType = contentType,
+            Headers = { ContentDisposition = "attachment" },
+        });
+
+        _logger.LogInformation("Uploaded generated file to S3: {Key}", key);
+
+        return key;
+    }
+
     public async Task DeleteFileAsync(string fileUrlOrKey)
     {
         var key = ExtractKey(fileUrlOrKey);

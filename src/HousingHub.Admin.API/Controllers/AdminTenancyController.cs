@@ -81,8 +81,10 @@ public class AdminTenancyController : ControllerBase
     [Authorize(Policy = "SuperAdminOnly")]
     [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDocumentUrl(
-        Guid tenancyId, Guid documentId, [FromQuery] bool submitted = false)
+        Guid tenancyId,
+        Guid documentId,
+        [FromQuery] TenancyDocumentFile file = TenancyDocumentFile.Source)
     {
-        return Ok(await _tenancies.GetDocumentUrlAsync(tenancyId, documentId, submitted));
+        return Ok(await _tenancies.GetDocumentUrlAsync(tenancyId, documentId, file));
     }
 }

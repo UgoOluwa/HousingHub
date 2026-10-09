@@ -69,3 +69,24 @@ public enum TenancyDocumentStatus
     /// </remarks>
     Rejected = 4,
 }
+
+/// <summary>
+/// Which of a document's files is being asked for.
+/// </summary>
+/// <remarks>
+/// A document can have three, and they are three different things: what the owner
+/// supplied, what the tenant sent back, and the stamped PDF produced at signing.
+/// An enum rather than a pair of booleans, because two booleans have four states
+/// and only three of them mean anything.
+/// </remarks>
+public enum TenancyDocumentFile
+{
+    /// <summary>What the owner supplied, to be read or signed.</summary>
+    Source = 1,
+
+    /// <summary>What the tenant uploaded.</summary>
+    Submitted = 2,
+
+    /// <summary>The stamped PDF, made when the tenant signed in the app.</summary>
+    Signed = 3,
+}

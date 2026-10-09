@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Asp.Versioning;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Core.Security;
+using HousingHub.Model.Enums;
 using HousingHub.Service.Dtos.Tenancy;
 using HousingHub.Service.TenancyService.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -263,21 +264,27 @@ public class TenancyController : ControllerBase
     }
 
     /// <summary>
-    /// A short-lived link to a document's file.
+    /// A short-lived link to one of a document's files.
     /// </summary>
     /// <remarks>
     /// Treat the URL as a credential rather than an address: anyone holding it can
     /// read the document until it expires. Fetch it on click and discard it.
     /// </remarks>
+    /// <param name="file">
+    /// Source — what the owner supplied. Submitted — what the tenant sent back.
+    /// Signed — the stamped PDF made when the tenant signed in the app.
+    /// </param>
     [HttpGet("{tenancyId:guid}/documents/{documentId:guid}/url")]
     [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDocumentUrl(
-        Guid tenancyId, Guid documentId, [FromQuery] bool submitted = false)
+        Guid tenancyId,
+        Guid documentId,
+        [FromQuery] TenancyDocumentFile file = TenancyDocumentFile.Source)
     {
         var userId = GetAuthenticatedUserId();
         if (userId is null) return Unauthorized();
 
-        return Ok(await _documents.GetDocumentUrlAsync(tenancyId, documentId, submitted, userId.Value));
+        return Ok(await _documents.GetDocumentUrlAsync(tenancyId, documentId, file, userId.Value));
     }
 
     private Guid? GetAuthenticatedUserId()

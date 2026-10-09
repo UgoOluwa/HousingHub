@@ -105,6 +105,8 @@ public static class ResponseMessages
     public const string TenancyAgreementRequired = "Add the tenancy agreement before sending — every let needs one.";
     public const string TenancyOneAgreementOnly = "There can only be one tenancy agreement in a request.";
     public const string TenancySignDocumentMissingFile = "Upload the document you want them to sign.";
+
+    public const string TenancySignDocumentUnsupportedType = "A document to be signed in the app has to be a PDF or a photo. Use 'print, sign and upload' for anything else.";
     public const string TenancyUploadDocumentHasFile = "You don't attach a file to a document you're asking them to provide.";
     public const string TenancyNoDocumentsRequested = "Add at least the tenancy agreement before sending.";
     public const string TenancyDocumentNotYours = "We couldn't find that document.";

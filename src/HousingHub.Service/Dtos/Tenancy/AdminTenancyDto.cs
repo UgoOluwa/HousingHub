@@ -79,6 +79,7 @@ public record AdminTenancyDocumentDto(
     TenancyDocumentStatus Status,
     bool HasSourceFile,
     bool HasSubmittedFile,
+    bool HasSignedPdf,
     DateTime? SubmittedAt,
     DateTime? ReviewedAt,
     string? RejectionReason,
