@@ -57,6 +57,41 @@ public class InternalController(
     }
 
     /// <summary>
+    /// Asks renters whether their viewing happened, and closes the ones who never say.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Nothing downstream moves until somebody confirms a viewing took place — an
+    /// owner cannot choose a tenant from an inspection that only ever got as far as
+    /// Confirmed. Without this, a renter who forgets blocks the property as
+    /// effectively as one who was never interested.
+    /// </para>
+    /// <para>
+    /// Idempotent: each inspection is asked once and closed once, so running it more
+    /// often than intended is harmless. A few times a day is plenty — the windows are
+    /// hours and days.
+    /// </para>
+    /// <para>
+    /// It deliberately ignores anything whose slot passed more than a fortnight ago.
+    /// On the first run there is a backlog of confirmed inspections going back
+    /// months, and neither emailing all of them nor quietly closing them is a call a
+    /// worker should make by itself.
+    /// </para>
+    /// </remarks>
+    /// <param name="secret">Must match the configured Internal:WorkerSecret.</param>
+    [HttpPost("inspection-followups/run")]
+    [ProducesResponseType(typeof(BaseResponse<int>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> RunInspectionFollowUps([FromHeader(Name = "X-Worker-Secret")] string? secret)
+    {
+        if (!IsAuthorisedWorker(secret))
+            return Unauthorized();
+
+        var result = await inspectionCommandService.RunInspectionFollowUpsAsync();
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Daily verification maintenance: expire what has lapsed, warn what is about to.
     /// </summary>
     /// <remarks>

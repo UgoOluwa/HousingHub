@@ -89,5 +89,19 @@ public enum NotificationType
 
     /// <summary>Every document has been accepted. The next step is payment.</summary>
     [Description("Documents Complete")]
-    TenancyDocumentsComplete = 18
+    TenancyDocumentsComplete = 18,
+
+    /// <summary>
+    /// The renter confirmed the viewing happened. Sent to the owner.
+    /// </summary>
+    /// <remarks>
+    /// The owner's cue that they can now choose this person as a tenant, which is
+    /// why it carries any comment the renter left with it.
+    /// </remarks>
+    [Description("Inspection Completed")]
+    InspectionCompleted = 19,
+
+    /// <summary>Nobody ever said whether the viewing happened, so it was closed.</summary>
+    [Description("Inspection Expired")]
+    InspectionExpired = 20
 }

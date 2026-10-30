@@ -26,5 +26,27 @@ public interface IInspectionCommandService
     /// scheduled trigger, not directly by a user. Returns the number of
     /// inspections reminded.
     /// </summary>
+    /// <summary>
+    /// The renter says the viewing happened, optionally with a note about it.
+    /// </summary>
+    /// <remarks>
+    /// The renter alone, because they booked it and they are the only one who knows
+    /// whether they turned up. An owner marking their own viewings complete is how
+    /// a candidate list fills with people who never came.
+    /// </remarks>
+    Task<BaseResponse<InspectionDto>> CompleteInspectionAsync(
+        Guid inspectionId, string? comment, Guid authenticatedUserId);
+
     Task<BaseResponse<int>> SendDueInspectionRemindersAsync();
+
+    /// <summary>
+    /// Chases renters who never said whether their viewing happened, and closes the
+    /// ones who still have not.
+    /// </summary>
+    /// <remarks>
+    /// Idempotent: each inspection is asked once and closed once. Intended to run a
+    /// few times a day — the windows are measured in hours and days, so a late run
+    /// costs nothing.
+    /// </remarks>
+    Task<BaseResponse<int>> RunInspectionFollowUpsAsync();
 }
