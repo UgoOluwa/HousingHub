@@ -44,20 +44,26 @@ limits worth knowing before you lose an afternoon to them:
 Saving an account costs one resolve. Checking it first costs another, which is why
 checking is optional rather than a required first step.
 
-### The simulated bank
+### Why there is no simulated bank
 
-On a test key the bank dropdown carries an extra first entry — **"Test Bank —
-simulated, dev only"**, bank code `001`. Choosing it resolves through Paystack as
-normal and then **skips the name check**, recording the account under the owner's
-own verified name, so the whole payout-to-payment flow can be walked without
-spending a daily lookup or using a developer's real bank account.
+There was one briefly. Paystack's test bank code `001` resolves an account name
+without counting against the daily limit, which looked like a way to walk the payout
+flow with no real bank account — so a dev-only dropdown entry skipped the name check
+for it.
 
-**It is gated on the Paystack credential starting `sk_test_`, not on a setting.**
-The bypass is switched on by the same fact that makes it harmless: a live key is
-not a test key, so there is no configuration that produces a production environment
-with this active and no flag anybody can set wrongly. On a live key the entry is
-absent from the list and bank code `001` is treated as an ordinary bank whose name
-must match — there is a test for exactly that.
+It does not work. **Creating a subaccount with `001` is refused** — `"Account
+details are invalid"` — because Paystack verifies the account as part of creating a
+payout destination, and `001` has no real account behind it. Resolution is the only
+thing that code supports.
+
+Stubbing the subaccount instead would be worse: a made-up `subaccount_code` is
+rejected at `transaction/initialize`, so the flow would get all the way to checkout
+before failing, further from the cause.
+
+**Use a real account, once.** The `subaccount_code` it returns is the payout
+destination and outlives the lookup, so every payment after that splits without
+another resolve. The name check is forgiving about middle names the bank holds and
+we do not — see `BankAccountNameMatcher` — so an ordinary personal account passes.
 
 ### Walking a split payment end to end on test keys
 
