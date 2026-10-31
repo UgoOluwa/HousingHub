@@ -230,7 +230,8 @@ public class PaystackPaymentGateway : IPaymentGateway
                     (int)response.StatusCode, payload?.Message);
 
                 return GatewayAccountName.Failed(
-                    "We couldn't find that account. Check the number and the bank, then try again.");
+                    Explain("We couldn't find that account. Check the number and the bank, then try again.",
+                        payload?.Message));
             }
 
             return new GatewayAccountName(true, payload.Data.AccountName, null);
@@ -279,7 +280,8 @@ public class PaystackPaymentGateway : IPaymentGateway
                     "Paystack subaccount creation failed: {StatusCode} {Message}",
                     (int)response.StatusCode, payload?.Message);
 
-                return GatewaySubaccount.Failed("We couldn't set that account up for payouts. Please try again.");
+                return GatewaySubaccount.Failed(
+                    Explain("We couldn't set that account up for payouts. Please try again.", payload?.Message));
             }
 
             return new GatewaySubaccount(true, payload.Data.SubaccountCode, null);
@@ -290,6 +292,28 @@ public class PaystackPaymentGateway : IPaymentGateway
             return GatewaySubaccount.Failed("We couldn't set that account up for payouts. Please try again.");
         }
     }
+
+    /// <summary>
+    /// The provider's own reason, but only on a test credential.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Paystack's messages describe the request, not the credential, so they are
+    /// safe to log — but they are written for whoever built the integration, not
+    /// for the person who typed an account number. In production the owner gets our
+    /// sentence and the detail goes to the log.
+    /// </para>
+    /// <para>
+    /// On a test key that trade is the wrong way round. There is no owner, only a
+    /// developer, and sending them to CloudWatch to read one line is how an
+    /// afternoon disappears — which is exactly what happened to the first person to
+    /// try a subaccount on the simulated bank.
+    /// </para>
+    /// </remarks>
+    private string Explain(string ours, string? theirs) =>
+        IsTestMode && !string.IsNullOrWhiteSpace(theirs)
+            ? $"{ours} (Paystack said: {theirs})"
+            : ours;
 
     public async Task<GatewayRefund> RefundAsync(
         string transactionReference,
