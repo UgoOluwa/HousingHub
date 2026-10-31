@@ -90,6 +90,17 @@ public class PaystackPaymentGateway : IPaymentGateway
                 currency = request.Currency,
                 callback_url = request.CallbackUrl,
                 metadata = request.Metadata,
+
+                // Null on everything that is not a split, and Paystack ignores the
+                // fields when they are. subaccount names the destination;
+                // transaction_charge is the flat amount we keep out of it.
+                subaccount = request.SubaccountCode,
+                transaction_charge = request.PlatformChargeKobo,
+
+                // Our own share bears the provider's fee, which is where the
+                // tenant's contribution to it already sits — so the owner receives
+                // the rent in full rather than net of a deduction they never agreed.
+                bearer = request.SubaccountCode is null ? null : "account",
             };
 
             using var response = await _http.PostAsJsonAsync("transaction/initialize", body, JsonOptions, cancellationToken);

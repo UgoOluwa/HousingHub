@@ -16,7 +16,27 @@ public sealed record GatewayChargeRequest(
     string CustomerEmail,
     string Currency,
     string? CallbackUrl,
-    IReadOnlyDictionary<string, string>? Metadata = null);
+    IReadOnlyDictionary<string, string>? Metadata = null,
+
+    /// <summary>
+    /// The payout destination the balance of this charge belongs to.
+    /// </summary>
+    /// <remarks>
+    /// Set only on a split. The provider pays this account everything except
+    /// <see cref="PlatformChargeKobo"/>, so the rent reaches the owner without
+    /// passing through us.
+    /// </remarks>
+    string? SubaccountCode = null,
+
+    /// <summary>
+    /// What we keep out of the charge, in kobo. The remainder goes to the subaccount.
+    /// </summary>
+    /// <remarks>
+    /// A flat amount rather than a percentage, because the commission is a share of
+    /// the rent and the fees differ on every let — the figure is only knowable here,
+    /// at the point of charging.
+    /// </remarks>
+    long? PlatformChargeKobo = null);
 
 /// <summary>The gateway's answer to "where should the payer go to pay this".</summary>
 public sealed record GatewayInitialisation(

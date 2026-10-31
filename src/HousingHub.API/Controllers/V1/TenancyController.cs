@@ -3,6 +3,7 @@ using Asp.Versioning;
 using HousingHub.Core.CustomResponses;
 using HousingHub.Core.Security;
 using HousingHub.Model.Enums;
+using HousingHub.Service.Dtos.Payment;
 using HousingHub.Service.Dtos.Tenancy;
 using HousingHub.Service.TenancyService.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -36,11 +37,16 @@ public class TenancyController : ControllerBase
 {
     private readonly ITenancyService _tenancies;
     private readonly ITenancyDocumentService _documents;
+    private readonly ITenancyPaymentService _payments;
 
-    public TenancyController(ITenancyService tenancies, ITenancyDocumentService documents)
+    public TenancyController(
+        ITenancyService tenancies,
+        ITenancyDocumentService documents,
+        ITenancyPaymentService payments)
     {
         _tenancies = tenancies;
         _documents = documents;
+        _payments = payments;
     }
 
     /// <summary>
@@ -134,6 +140,43 @@ public class TenancyController : ControllerBase
         if (userId is null) return Unauthorized();
 
         return Ok(await _tenancies.GetAsync(tenancyId, userId.Value));
+    }
+
+    // ─── Paying for it ───────────────────────────────────────────
+
+    /// <summary>
+    /// What the tenant will pay, itemised. Either party.
+    /// </summary>
+    /// <remarks>
+    /// Readable by the owner too, so they can see what their tenant is being asked
+    /// for — the commission is charged on top of their rent and they should not
+    /// learn its size from a complaint.
+    /// </remarks>
+    [HttpGet("{tenancyId:guid}/payment/quote")]
+    [ProducesResponseType(typeof(BaseResponse<TenancyPaymentQuoteDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> QuotePayment(Guid tenancyId)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId is null) return Unauthorized();
+
+        return Ok(await _payments.QuoteAsync(tenancyId, userId.Value));
+    }
+
+    /// <summary>
+    /// Starts the payment and returns where to send the tenant. The tenant only.
+    /// </summary>
+    /// <remarks>
+    /// Not "either party": the owner is on this tenancy and would otherwise be able
+    /// to start a charge against the other person's card.
+    /// </remarks>
+    [HttpPost("{tenancyId:guid}/payment")]
+    [ProducesResponseType(typeof(BaseResponse<PaymentDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> StartPayment(Guid tenancyId, StartTenancyPaymentDto? request)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId is null) return Unauthorized();
+
+        return Ok(await _payments.InitialiseAsync(tenancyId, request?.CallbackUrl, userId.Value));
     }
 
     // ─── Documents and fees ──────────────────────────────────────

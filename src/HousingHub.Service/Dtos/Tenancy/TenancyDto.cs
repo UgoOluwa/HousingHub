@@ -51,3 +51,49 @@ public record SelectCandidateDto(Guid CustomerId);
 /// that distinguishes "the owner changed their mind" from silence.
 /// </remarks>
 public record WithdrawTenancyDto(string? Reason);
+
+/// <summary>
+/// What a tenant is asked to pay, itemised.
+/// </summary>
+/// <remarks>
+/// Every line is shown before anything is charged. The commission is ours and is
+/// named as ours — a tenant who discovers it only on a bank statement is a tenant
+/// who disputes it, and they agreed to the rent and the owner's fees long before
+/// this screen.
+/// </remarks>
+public record TenancyPaymentQuoteDto(
+    Guid TenancyId,
+    TenancyStatus TenancyStatus,
+    long RentKobo,
+    long OwnerFeesKobo,
+    long CommissionKobo,
+    long ProcessingFeeKobo,
+    long TotalKobo,
+    string Currency,
+
+    /// <summary>False until every document has been accepted.</summary>
+    bool IsPayable,
+
+    /// <summary>True once this tenancy has been paid for.</summary>
+    bool IsAlreadyPaid,
+
+    /// <summary>
+    /// False when the owner has not said where to pay them.
+    /// </summary>
+    /// <remarks>
+    /// Surfaced rather than hidden behind a failure: the tenant has done nothing
+    /// wrong and can do nothing about it, so the screen says who is holding things
+    /// up instead of refusing with a message about an account they have never seen.
+    /// </remarks>
+    bool OwnerCanBePaid,
+
+    IReadOnlyList<TenancyFeeDto> Fees);
+
+/// <summary>
+/// Where to send the tenant after they have paid.
+/// </summary>
+/// <remarks>
+/// Dropped unless it points at one of our own front ends. Unchecked it is an open
+/// redirect at the exact moment somebody is expecting a receipt.
+/// </remarks>
+public record StartTenancyPaymentDto(string? CallbackUrl);

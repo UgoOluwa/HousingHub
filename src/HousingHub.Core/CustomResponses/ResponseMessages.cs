@@ -250,6 +250,8 @@ public static class ResponseMessages
 
     public const string PayoutAccountNeedsIdentity = "Verify your identity before adding a payout account. We check that the account belongs to you, and we can't do that until we know who you are.";
 
+    public const string TenancyNotPayable = "This tenancy isn't ready to be paid for. Every document has to be accepted first.";
+
     public const string PayoutAccountRequired = "The owner hasn't set up an account to be paid into yet. We've let them know.";
 
     public const string InspectionCompleted = "Thanks — we've told the owner the viewing went ahead.";

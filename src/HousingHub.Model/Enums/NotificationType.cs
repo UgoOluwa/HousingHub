@@ -103,5 +103,15 @@ public enum NotificationType
 
     /// <summary>Nobody ever said whether the viewing happened, so it was closed.</summary>
     [Description("Inspection Expired")]
-    InspectionExpired = 20
+    InspectionExpired = 20,
+
+    /// <summary>
+    /// The tenant is ready to pay and the owner has nowhere to be paid into.
+    /// </summary>
+    /// <remarks>
+    /// The one notification that tells somebody they are the obstacle. Sent to the
+    /// owner, because the tenant has done nothing wrong and can do nothing about it.
+    /// </remarks>
+    [Description("Add A Payout Account")]
+    TenancyPayoutAccountRequired = 21
 }

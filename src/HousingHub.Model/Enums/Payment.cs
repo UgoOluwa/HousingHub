@@ -20,6 +20,18 @@ public enum PaymentPurpose
     IdentityVerification = 1,
     BusinessVerification = 2,
     PropertyVerification = 3,
+
+    /// <summary>
+    /// A tenant paying to take a property: rent, the owner's fees, our commission
+    /// and the processing fee, in one transaction.
+    /// </summary>
+    /// <remarks>
+    /// The only purpose that is split. The rent and the owner's fees go straight to
+    /// the owner's payout account and never sit with us — which is what keeps this
+    /// a payment rail rather than a money-holding business, and out of reach of the
+    /// licensing that would come with one.
+    /// </remarks>
+    TenancyRent = 4,
 }
 
 /// <summary>
