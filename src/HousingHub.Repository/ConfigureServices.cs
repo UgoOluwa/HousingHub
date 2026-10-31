@@ -50,6 +50,8 @@ public static class ConfigureServices
         services.AddScoped<ITenancyDocumentQueryRepository, TenancyDocumentQueryRepository>();
         services.AddScoped<ITenancyFeeCommandRepository, TenancyFeeCommandRepository>();
         services.AddScoped<ITenancyFeeQueryRepository, TenancyFeeQueryRepository>();
+        services.AddScoped<IPayoutAccountCommandRepository, PayoutAccountCommandRepository>();
+        services.AddScoped<IPayoutAccountQueryRepository, PayoutAccountQueryRepository>();
 
         return services;
     }

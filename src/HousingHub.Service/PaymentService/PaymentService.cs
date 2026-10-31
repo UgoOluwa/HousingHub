@@ -62,6 +62,7 @@ public class PaymentService : IPaymentService
 
     private readonly IUnitOfWOrk _unitOfWork;
     private readonly IPaymentGateway _gateway;
+    private readonly ICallbackUrlResolver _callbacks;
     private readonly PaymentFeeCatalogue _fees;
     private readonly IEmailService _emailService;
     private readonly IConfiguration _configuration;
@@ -70,6 +71,7 @@ public class PaymentService : IPaymentService
     public PaymentService(
         IUnitOfWOrk unitOfWork,
         IPaymentGateway gateway,
+        ICallbackUrlResolver callbacks,
         PaymentFeeCatalogue fees,
         IEmailService emailService,
         IConfiguration configuration,
@@ -77,6 +79,7 @@ public class PaymentService : IPaymentService
     {
         _unitOfWork = unitOfWork;
         _gateway = gateway;
+        _callbacks = callbacks;
         _fees = fees;
         _emailService = emailService;
         _configuration = configuration;
@@ -175,7 +178,7 @@ public class PaymentService : IPaymentService
                 AmountKobo: payment.AmountKobo,
                 CustomerEmail: customer.Email,
                 Currency: payment.Currency,
-                CallbackUrl: ResolveCallbackUrl(callbackUrl),
+                CallbackUrl: _callbacks.Resolve(callbackUrl),
                 Metadata: new Dictionary<string, string>
                 {
                     ["purpose"] = pricing.Purpose.ToString(),
@@ -363,6 +366,12 @@ public class PaymentService : IPaymentService
                 _logger.LogInformation(
                     "Settled payment {Reference} for {AmountKobo} kobo, purpose {Purpose}, subject {SubjectId}",
                     payment.Reference, payment.AmountKobo, payment.Purpose, payment.SubjectId);
+
+                // The thing the payment was for. Before the receipt, because the
+                // receipt is a courtesy and this is the entitlement — a tenant who
+                // has paid should not be able to read their receipt while the
+                // tenancy still says it is waiting for money.
+                await FulfilAsync(payment);
 
                 // After the save, and never in front of it. The payment is the
                 // record; the receipt is a courtesy. A failing mail provider must
@@ -588,60 +597,61 @@ public class PaymentService : IPaymentService
     }
 
     /// <summary>
-    /// Accepts a client-supplied return URL only if it points at a front end we
-    /// already trust.
+    /// Hands over whatever the payment was for.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Unchecked, this is an open redirect with a payment attached. The gateway sends
-    /// the payer wherever this says once they have paid, so an attacker who can get
-    /// someone to start a payment with their URL lands that person on a page of their
-    /// choosing at the exact moment they are expecting a receipt — which is the most
-    /// credible phishing context this product has.
+    /// Only a tenancy has anything to hand over here. A verification payment is
+    /// read back by the verification service when the case is submitted, so there
+    /// is nothing for this to do — the entitlement is a question that gets asked,
+    /// not a flag that gets set.
     /// </para>
     /// <para>
-    /// Validated against <c>Cors:AllowedOrigins</c> rather than a new setting: that
-    /// list already answers "is this one of our front ends", it is required in
-    /// production, and a second list would drift from it. A URL that does not match
-    /// is dropped rather than rejected — the payment is still perfectly valid
-    /// without a return URL, and the gateway shows its own receipt page.
+    /// Swallows its own failures. The money has arrived and the payment is already
+    /// recorded as settled; throwing here would turn a successful payment into a
+    /// failed webhook that the provider then retries, and the retry would find the
+    /// payment already settled and do nothing at all.
     /// </para>
     /// </remarks>
-    private string? ResolveCallbackUrl(string? requested)
+    private async Task FulfilAsync(Payment payment)
     {
-        if (string.IsNullOrWhiteSpace(requested)) return null;
+        if (payment.Purpose != PaymentPurpose.TenancyRent || payment.SubjectId is not { } tenancyId) return;
 
-        if (!Uri.TryCreate(requested, UriKind.Absolute, out var candidate))
+        try
         {
-            _logger.LogWarning("Discarded a payment callback URL that is not absolute");
-            return null;
-        }
+            var tenancy = await _unitOfWork.TenancyQueries.GetByIdAsync(tenancyId);
 
-        if (candidate.Scheme != Uri.UriSchemeHttps && !candidate.IsLoopback)
-        {
-            _logger.LogWarning("Discarded a non-HTTPS payment callback URL");
-            return null;
-        }
-
-        var allowed = _configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
-
-        foreach (var origin in allowed)
-        {
-            if (!Uri.TryCreate(origin, UriKind.Absolute, out var trusted)) continue;
-
-            // Scheme, host and port must all match. Comparing the string prefix
-            // instead would let "https://housinghub.ng.attacker.example" through.
-            if (candidate.Scheme == trusted.Scheme
-                && string.Equals(candidate.Host, trusted.Host, StringComparison.OrdinalIgnoreCase)
-                && candidate.Port == trusted.Port)
+            if (tenancy is null)
             {
-                return requested;
+                // Paid for something that is not there. Loud, because somebody is
+                // out of pocket and no amount of retrying will fix it.
+                _logger.LogError(
+                    "Payment {Reference} settled against tenancy {TenancyId}, which does not exist",
+                    payment.Reference, tenancyId);
+                return;
             }
-        }
 
-        _logger.LogWarning(
-            "Discarded a payment callback URL for untrusted origin {Origin}", candidate.GetLeftPart(UriPartial.Authority));
-        return null;
+            if (!tenancy.TryActivate())
+            {
+                // Expected on a replay — an already-active tenancy stays active.
+                _logger.LogInformation(
+                    "Tenancy {TenancyId} was not activated by {Reference}; it is {Status}",
+                    tenancyId, payment.Reference, tenancy.Status);
+                return;
+            }
+
+            await _unitOfWork.TenancyCommands.UpdateAsync(tenancy);
+            await _unitOfWork.SaveAsync();
+
+            _logger.LogInformation(
+                "Tenancy {TenancyId} is active: {Reference} settled for {AmountKobo} kobo",
+                tenancyId, payment.Reference, payment.AmountKobo);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not activate tenancy {TenancyId} after payment {Reference}",
+                tenancyId, payment.Reference);
+        }
     }
 
     private async Task<(VerificationCase? Case, Customer? Customer, string? Error)> LoadOwnedCaseAsync(

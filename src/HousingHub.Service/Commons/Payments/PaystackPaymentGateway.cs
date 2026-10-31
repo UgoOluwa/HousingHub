@@ -90,6 +90,17 @@ public class PaystackPaymentGateway : IPaymentGateway
                 currency = request.Currency,
                 callback_url = request.CallbackUrl,
                 metadata = request.Metadata,
+
+                // Null on everything that is not a split, and Paystack ignores the
+                // fields when they are. subaccount names the destination;
+                // transaction_charge is the flat amount we keep out of it.
+                subaccount = request.SubaccountCode,
+                transaction_charge = request.PlatformChargeKobo,
+
+                // Our own share bears the provider's fee, which is where the
+                // tenant's contribution to it already sits — so the owner receives
+                // the rent in full rather than net of a deduction they never agreed.
+                bearer = request.SubaccountCode is null ? null : "account",
             };
 
             using var response = await _http.PostAsJsonAsync("transaction/initialize", body, JsonOptions, cancellationToken);
@@ -148,6 +159,125 @@ public class PaystackPaymentGateway : IPaymentGateway
         {
             _logger.LogError(ex, "Paystack verify threw for {Reference}", reference);
             return null;
+        }
+    }
+
+    public async Task<IReadOnlyList<GatewayBank>> ListBanksAsync(CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured) return [];
+
+        try
+        {
+            using var response = await _http.GetAsync(
+                "bank?country=nigeria&currency=NGN&perPage=100", cancellationToken);
+
+            var payload = await response.Content
+                .ReadFromJsonAsync<PaystackEnvelope<List<BankData>>>(JsonOptions, cancellationToken);
+
+            if (!response.IsSuccessStatusCode || payload?.Data is null)
+            {
+                _logger.LogError("Paystack bank list failed: {StatusCode} {Message}",
+                    (int)response.StatusCode, payload?.Message);
+                return [];
+            }
+
+            return payload.Data
+                .Where(b => !string.IsNullOrWhiteSpace(b.Name) && !string.IsNullOrWhiteSpace(b.Code))
+                .Select(b => new GatewayBank(b.Name, b.Code))
+                .OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Paystack bank list threw");
+            return [];
+        }
+    }
+
+    public async Task<GatewayAccountName> ResolveAccountNameAsync(
+        string accountNumber, string bankCode, CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured)
+            return GatewayAccountName.Failed("Payouts are not configured on this environment.");
+
+        try
+        {
+            using var response = await _http.GetAsync(
+                $"bank/resolve?account_number={Uri.EscapeDataString(accountNumber)}"
+                + $"&bank_code={Uri.EscapeDataString(bankCode)}",
+                cancellationToken);
+
+            var payload = await response.Content
+                .ReadFromJsonAsync<PaystackEnvelope<ResolveData>>(JsonOptions, cancellationToken);
+
+            if (!response.IsSuccessStatusCode || payload is null || !payload.Status || payload.Data is null)
+            {
+                // Paystack says "Could not resolve account name. Check parameters or
+                // try again." for a wrong number, which is both true and useful, so
+                // it is passed through rather than replaced.
+                _logger.LogWarning(
+                    "Paystack could not resolve an account: {StatusCode} {Message}",
+                    (int)response.StatusCode, payload?.Message);
+
+                return GatewayAccountName.Failed(
+                    "We couldn't find that account. Check the number and the bank, then try again.");
+            }
+
+            return new GatewayAccountName(true, payload.Data.AccountName, null);
+        }
+        catch (Exception ex)
+        {
+            // Never logs the account number: it identifies a bank account and the
+            // call is retried from the screen anyway.
+            _logger.LogError(ex, "Paystack account resolution threw for bank {BankCode}", bankCode);
+            return GatewayAccountName.Failed("We couldn't check that account just now. Please try again.");
+        }
+    }
+
+    public async Task<GatewaySubaccount> CreateSubaccountAsync(
+        string businessName,
+        string bankCode,
+        string accountNumber,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured)
+            return GatewaySubaccount.Failed("Payouts are not configured on this environment.");
+
+        try
+        {
+            var body = new
+            {
+                business_name = businessName,
+                settlement_bank = bankCode,
+                account_number = accountNumber,
+                // Zero, deliberately. What we keep is sent per transaction, because
+                // the commission is a share of the rent and the fees differ on every
+                // let — a percentage fixed here would be a number chosen before it
+                // could be known.
+                percentage_charge = 0,
+            };
+
+            using var response = await _http.PostAsJsonAsync("subaccount", body, JsonOptions, cancellationToken);
+
+            var payload = await response.Content
+                .ReadFromJsonAsync<PaystackEnvelope<SubaccountData>>(JsonOptions, cancellationToken);
+
+            if (!response.IsSuccessStatusCode || payload is null || !payload.Status
+                || string.IsNullOrWhiteSpace(payload.Data?.SubaccountCode))
+            {
+                _logger.LogError(
+                    "Paystack subaccount creation failed: {StatusCode} {Message}",
+                    (int)response.StatusCode, payload?.Message);
+
+                return GatewaySubaccount.Failed("We couldn't set that account up for payouts. Please try again.");
+            }
+
+            return new GatewaySubaccount(true, payload.Data.SubaccountCode, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Paystack subaccount creation threw for bank {BankCode}", bankCode);
+            return GatewaySubaccount.Failed("We couldn't set that account up for payouts. Please try again.");
         }
     }
 
@@ -285,6 +415,12 @@ public class PaystackPaymentGateway : IPaymentGateway
         };
 
     private sealed record PaystackEnvelope<T>(bool Status, string? Message, T? Data);
+
+    private sealed record BankData(string Name, string Code);
+
+    private sealed record ResolveData(string? AccountName, string? AccountNumber);
+
+    private sealed record SubaccountData(string? SubaccountCode);
 
     private sealed record InitialiseData(
         [property: JsonPropertyName("authorization_url")] string AuthorizationUrl,

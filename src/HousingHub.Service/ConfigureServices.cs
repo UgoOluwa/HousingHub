@@ -125,6 +125,13 @@ public static class ConfigureServices
                            TenancyService.AdminTenancyQueryService>();
         services.AddScoped<Commons.Documents.ISignedDocumentBuilder,
                            Commons.Documents.SignedDocumentBuilder>();
+        services.AddScoped<PayoutService.Interfaces.IPayoutAccountService,
+                           PayoutService.PayoutAccountService>();
+        services.AddScoped<Commons.Payments.ICallbackUrlResolver,
+                           Commons.Payments.PaymentCallbackUrlResolver>();
+        services.AddScoped<Commons.Payments.TenancyChargeCalculator>();
+        services.AddScoped<TenancyService.Interfaces.ITenancyPaymentService,
+                           TenancyService.TenancyPaymentService>();
         services.AddSingleton<IUtilityService, UtilityService>();
 
         // AWS S3 File Storage

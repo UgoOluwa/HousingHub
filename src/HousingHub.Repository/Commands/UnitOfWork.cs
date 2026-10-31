@@ -42,6 +42,8 @@ public class UnitOfWork : IUnitOfWOrk
     public ITenancyDocumentQueryRepository TenancyDocumentQueries { get; }
     public ITenancyFeeCommandRepository TenancyFeeCommands { get; }
     public ITenancyFeeQueryRepository TenancyFeeQueries { get; }
+    public IPayoutAccountCommandRepository PayoutAccountCommands { get; }
+    public IPayoutAccountQueryRepository PayoutAccountQueries { get; }
 
     public UnitOfWork(
         ICustomerAddressCommandRepository customerAddressCommands,
@@ -79,7 +81,9 @@ public class UnitOfWork : IUnitOfWOrk
         ITenancyDocumentCommandRepository tenancyDocumentCommands,
         ITenancyDocumentQueryRepository tenancyDocumentQueries,
         ITenancyFeeCommandRepository tenancyFeeCommands,
-        ITenancyFeeQueryRepository tenancyFeeQueries)
+        ITenancyFeeQueryRepository tenancyFeeQueries,
+        IPayoutAccountCommandRepository payoutAccountCommands,
+        IPayoutAccountQueryRepository payoutAccountQueries)
     {
         CustomerAddressCommands = customerAddressCommands;
         CustomerAddressQueries = customerAddressQueries;
@@ -117,6 +121,8 @@ public class UnitOfWork : IUnitOfWOrk
         TenancyDocumentQueries = tenancyDocumentQueries;
         TenancyFeeCommands = tenancyFeeCommands;
         TenancyFeeQueries = tenancyFeeQueries;
+        PayoutAccountCommands = payoutAccountCommands;
+        PayoutAccountQueries = payoutAccountQueries;
     }
 
     public Task SaveAsync()

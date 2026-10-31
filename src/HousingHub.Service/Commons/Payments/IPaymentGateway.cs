@@ -16,7 +16,27 @@ public sealed record GatewayChargeRequest(
     string CustomerEmail,
     string Currency,
     string? CallbackUrl,
-    IReadOnlyDictionary<string, string>? Metadata = null);
+    IReadOnlyDictionary<string, string>? Metadata = null,
+
+    /// <summary>
+    /// The payout destination the balance of this charge belongs to.
+    /// </summary>
+    /// <remarks>
+    /// Set only on a split. The provider pays this account everything except
+    /// <see cref="PlatformChargeKobo"/>, so the rent reaches the owner without
+    /// passing through us.
+    /// </remarks>
+    string? SubaccountCode = null,
+
+    /// <summary>
+    /// What we keep out of the charge, in kobo. The remainder goes to the subaccount.
+    /// </summary>
+    /// <remarks>
+    /// A flat amount rather than a percentage, because the commission is a share of
+    /// the rent and the fees differ on every let — the figure is only knowable here,
+    /// at the point of charging.
+    /// </remarks>
+    long? PlatformChargeKobo = null);
 
 /// <summary>The gateway's answer to "where should the payer go to pay this".</summary>
 public sealed record GatewayInitialisation(
@@ -50,6 +70,27 @@ public sealed record GatewayTransaction(
     string? ProviderReference,
     string? Channel,
     string? FailureReason);
+
+/// <summary>One of the banks a payout account can be held with.</summary>
+public sealed record GatewayBank(string Name, string Code);
+
+/// <summary>
+/// Whose name the bank says an account is in.
+/// </summary>
+/// <remarks>
+/// The name comes from the bank, never from the person claiming the account. That
+/// is the entire value of the call — anyone can type a name.
+/// </remarks>
+public sealed record GatewayAccountName(bool IsSuccessful, string? AccountName, string? Error)
+{
+    public static GatewayAccountName Failed(string error) => new(false, null, error);
+}
+
+/// <summary>A payout destination the provider will split money into.</summary>
+public sealed record GatewaySubaccount(bool IsSuccessful, string? SubaccountCode, string? Error)
+{
+    public static GatewaySubaccount Failed(string error) => new(false, null, error);
+}
 
 /// <summary>
 /// A payment provider.
@@ -103,6 +144,35 @@ public interface IPaymentGateway
     /// moved. <c>IsComplete</c> is the one that means moved.
     /// </para>
     /// </remarks>
+    /// <summary>Banks a payout account can be held with, for the owner to pick from.</summary>
+    Task<IReadOnlyList<GatewayBank>> ListBanksAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Asks the bank whose name an account is in.
+    /// </summary>
+    /// <remarks>
+    /// Checked against the holder's verified identity before any payout destination
+    /// is created. Without it, anyone who can list a property can point rent at any
+    /// account number they can type.
+    /// </remarks>
+    Task<GatewayAccountName> ResolveAccountNameAsync(
+        string accountNumber, string bankCode, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates the payout destination a split will pay into.
+    /// </summary>
+    /// <remarks>
+    /// Created taking none of the transaction by default. What we keep is decided
+    /// per transaction instead, because the commission is a share of the rent and
+    /// the fees differ on every let — baking a percentage in here would fix at
+    /// onboarding a number that is only knowable at payment.
+    /// </remarks>
+    Task<GatewaySubaccount> CreateSubaccountAsync(
+        string businessName,
+        string bankCode,
+        string accountNumber,
+        CancellationToken cancellationToken = default);
+
     Task<GatewayRefund> RefundAsync(
         string transactionReference,
         long amountKobo,

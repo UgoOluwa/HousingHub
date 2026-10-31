@@ -131,6 +131,48 @@ public class Tenancy : BaseEntity
     /// consequences — money has moved and somebody is living there — and it belongs
     /// to the tenancy-management phase, not here.
     /// </remarks>
+    /// <summary>
+    /// Everything has been agreed; the tenant can pay.
+    /// </summary>
+    /// <remarks>
+    /// Only from <see cref="TenancyStatus.DocumentsAccepted"/>. Taking money before
+    /// the paperwork is settled would be charging for an agreement that does not
+    /// exist yet, and the documents are what say what was agreed.
+    /// </remarks>
+    public bool TryBeginPayment()
+    {
+        if (Status != TenancyStatus.DocumentsAccepted) return false;
+
+        Status = TenancyStatus.AwaitingPayment;
+        DateModified = DateTime.UtcNow;
+        return true;
+    }
+
+    /// <summary>
+    /// The money arrived. The let is running.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Accepted from <see cref="TenancyStatus.DocumentsAccepted"/> as well as
+    /// <see cref="TenancyStatus.AwaitingPayment"/>. A provider's webhook can land
+    /// before the browser comes back from the gateway, so the tenancy may never have
+    /// been observed in the intermediate state — refusing that would lose a paid
+    /// tenancy to a race nobody can see.
+    /// </para>
+    /// <para>
+    /// Idempotent: a tenancy already active stays active and reports false, so a
+    /// replayed webhook changes nothing.
+    /// </para>
+    /// </remarks>
+    public bool TryActivate()
+    {
+        if (Status is not (TenancyStatus.AwaitingPayment or TenancyStatus.DocumentsAccepted)) return false;
+
+        Status = TenancyStatus.Active;
+        DateModified = DateTime.UtcNow;
+        return true;
+    }
+
     public bool TryWithdraw(string? reason)
     {
         if (!IsLive || Status == TenancyStatus.Active) return false;
