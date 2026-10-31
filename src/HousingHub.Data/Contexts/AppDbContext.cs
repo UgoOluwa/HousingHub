@@ -139,6 +139,13 @@ public class DynamoDbTableInitializer
         {
             CreateGsi("TenancyId-index", "TenancyId"),
         }),
+        ["PayoutAccounts"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            // "Where do I pay this owner." One row per customer, so this answers
+            // with one item — but it is a GSI rather than the key because the table
+            // is keyed by Id like every other.
+            CreateGsi("CustomerId-index", "CustomerId"),
+        }),
     };
 
     public DynamoDbTableInitializer(

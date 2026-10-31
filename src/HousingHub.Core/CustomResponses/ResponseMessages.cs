@@ -234,6 +234,24 @@ public static class ResponseMessages
     public const string InspectionCannotCancel = "Completed or already cancelled inspections can't be cancelled.";
 
     /// <summary>Worker summary. Pluralised properly rather than emitting "reminder(s)".</summary>
+    // ── Payout accounts ──────────────────────────────────────────
+
+    public const string PayoutAccountSaved = "Saved. Rent for your properties will be paid into this account.";
+
+    /// <summary>
+    /// Names what is wrong and what to do, without saying whose account it is.
+    /// </summary>
+    /// <remarks>
+    /// The resolved name is deliberately absent. Somebody probing account numbers
+    /// would otherwise get a name lookup out of a refusal, which is a directory of
+    /// account holders built one guess at a time.
+    /// </remarks>
+    public const string PayoutAccountNameMismatch = "That account isn't in your name. Rent can only be paid into an account belonging to the verified account holder — use one of your own, or update your name with us if it has changed.";
+
+    public const string PayoutAccountNeedsIdentity = "Verify your identity before adding a payout account. We check that the account belongs to you, and we can't do that until we know who you are.";
+
+    public const string PayoutAccountRequired = "The owner hasn't set up an account to be paid into yet. We've let them know.";
+
     public const string InspectionCompleted = "Thanks — we've told the owner the viewing went ahead.";
 
     /// <summary>

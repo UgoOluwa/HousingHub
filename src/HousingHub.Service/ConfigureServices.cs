@@ -125,6 +125,8 @@ public static class ConfigureServices
                            TenancyService.AdminTenancyQueryService>();
         services.AddScoped<Commons.Documents.ISignedDocumentBuilder,
                            Commons.Documents.SignedDocumentBuilder>();
+        services.AddScoped<PayoutService.Interfaces.IPayoutAccountService,
+                           PayoutService.PayoutAccountService>();
         services.AddSingleton<IUtilityService, UtilityService>();
 
         // AWS S3 File Storage
