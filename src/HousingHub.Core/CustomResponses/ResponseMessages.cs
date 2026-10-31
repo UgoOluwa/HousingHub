@@ -248,6 +248,16 @@ public static class ResponseMessages
     /// </remarks>
     public const string PayoutAccountNameMismatch = "That account isn't in your name. Rent can only be paid into an account belonging to the verified account holder — use one of your own, or update your name with us if it has changed.";
 
+    /// <summary>
+    /// The bank answered without a name on it.
+    /// </summary>
+    /// <remarks>
+    /// Its own message rather than the generic one, because "something went wrong
+    /// on our end" sent somebody hunting a server fault when the answer was that
+    /// the provider had returned a shape we were not reading.
+    /// </remarks>
+    public const string PayoutAccountNameUnavailable = "The bank didn't give us a name for that account. Check the number and the bank, then try again.";
+
     public const string PayoutAccountNeedsIdentity = "Verify your identity before adding a payout account. We check that the account belongs to you, and we can't do that until we know who you are.";
 
     public const string TenancyNotPayable = "This tenancy isn't ready to be paid for. Every document has to be accepted first.";

@@ -34,12 +34,25 @@ public class TenancyChargeCalculatorTests
     }
 
     [Fact]
-    public void CommissionIsFivePercentOfRentAndFees()
+    public void CommissionIsFivePercentOfTheRent()
     {
         Assert.True(Build().TryCalculate(Rent, Fees, out var charge, out _));
 
-        // 5% of ₦5,500,000.
-        Assert.Equal(275_000_00, charge.CommissionKobo);
+        // 5% of ₦5,000,000 — the rent, not the ₦5,500,000 total.
+        Assert.Equal(250_000_00, charge.CommissionKobo);
+    }
+
+    /// <summary>
+    /// The owner's own fees are their charges, collected on their behalf. Taking a
+    /// share would mean our commission grew every time an owner added a line.
+    /// </summary>
+    [Fact]
+    public void TheOwnersFeesAreNotCommissioned()
+    {
+        Build().TryCalculate(Rent, 0, out var withoutFees, out _);
+        Build().TryCalculate(Rent, Fees, out var withFees, out _);
+
+        Assert.Equal(withoutFees.CommissionKobo, withFees.CommissionKobo);
     }
 
     /// <summary>
@@ -97,8 +110,8 @@ public class TenancyChargeCalculatorTests
     {
         Build().TryCalculate(1_000_00, 0, out var charge, out _);
 
-        // 5% commission on ₦1,000 is ₦50; 1.5% of ₦1,050 is ₦15.75 — and no ₦100
-        // flat part, because the charge is under ₦2,500.
+        // 5% commission on ₦1,000 of rent is ₦50; 1.5% of ₦1,050 is ₦15.75 — and no
+        // ₦100 flat part, because the charge is under ₦2,500.
         Assert.Equal(15_75, charge.ProcessingFeeKobo);
     }
 
@@ -112,7 +125,7 @@ public class TenancyChargeCalculatorTests
         // 5% of ₦333.33 is ₦16.6665.
         Build().TryCalculate(333_33, 0, out var charge, out _);
 
-        Assert.Equal(1667, charge.CommissionKobo);
+        Assert.Equal(16_67, charge.CommissionKobo);
     }
 
     /// <summary>

@@ -55,7 +55,7 @@ public class PayoutAccountService : IPayoutAccountService
 
             var resolved = await _gateway.ResolveAccountNameAsync(request.AccountNumber, request.BankCode);
             if (!resolved.IsSuccessful || string.IsNullOrWhiteSpace(resolved.AccountName))
-                return Fail<ResolvedAccountDto>(resolved.Error ?? ResponseMessages.UnexpectedError);
+                return Fail<ResolvedAccountDto>(resolved.Error ?? ResponseMessages.PayoutAccountNameUnavailable);
 
             // Shown rather than judged. The owner sees whose account they have typed
             // and can correct a digit; the decision is still made at save, against
@@ -83,7 +83,7 @@ public class PayoutAccountService : IPayoutAccountService
 
             var resolved = await _gateway.ResolveAccountNameAsync(request.AccountNumber, request.BankCode);
             if (!resolved.IsSuccessful || string.IsNullOrWhiteSpace(resolved.AccountName))
-                return Fail<PayoutAccountDto>(resolved.Error ?? ResponseMessages.UnexpectedError);
+                return Fail<PayoutAccountDto>(resolved.Error ?? ResponseMessages.PayoutAccountNameUnavailable);
 
             // The check the whole feature exists for. Re-run here rather than trusted
             // from the resolve call, because the two are separate requests and only

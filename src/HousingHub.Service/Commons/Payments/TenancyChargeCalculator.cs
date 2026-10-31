@@ -68,6 +68,10 @@ public class TenancyChargeCalculator
     /// Breaks a let down into what each party gets.
     /// </summary>
     /// <param name="error">Why no charge could be worked out. Null on success.</param>
+    /// <remarks>
+    /// Commission is a share of <paramref name="rentKobo"/> only. The owner's own
+    /// fees pass through untouched.
+    /// </remarks>
     public bool TryCalculate(long rentKobo, long ownerFeesKobo, out TenancyCharge charge, out string? error)
     {
         charge = new TenancyCharge(0, 0, 0, 0);
@@ -91,9 +95,14 @@ public class TenancyChargeCalculator
 
         var ownerReceives = rentKobo + ownerFeesKobo;
 
-        // Rounded up. The alternative is systematically under-charging by up to a
+        // On the rent alone, not on the rent plus whatever the owner added. The
+        // owner's fees are their charges, collected on their behalf — an agency fee
+        // or a caution deposit is not income we had any part in, and taking a share
+        // of it would mean our commission grew every time an owner added a line.
+        //
+        // Rounded up: the alternative is systematically under-charging by up to a
         // kobo on every let, in the one direction we cannot invoice for later.
-        var commission = (long)Math.Ceiling(ownerReceives * percent.Value / 100m);
+        var commission = (long)Math.Ceiling(rentKobo * percent.Value / 100m);
 
         charge = new TenancyCharge(
             rentKobo, ownerFeesKobo, commission, ProcessingFeeKobo(ownerReceives + commission));
