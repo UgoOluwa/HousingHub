@@ -44,6 +44,25 @@ limits worth knowing before you lose an afternoon to them:
 Saving an account costs one resolve. Checking it first costs another, which is why
 checking is optional rather than a required first step.
 
+### The simulated bank
+
+On a test key the bank dropdown carries an extra first entry — **"Test Bank —
+simulated, dev only"**, bank code `001`. Choosing it resolves through Paystack as
+normal and then **skips the name check**, recording the account under the owner's
+own verified name, so the whole payout-to-payment flow can be walked without
+spending a daily lookup or using a developer's real bank account.
+
+**It is gated on the Paystack credential starting `sk_test_`, not on a setting.**
+The bypass is switched on by the same fact that makes it harmless: a live key is
+not a test key, so there is no configuration that produces a production environment
+with this active and no flag anybody can set wrongly. On a live key the entry is
+absent from the list and bank code `001` is treated as an ordinary bank whose name
+must match — there is a test for exactly that.
+
+It relaxes the name check and nothing else. An unverified identity still cannot add
+a payout account, a real bank code on a test key is still checked properly, and
+every simulated match is logged at warning level.
+
 **A subaccount created with a live key is a real payout destination.** If you ever
 test with live keys, use an account you control and delete the subaccount from the
 Paystack dashboard afterwards.

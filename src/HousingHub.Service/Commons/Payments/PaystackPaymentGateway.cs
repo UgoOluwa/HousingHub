@@ -68,6 +68,16 @@ public class PaystackPaymentGateway : IPaymentGateway
     /// </remarks>
     public bool IsConfigured => !string.IsNullOrWhiteSpace(_secretKey);
 
+    /// <summary>
+    /// Paystack's test keys are prefixed <c>sk_test_</c> and its live keys
+    /// <c>sk_live_</c>, so the credential states which world it operates in.
+    /// </summary>
+    /// <remarks>
+    /// An unset key is not test mode. It is no mode at all, and reading it as test
+    /// would mean a misconfigured production environment quietly relaxed its checks.
+    /// </remarks>
+    public bool IsTestMode => _secretKey.StartsWith("sk_test_", StringComparison.Ordinal);
+
     public async Task<GatewayInitialisation> InitialiseAsync(
         GatewayChargeRequest request,
         CancellationToken cancellationToken = default)

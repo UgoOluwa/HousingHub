@@ -225,4 +225,119 @@ public class PayoutAccountServiceTests
         Assert.True(result.IsSuccessful);
         Assert.Null(result.Data);
     }
+
+    // ── the simulated bank ───────────────────────────────────────
+
+    private void SetupTestMode(bool isTestMode) =>
+        _gateway.Setup(g => g.IsTestMode).Returns(isTestMode);
+
+    private static SavePayoutAccountDto SimulatedRequest() =>
+        new(PaymentSimulation.TestBankCode, AccountNumber);
+
+    /// <summary>
+    /// The point of it: a developer walks the whole flow without spending one of
+    /// three daily lookups or using a bank account of their own.
+    /// </summary>
+    [Fact]
+    public async Task OnATestKey_TheSimulatedBankIsAcceptedWhateverNameComesBack()
+    {
+        SetupTestMode(true);
+        SetupOwner("Bayo", "Eze");
+        SetupBankSays("SOMEBODY ENTIRELY ELSE");
+        SetupSubaccount();
+
+        var result = await _sut.SaveAsync(SimulatedRequest(), OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        // Recorded under the holder's own name, so the rest of the flow reads as it
+        // would in life.
+        Assert.Equal("Bayo Eze", result.Data!.ResolvedAccountName);
+    }
+
+    /// <summary>
+    /// The one that matters. A live credential has no bypass, whatever bank code
+    /// arrives — "001" is a string anybody can send.
+    /// </summary>
+    [Fact]
+    public async Task OnALiveKey_TheSimulatedBankCodeIsJustAnotherBank()
+    {
+        SetupTestMode(false);
+        SetupOwner("Bayo", "Eze");
+        SetupBankSays("SOMEBODY ENTIRELY ELSE");
+        SetupSubaccount();
+
+        var result = await _sut.SaveAsync(SimulatedRequest(), OwnerId);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.PayoutAccountNameMismatch, result.Message);
+        _unitOfWork.Verify(u => u.PayoutAccountCommands.InsertAsync(It.IsAny<PayoutAccount>()), Times.Never);
+    }
+
+    /// <summary>
+    /// The bypass relaxes the name check and nothing else. An identity that was
+    /// never verified still cannot add an account, because there is no name to
+    /// record it under.
+    /// </summary>
+    [Fact]
+    public async Task TheSimulatedBankDoesNotExcuseAnUnverifiedIdentity()
+    {
+        SetupTestMode(true);
+        SetupOwner(verified: false);
+
+        var result = await _sut.SaveAsync(SimulatedRequest(), OwnerId);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.PayoutAccountNeedsIdentity, result.Message);
+    }
+
+    /// <summary>A real bank on a test key is still checked against the real name.</summary>
+    [Fact]
+    public async Task OnATestKey_ARealBankIsStillChecked()
+    {
+        SetupTestMode(true);
+        SetupOwner("Bayo", "Eze");
+        SetupBankSays("ADA OBI");
+        SetupSubaccount();
+
+        var result = await _sut.SaveAsync(Request(), OwnerId);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.PayoutAccountNameMismatch, result.Message);
+    }
+
+    [Fact]
+    public async Task OnATestKey_TheSimulatedBankIsOfferedFirst()
+    {
+        SetupTestMode(true);
+
+        var banks = (await _sut.GetBanksAsync()).Data!;
+
+        Assert.Equal(PaymentSimulation.TestBankCode, banks[0].Code);
+        Assert.Contains("simulated", banks[0].Name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Nobody on live should be able to see it, let alone pick it.</summary>
+    [Fact]
+    public async Task OnALiveKey_TheSimulatedBankIsNotOfferedAtAll()
+    {
+        SetupTestMode(false);
+
+        var banks = (await _sut.GetBanksAsync()).Data!;
+
+        Assert.DoesNotContain(banks, b => b.Code == PaymentSimulation.TestBankCode);
+    }
+
+    /// <summary>The preview agrees with the save, so neither can mislead about the other.</summary>
+    [Fact]
+    public async Task TheSimulatedBankPreviewsAsAMatchToo()
+    {
+        SetupTestMode(true);
+        SetupOwner("Bayo", "Eze");
+        SetupBankSays("SOMEBODY ENTIRELY ELSE");
+
+        var result = await _sut.ResolveAsync(SimulatedRequest(), OwnerId);
+
+        Assert.True(result.Data!.MatchesYourIdentity);
+        Assert.Equal("Bayo Eze", result.Data.AccountName);
+    }
 }
