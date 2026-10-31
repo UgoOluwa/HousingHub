@@ -34,6 +34,24 @@ public interface IPaymentService
     /// <summary>Reads one of the caller's own payments back, by our reference.</summary>
     Task<BaseResponse<PaymentDto>> GetByReferenceAsync(Guid customerId, string reference);
 
+    /// <summary>
+    /// Asks the provider what happened to a payment, and settles it if it is paid.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For the moment a payer comes back from the gateway. Until this existed the
+    /// system depended entirely on the webhook arriving: a payer who had just paid
+    /// returned to a page still saying they had not, and the obvious thing to do
+    /// about that is pay again.
+    /// </para>
+    /// <para>
+    /// Settles through the same path the webhook uses, which only ever moves a
+    /// payment out of Pending — so whichever of the two arrives second changes
+    /// nothing.
+    /// </para>
+    /// </remarks>
+    Task<BaseResponse<PaymentDto>> ReconcileAsync(Guid customerId, string reference);
+
     /// <summary>Every payment the caller has made, newest first.</summary>
     Task<BaseResponse<List<PaymentDto>>> GetMyPaymentsAsync(Guid customerId);
 

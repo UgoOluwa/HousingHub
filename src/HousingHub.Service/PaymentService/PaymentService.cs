@@ -237,6 +237,38 @@ public class PaymentService : IPaymentService
         }
     }
 
+    public async Task<BaseResponse<PaymentDto>> ReconcileAsync(Guid customerId, string reference)
+    {
+        try
+        {
+            var payment = await FindByReferenceAsync(reference);
+
+            // Same answer for "no such payment" and "somebody else's payment", as
+            // everywhere else a reference is accepted from a client.
+            if (payment is null || payment.CustomerId != customerId)
+                return Fail<PaymentDto>(ResponseMessages.SetNotFoundMessage("payment"));
+
+            // Only a payment still waiting has anything to learn from the provider.
+            // Re-asking about a settled one would spend a call to be told what we
+            // already acted on, and a refunded one would be reported as paid.
+            if (payment.Status == PaymentStatus.Pending)
+            {
+                await SettleFromGatewayAsync(payment, CancellationToken.None);
+
+                // Re-read: settling writes through the repository, and the instance
+                // above is not necessarily the one that was updated.
+                payment = await FindByReferenceAsync(reference) ?? payment;
+            }
+
+            return Ok(ToDto(payment));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reconciling payment {Reference}", reference);
+            return Fail<PaymentDto>(ResponseMessages.UnexpectedError);
+        }
+    }
+
     public async Task<BaseResponse<List<PaymentDto>>> GetMyPaymentsAsync(Guid customerId)
     {
         try
@@ -328,6 +360,28 @@ public class PaymentService : IPaymentService
 
         if (handled is "refund.processed" or "refund.failed")
             return await HandleRefundEventAsync(payment, handled, rawBody);
+
+        return await SettleFromGatewayAsync(payment, cancellationToken);
+    }
+
+    /// <summary>
+    /// Asks the provider what happened, and acts on the answer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Shared by the webhook and by the reconcile a payer's own return triggers,
+    /// so the two can never settle a payment under different rules. Both routes
+    /// land on <c>TrySettle</c>, which only ever moves a payment out of Pending —
+    /// so whichever arrives second changes nothing.
+    /// </para>
+    /// <para>
+    /// Returns false only when the provider could not be reached, which is the
+    /// webhook's signal to ask for redelivery.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> SettleFromGatewayAsync(Payment payment, CancellationToken cancellationToken)
+    {
+        var reference = payment.Reference;
 
         // Re-read from the gateway rather than trusting the amount in the payload.
         // The signature proves the body came from the provider; asking the provider

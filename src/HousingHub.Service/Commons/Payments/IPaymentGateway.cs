@@ -114,6 +114,16 @@ public interface IPaymentGateway
     /// <summary>Provider name, recorded on the payment so a later migration can tell attempts apart.</summary>
     string Name { get; }
 
+    /// <summary>
+    /// Whether the configured credential is a test one.
+    /// </summary>
+    /// <remarks>
+    /// Read from the key itself rather than from a setting. Anything that relaxes a
+    /// check for testing has to be switched on by the same fact that makes it safe —
+    /// a separate flag is one somebody can set in production.
+    /// </remarks>
+    bool IsTestMode { get; }
+
     /// <summary>Registers the charge and returns where to send the payer.</summary>
     Task<GatewayInitialisation> InitialiseAsync(GatewayChargeRequest request, CancellationToken cancellationToken = default);
 

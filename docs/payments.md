@@ -27,6 +27,67 @@ renter side — affordability at shortlist — is Phase 4.
 
 ---
 
+## Testing payout accounts
+
+Paystack's account-resolution endpoint works on a **test** secret key, with two
+limits worth knowing before you lose an afternoon to them:
+
+- **Three live bank resolves per day.** Exceeding it returns
+  `"Test mode daily limit of 3 live bank resolves exceeded"` — an `api_error`, not a
+  bad-account error, so it surfaces to the owner as "we couldn't find that account"
+  and looks exactly like a wrong account number.
+- **Bank code `001` resolves without counting against that limit.** The name it
+  returns is Paystack's, not yours, so it will fail our name match — which is the
+  matcher working, not a bug. Use it to exercise the plumbing; use a real account of
+  your own to test a successful save.
+
+Saving an account costs one resolve. Checking it first costs another, which is why
+checking is optional rather than a required first step.
+
+### The simulated bank
+
+On a test key the bank dropdown carries an extra first entry — **"Test Bank —
+simulated, dev only"**, bank code `001`. Choosing it resolves through Paystack as
+normal and then **skips the name check**, recording the account under the owner's
+own verified name, so the whole payout-to-payment flow can be walked without
+spending a daily lookup or using a developer's real bank account.
+
+**It is gated on the Paystack credential starting `sk_test_`, not on a setting.**
+The bypass is switched on by the same fact that makes it harmless: a live key is
+not a test key, so there is no configuration that produces a production environment
+with this active and no flag anybody can set wrongly. On a live key the entry is
+absent from the list and bank code `001` is treated as an ordinary bank whose name
+must match — there is a test for exactly that.
+
+### Walking a split payment end to end on test keys
+
+Paystack simulates splits in test mode, so once a subaccount exists the whole thing
+works without a change: the charge carries `subaccount`, `transaction_charge` and
+`bearer`, and the test dashboard shows the division on the transaction.
+
+The order that works:
+
+1. Owner adds a payout account — the simulated bank is fine, and the subaccount it
+   creates is a real test subaccount.
+2. Tenant pays with Paystack's test card. The amount is the quote's total.
+3. On return, the app asks the gateway directly rather than waiting for the
+   webhook — see `POST /api/v1/Payment/{reference}/reconcile`. Both routes settle
+   through the same path, so whichever lands second changes nothing.
+4. The tenancy turns Active, the tenant's receipt appears under Payments, and the
+   split shows on the admin tenancy screen and in the Finance report.
+
+**If the webhook is not configured on the dev environment the flow still completes**,
+because of step 3. Configure it anyway — a payer who closes the tab before the
+redirect has only the webhook left.
+
+It relaxes the name check and nothing else. An unverified identity still cannot add
+a payout account, a real bank code on a test key is still checked properly, and
+every simulated match is logged at warning level.
+
+**A subaccount created with a live key is a real payout destination.** If you ever
+test with live keys, use an account you control and delete the subaccount from the
+Paystack dashboard afterwards.
+
 ## The bundling rule
 
 From the lifecycle plan, and implemented in `PaymentService.TryPrice`:

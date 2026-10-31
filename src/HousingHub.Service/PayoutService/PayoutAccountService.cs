@@ -32,11 +32,18 @@ public class PayoutAccountService : IPayoutAccountService
     {
         try
         {
-            var banks = await _gateway.ListBanksAsync();
+            var banks = (await _gateway.ListBanksAsync())
+                .Select(b => new BankDto(b.Name, b.Code))
+                .ToList();
 
-            return new BaseResponse<List<BankDto>>(
-                banks.Select(b => new BankDto(b.Name, b.Code)).ToList(),
-                true, string.Empty, ResponseMessages.Successful);
+            // First in the list on a test key, and absent entirely on a live one.
+            // Put at the top rather than sorted in among the real banks because
+            // somebody looking for it should not have to hunt, and nobody choosing
+            // a real bank will reach for it by accident.
+            if (_gateway.IsTestMode)
+                banks.Insert(0, new BankDto(PaymentSimulation.TestBankName, PaymentSimulation.TestBankCode));
+
+            return new BaseResponse<List<BankDto>>(banks, true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
         {
@@ -57,13 +64,13 @@ public class PayoutAccountService : IPayoutAccountService
             if (!resolved.IsSuccessful || string.IsNullOrWhiteSpace(resolved.AccountName))
                 return Fail<ResolvedAccountDto>(resolved.Error ?? ResponseMessages.PayoutAccountNameUnavailable);
 
+            var (accountName, matches) = Judge(customer!, resolved.AccountName!, request.BankCode);
+
             // Shown rather than judged. The owner sees whose account they have typed
             // and can correct a digit; the decision is still made at save, against
             // the bank's answer rather than this one.
             return new BaseResponse<ResolvedAccountDto>(
-                new ResolvedAccountDto(
-                    resolved.AccountName,
-                    BankAccountNameMatcher.Matches(VerifiedName(customer!), resolved.AccountName)),
+                new ResolvedAccountDto(accountName, matches),
                 true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
@@ -88,7 +95,9 @@ public class PayoutAccountService : IPayoutAccountService
             // The check the whole feature exists for. Re-run here rather than trusted
             // from the resolve call, because the two are separate requests and only
             // this one creates a destination money can reach.
-            if (!BankAccountNameMatcher.Matches(VerifiedName(customer!), resolved.AccountName))
+            var (accountName, matches) = Judge(customer!, resolved.AccountName!, request.BankCode);
+
+            if (!matches)
             {
                 _logger.LogWarning(
                     "Refused a payout account for {CustomerId}: the bank's name does not match their verified identity",
@@ -98,17 +107,19 @@ public class PayoutAccountService : IPayoutAccountService
             }
 
             var subaccount = await _gateway.CreateSubaccountAsync(
-                resolved.AccountName!, request.BankCode, request.AccountNumber);
+                accountName, request.BankCode, request.AccountNumber);
 
             if (!subaccount.IsSuccessful || string.IsNullOrWhiteSpace(subaccount.SubaccountCode))
                 return Fail<PayoutAccountDto>(subaccount.Error ?? ResponseMessages.UnexpectedError);
 
-            var banks = await _gateway.ListBanksAsync();
-            var bankName = banks.FirstOrDefault(b => b.Code == request.BankCode)?.Name ?? request.BankCode;
+            var bankName = PaymentSimulation.IsSimulated(request.BankCode, _gateway.IsTestMode)
+                ? PaymentSimulation.TestBankName
+                : (await _gateway.ListBanksAsync())
+                    .FirstOrDefault(b => b.Code == request.BankCode)?.Name ?? request.BankCode;
 
             var account = new PayoutAccount(
                 authenticatedUserId, request.BankCode, bankName,
-                request.AccountNumber, resolved.AccountName!, subaccount.SubaccountCode!);
+                request.AccountNumber, accountName, subaccount.SubaccountCode!);
 
             // Replaced, not added. Two live payout accounts for one person is a
             // question nobody should have to answer while money is moving.
@@ -173,6 +184,38 @@ public class PayoutAccountService : IPayoutAccountService
             return (null, ResponseMessages.PayoutAccountNeedsIdentity);
 
         return (customer, null);
+    }
+
+    /// <summary>
+    /// Whether this account is the holder's, and under what name to record it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One place, used by both the preview and the save, so the two can never
+    /// disagree about whose account it is.
+    /// </para>
+    /// <para>
+    /// On the simulated bank it answers yes and records the holder's own name, so
+    /// the rest of the flow reads as it would in life. That only happens on a test
+    /// credential — see <see cref="PaymentSimulation"/> — and it is logged, because
+    /// a match nobody checked should leave a trace even in an environment where
+    /// nothing is real.
+    /// </para>
+    /// </remarks>
+    private (string AccountName, bool Matches) Judge(Customer customer, string bankName, string bankCode)
+    {
+        var verified = VerifiedName(customer);
+
+        if (PaymentSimulation.IsSimulated(bankCode, _gateway.IsTestMode))
+        {
+            _logger.LogWarning(
+                "Simulated payout match for {CustomerId} on the test bank; the real name check was skipped",
+                customer.Id);
+
+            return (verified, true);
+        }
+
+        return (bankName, BankAccountNameMatcher.Matches(verified, bankName));
     }
 
     private static string VerifiedName(Customer customer) =>
