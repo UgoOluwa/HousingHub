@@ -97,8 +97,47 @@ public record AdminTenancyDocumentDto(
 
     DateTime DateCreated);
 
+/// <summary>
+/// Somebody who viewed the property, and whether they were the one chosen.
+/// </summary>
+/// <remarks>
+/// Staff see everyone who was in the running, not just the person picked. A
+/// complaint about a letting decision is a complaint about who else there was, and
+/// answering it from the selected row alone is answering a different question.
+/// </remarks>
+public record AdminTenancyCandidateDto(
+    Guid CustomerId,
+    string? Name,
+    string? Email,
+    Guid InspectionId,
+    DateTime InspectedOn,
+    DateTime? ConfirmedByRenterAt,
+    string? RenterComment,
+    bool WasChosen);
+
+/// <summary>A payment against this tenancy, as staff need it.</summary>
+public record AdminTenancyPaymentDto(
+    Guid Id,
+    string Reference,
+    PaymentStatus Status,
+    long AmountKobo,
+    /// <summary>What we kept. The rest went straight to the owner.</summary>
+    long? PlatformChargeKobo,
+    long PaidToOwnerKobo,
+    DateTime? PaidAt,
+    DateTime DateCreated,
+    string? RefundReason,
+    DateTime? RefundedAt,
+    long? RefundAmountKobo);
+
 /// <summary>One tenancy in full: the parties, the money, the paperwork and the fees.</summary>
 public record AdminTenancyDetailDto(
     AdminTenancyDto Tenancy,
     IReadOnlyList<AdminTenancyDocumentDto> Documents,
-    IReadOnlyList<TenancyFeeDto> Fees);
+    IReadOnlyList<TenancyFeeDto> Fees,
+
+    /// <summary>Everyone who completed a viewing on this property, chosen or not.</summary>
+    IReadOnlyList<AdminTenancyCandidateDto> Candidates,
+
+    /// <summary>Every payment attempt against this tenancy, newest first.</summary>
+    IReadOnlyList<AdminTenancyPaymentDto> Payments);

@@ -135,7 +135,13 @@ public class TenancyPaymentService : ITenancyPaymentService
                 purposeFeeKobo: charge.TotalKobo,
                 identityFeeKobo: 0,
                 currency: _fees.Currency,
-                provider: _gateway.Name);
+                provider: _gateway.Name)
+            {
+                // Recorded now, against the rates in force today. The provider is
+                // about to act on this number, and a report that recomputed it later
+                // would restate settled history every time a rate changed.
+                PlatformChargeKobo = charge.PlatformKeepsKobo,
+            };
 
             // Persisted before the gateway is called. A webhook can arrive while the
             // initialise response is still in flight and needs a row to land on.

@@ -418,9 +418,16 @@ public class PaystackPaymentGateway : IPaymentGateway
 
     private sealed record BankData(string Name, string Code);
 
-    private sealed record ResolveData(string? AccountName, string? AccountNumber);
+    // Paystack answers in snake_case and the serializer is configured for camelCase,
+    // so every multi-word field has to be named explicitly. A field that is not
+    // deserialises as null and the call looks like it succeeded with nothing in it,
+    // which is exactly how account resolution shipped broken.
+    private sealed record ResolveData(
+        [property: JsonPropertyName("account_name")] string? AccountName,
+        [property: JsonPropertyName("account_number")] string? AccountNumber);
 
-    private sealed record SubaccountData(string? SubaccountCode);
+    private sealed record SubaccountData(
+        [property: JsonPropertyName("subaccount_code")] string? SubaccountCode);
 
     private sealed record InitialiseData(
         [property: JsonPropertyName("authorization_url")] string AuthorizationUrl,
