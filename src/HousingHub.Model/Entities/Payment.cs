@@ -80,6 +80,57 @@ public class Payment : BaseEntity
     public long IdentityFeeKobo { get; set; }
 
     /// <summary>ISO currency code. NGN throughout; stored so a receipt is unambiguous.</summary>
+    /// <summary>
+    /// What Housing Hub keeps out of this payment — commission plus the processing
+    /// fee the provider deducts from our share. Null when we keep all of it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Written at the moment the charge is registered, not worked out again later.
+    /// A split is decided once, against the rates in force that day, and the
+    /// provider has already acted on that decision — recomputing it for a report
+    /// would restate settled history every time a rate changed, and the figures
+    /// would quietly stop matching the bank.
+    /// </para>
+    /// <para>
+    /// Null rather than equal to <see cref="AmountKobo"/> on an unsplit payment, so
+    /// "we took a share of this" and "this was all ours" stay distinguishable. A
+    /// verification fee is ours entirely and was never split.
+    /// </para>
+    /// </remarks>
+    public long? PlatformChargeKobo { get; set; }
+
+    /// <summary>
+    /// What was paid out to somebody else — the owner's rent and fees.
+    /// </summary>
+    /// <remarks>
+    /// Money that passed through the provider and never reached us. Recorded
+    /// because a report that counts it as revenue is wrong by the size of the rent,
+    /// which on these amounts is most of it.
+    /// </remarks>
+    [DynamoDBIgnore]
+    public long SettledToOthersKobo =>
+        Status == PaymentStatus.Successful && PlatformChargeKobo is { } kept
+            ? Math.Max(0, AmountKobo - kept)
+            : 0;
+
+    /// <summary>What Housing Hub actually earned on this payment, after any refund.</summary>
+    /// <remarks>
+    /// A refunded payment earns nothing: the whole charge went back, our share with
+    /// it. Partial refunds are issued in the provider's dashboard and are not
+    /// modelled here — see <see cref="RefundAmountKobo"/>.
+    /// </remarks>
+    [DynamoDBIgnore]
+    public long PlatformEarnedKobo
+    {
+        get
+        {
+            if (Status != PaymentStatus.Successful) return 0;
+
+            return PlatformChargeKobo ?? AmountKobo;
+        }
+    }
+
     public string Currency { get; set; } = "NGN";
 
     public PaymentStatus Status { get; set; } = PaymentStatus.Pending;

@@ -117,6 +117,8 @@ public static class ConfigureServices
                            PaymentService.AdminPaymentQueryService>();
         services.AddScoped<PaymentService.Interfaces.IAdminPaymentCommandService,
                            PaymentService.AdminPaymentCommandService>();
+        services.AddScoped<PaymentService.Interfaces.IAdminFinanceService,
+                           PaymentService.AdminFinanceService>();
 
         services.AddScoped<TenancyService.Interfaces.ITenancyService, TenancyService.TenancyService>();
         services.AddScoped<TenancyService.Interfaces.ITenancyDocumentService,

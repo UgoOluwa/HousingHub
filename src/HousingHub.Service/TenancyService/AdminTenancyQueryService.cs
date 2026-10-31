@@ -87,7 +87,9 @@ public class AdminTenancyQueryService : IAdminTenancyQueryService
                 documents.Select(ToDto).ToList(),
                 fees.OrderBy(f => f.DateCreated)
                     .Select(f => new TenancyFeeDto(f.Id, f.Name, f.Description, f.AmountKobo))
-                    .ToList()));
+                    .ToList(),
+                await LoadCandidatesAsync(tenancy),
+                await LoadPaymentsAsync(tenancyId)));
         }
         catch (Exception ex)
         {
@@ -197,6 +199,71 @@ public class AdminTenancyQueryService : IAdminTenancyQueryService
                 t.ClosedAt,
                 t.DateCreated);
         }).ToList();
+    }
+
+    /// <summary>
+    /// Everyone the owner could have picked, and who they did.
+    /// </summary>
+    /// <remarks>
+    /// Read from the property's completed inspections rather than the tenancy,
+    /// because the tenancy only knows about the person chosen. A complaint about a
+    /// letting decision is a complaint about who else was in the running.
+    /// </remarks>
+    private async Task<IReadOnlyList<AdminTenancyCandidateDto>> LoadCandidatesAsync(Tenancy tenancy)
+    {
+        var inspections = await _unitOfWork.PropertyInspectionQueries.QueryByIndexAsync(
+            "PropertyId-index", tenancy.PropertyId);
+
+        var completed = inspections
+            .Where(i => i.Status == InspectionStatus.Completed)
+            .OrderByDescending(i => i.ScheduledDate)
+            .ToList();
+
+        if (completed.Count == 0) return [];
+
+        var customers = await _unitOfWork.CustomerQueries.GetManyByAsync(
+            c => c.Id, completed.Select(i => i.CustomerId).Distinct());
+        var byId = customers.ToDictionary(c => c.Id);
+
+        return completed.Select(inspection =>
+        {
+            byId.TryGetValue(inspection.CustomerId, out var customer);
+
+            return new AdminTenancyCandidateDto(
+                inspection.CustomerId,
+                FullName(customer),
+                customer?.Email,
+                inspection.Id,
+                inspection.ScheduledDate,
+                inspection.CompletedAt,
+                inspection.CompletionComment,
+                // The inspection the tenancy was created from, not merely the same
+                // person: an owner who viewed twice has two rows and only one of
+                // them is the decision.
+                inspection.Id == tenancy.SelectedFromInspectionId);
+        }).ToList();
+    }
+
+    private async Task<IReadOnlyList<AdminTenancyPaymentDto>> LoadPaymentsAsync(Guid tenancyId)
+    {
+        var payments = await _unitOfWork.PaymentQueries.GetAllAsync(
+            p => p.SubjectId == tenancyId && p.Purpose == PaymentPurpose.TenancyRent);
+
+        return payments
+            .OrderByDescending(p => p.DateCreated)
+            .Select(p => new AdminTenancyPaymentDto(
+                p.Id,
+                p.Reference,
+                p.Status,
+                p.AmountKobo,
+                p.PlatformChargeKobo,
+                p.SettledToOthersKobo,
+                p.PaidAt,
+                p.DateCreated,
+                p.RefundReason,
+                p.RefundedAt,
+                p.RefundAmountKobo))
+            .ToList();
     }
 
     private async Task<IReadOnlyList<TenancyDocument>> LoadDocumentsAsync(Guid tenancyId)
