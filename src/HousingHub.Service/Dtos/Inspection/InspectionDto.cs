@@ -33,6 +33,18 @@ public record InspectionDto(
     /// is a leak rather than a feature. Null when they have not set an address.
     /// </remarks>
     string? CustomerLocation = null,
+
+    /// <summary>When the renter confirmed the viewing happened.</summary>
+    DateTime? CompletedAt = null,
+
+    /// <summary>
+    /// What the renter said about the viewing, if anything.
+    /// </summary>
+    /// <remarks>
+    /// Goes to both parties. It is the only written account of what happened, and an
+    /// owner deciding whether to choose this person should read it.
+    /// </remarks>
+    string? CompletionComment = null,
     string? PropertyOwnerName = null,
     DateTime? HandedOffAt = null,
     Guid? AssignedStaffId = null,

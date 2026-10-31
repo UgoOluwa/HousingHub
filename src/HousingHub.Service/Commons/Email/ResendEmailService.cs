@@ -213,6 +213,57 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(recipientEmail, $"Reminder: Inspection for {propertyTitle} in 24 hours", text, html);
     }
 
+    public async Task<bool> SendInspectionCompletionFollowUpAsync(
+        string customerEmail, string customerName, string propertyTitle,
+        DateTime scheduledDate, TimeSpan scheduledTime, Guid inspectionId, int daysUntilItCloses)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        string body = $"""
+            {P($"Hi {customerName},")}
+            {P($"You had a viewing booked for <strong style=\"color:{Ink};\">{propertyTitle}</strong>. Did it go ahead?")}
+            {DetailRow("Property", propertyTitle)}
+            {DetailRow("Was booked for", $"{scheduledDate:dddd, d MMMM yyyy} &middot; {scheduledTime:hh\\:mm}")}
+            {P("Telling us takes a moment, and it is what lets the owner put you forward for the property. You can add a note about how it went at the same time.")}
+            {Button("Yes, the viewing happened", $"{baseUrl}/inspections/{inspectionId}")}
+            {Callout("If it didn't happen", $"You do not need to do anything. We will close this booking in {daysUntilItCloses} days, and you are free to book another viewing whenever you like.")}
+            """;
+
+        string html = WrapInLayout("Did your viewing happen?", body, Hero("&#127968;", "Did your viewing happen?"));
+        string text = $"Hi {customerName}, did your viewing of {propertyTitle} on {scheduledDate:yyyy-MM-dd} go ahead? Tell us at {baseUrl}/inspections/{inspectionId} — it is what lets the owner put you forward. If it did not happen, do nothing and we will close it in {daysUntilItCloses} days.";
+
+        return await SendAsync(customerEmail, $"Did your viewing of {propertyTitle} happen?", text, html);
+    }
+
+    public async Task<bool> SendInspectionCompletedToOwnerAsync(
+        string ownerEmail, string ownerName, string customerName, string propertyTitle,
+        Guid propertyId, string? comment)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        // The renter's own words, when they left any. It is the only written account
+        // of the viewing, and the owner is about to decide whether to offer them the
+        // property on the strength of it.
+        string note = string.IsNullOrWhiteSpace(comment)
+            ? string.Empty
+            : Callout($"What {customerName} said", comment);
+
+        string body = $"""
+            {P($"Hi {ownerName},")}
+            {P($"<strong style=\"color:{Ink};\">{customerName}</strong> has confirmed that their viewing of <strong style=\"color:{Ink};\">{propertyTitle}</strong> went ahead.")}
+            {note}
+            {P("You can now put them forward for the property if you want to. Nothing happens until you do.")}
+            {Button("Choose a tenant", $"{baseUrl}/properties/{propertyId}/tenancy")}
+            """;
+
+        string html = WrapInLayout("A viewing has been confirmed", body, Hero("&#9989;", "Viewing confirmed"));
+        string text = $"Hi {ownerName}, {customerName} has confirmed their viewing of {propertyTitle} went ahead."
+            + (string.IsNullOrWhiteSpace(comment) ? "" : $" They said: {comment}")
+            + $" You can put them forward at {baseUrl}/properties/{propertyId}/tenancy.";
+
+        return await SendAsync(ownerEmail, $"{customerName} confirmed their viewing of {propertyTitle}", text, html);
+    }
+
     public async Task<bool> SendAdminOtpAsync(string toEmail, string firstName, string otpCode)
     {
         string body = $"""

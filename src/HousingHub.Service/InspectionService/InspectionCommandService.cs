@@ -559,6 +559,216 @@ public class InspectionCommandService : IInspectionCommandService
         }
     }
 
+    /// <summary>
+    /// How long after the slot before we ask whether the viewing happened.
+    /// </summary>
+    /// <remarks>
+    /// Long enough that the question is never asked while somebody is still standing
+    /// in the property, short enough to land the same day they went.
+    /// </remarks>
+    private static readonly TimeSpan CompletionFollowUpDelay = TimeSpan.FromHours(6);
+
+    /// <summary>How long the renter has to answer before the booking is closed.</summary>
+    private static readonly TimeSpan CompletionResponseWindow = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// How far back the follow-up reaches.
+    /// </summary>
+    /// <remarks>
+    /// Anything older is left exactly as it is — neither chased nor closed. On the
+    /// first run there is a backlog of confirmed inspections whose date passed long
+    /// ago, and neither emailing all of them nor silently closing them is a decision
+    /// a worker should take on its own.
+    /// </remarks>
+    private static readonly TimeSpan CompletionFollowUpLookback = TimeSpan.FromDays(14);
+
+    public async Task<BaseResponse<InspectionDto>> CompleteInspectionAsync(
+        Guid inspectionId, string? comment, Guid authenticatedUserId)
+    {
+        try
+        {
+            var inspection = await _unitOfWOrk.PropertyInspectionQueries.GetByAsync(x => x.Id == inspectionId);
+
+            if (inspection == null)
+                return Fail(ResponseMessages.SetNotFoundMessage(ClassName));
+
+            // Not "is a participant". The owner is a participant and must not be able
+            // to mark their own viewings as attended.
+            if (inspection.CustomerId != authenticatedUserId)
+                return Fail(ResponseMessages.InspectionCompleteNotCustomer);
+
+            if (!inspection.TryComplete(comment))
+                return Fail(ResponseMessages.InspectionCannotComplete);
+
+            await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
+            await _unitOfWOrk.SaveAsync();
+
+            var property = await _unitOfWOrk.PropertyQueries.GetByAsync(x => x.Id == inspection.PropertyId);
+            var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == inspection.CustomerId);
+
+            if (property != null && customer != null)
+            {
+                var customerName = $"{customer.FirstName} {customer.LastName}".Trim();
+
+                var notification = new Notification(
+                    property.OwnerId,
+                    inspection.Id,
+                    NotificationType.InspectionCompleted,
+                    "Viewing confirmed",
+                    string.IsNullOrWhiteSpace(inspection.CompletionComment)
+                        ? $"{customerName} confirmed their viewing of \"{property.Title}\" went ahead. You can now put them forward for the property."
+                        : $"{customerName} confirmed their viewing of \"{property.Title}\" went ahead. They said: \"{inspection.CompletionComment}\"");
+
+                await _unitOfWOrk.NotificationCommands.InsertAsync(notification);
+                await PushRealtimeNotificationAsync(notification);
+                await _unitOfWOrk.SaveAsync();
+
+                var owner = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == property.OwnerId);
+
+                // Best-effort, like every other mail on a command path: the viewing is
+                // already recorded as completed and a mail failure must not undo it.
+                if (owner != null && !string.IsNullOrWhiteSpace(owner.Email))
+                {
+                    _ = _emailService.SendInspectionCompletedToOwnerAsync(
+                        owner.Email, owner.FirstName, customerName,
+                        property.Title, property.Id, inspection.CompletionComment);
+                }
+            }
+
+            _logger.LogInformation(
+                "Inspection {InspectionId} marked completed by its renter {CustomerId}",
+                inspection.Id, authenticatedUserId);
+
+            return new BaseResponse<InspectionDto>(
+                _mapper.Map<InspectionDto>(inspection), true, string.Empty, ResponseMessages.InspectionCompleted);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in CompleteInspectionAsync: {Message}", ex.Message);
+            return Fail(ResponseMessages.UnexpectedError);
+        }
+
+        static BaseResponse<InspectionDto> Fail(string message) =>
+            new(null, false, string.Empty, message);
+    }
+
+    public async Task<BaseResponse<int>> RunInspectionFollowUpsAsync()
+    {
+        try
+        {
+            var now = DateTime.UtcNow;
+            var earliest = now - CompletionFollowUpLookback;
+
+            var outstanding = await _unitOfWOrk.PropertyInspectionQueries.GetAllAsync(
+                i => i.Status == InspectionStatus.Confirmed);
+
+            int asked = 0;
+            int expired = 0;
+
+            foreach (var inspection in outstanding)
+            {
+                if (inspection.ScheduledAt < earliest) continue;
+
+                // Closing runs before asking, so one whose window ran out overnight is
+                // closed rather than chased again on the same pass.
+                if (inspection.CompletionFollowUpSentAt is { } askedAt)
+                {
+                    if (now - askedAt < CompletionResponseWindow) continue;
+
+                    if (!inspection.TryExpire()) continue;
+
+                    await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
+                    await NotifyInspectionExpiredAsync(inspection);
+                    expired++;
+                    continue;
+                }
+
+                if (now - inspection.ScheduledAt < CompletionFollowUpDelay) continue;
+
+                if (await SendCompletionFollowUpAsync(inspection, now)) asked++;
+            }
+
+            await _unitOfWOrk.SaveAsync();
+
+            _logger.LogInformation(
+                "Inspection follow-ups: asked {Asked}, expired {Expired}", asked, expired);
+
+            return new BaseResponse<int>(
+                asked + expired, true, string.Empty, ResponseMessages.InspectionFollowUpsRun(asked, expired));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in RunInspectionFollowUpsAsync: {Message}", ex.Message);
+            return new BaseResponse<int>(0, false, string.Empty, ResponseMessages.UnexpectedError);
+        }
+    }
+
+    /// <summary>
+    /// Asks one renter whether their viewing happened.
+    /// </summary>
+    /// <remarks>
+    /// The row is only marked as asked when the mail has actually been handed over.
+    /// Marking first and sending afterwards would mean a send failure silently costs
+    /// somebody their only chance to answer, and then closes the booking for not
+    /// answering a question we never sent.
+    /// </remarks>
+    private async Task<bool> SendCompletionFollowUpAsync(PropertyInspection inspection, DateTime now)
+    {
+        var property = await _unitOfWOrk.PropertyQueries.GetByAsync(x => x.Id == inspection.PropertyId);
+        var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == inspection.CustomerId);
+
+        if (property == null || customer == null || string.IsNullOrWhiteSpace(customer.Email))
+            return false;
+
+        bool sent;
+        try
+        {
+            sent = await _emailService.SendInspectionCompletionFollowUpAsync(
+                customer.Email, customer.FirstName, property.Title,
+                inspection.ScheduledDate, inspection.ScheduledTime, inspection.Id,
+                (int)CompletionResponseWindow.TotalDays);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not ask about inspection {InspectionId}", inspection.Id);
+            return false;
+        }
+
+        if (!sent || !inspection.TryMarkFollowUpSent(now)) return false;
+
+        await _unitOfWOrk.PropertyInspectionCommands.UpdateAsync(inspection);
+        return true;
+    }
+
+    /// <summary>Tells both sides the booking has been closed, and why.</summary>
+    private async Task NotifyInspectionExpiredAsync(PropertyInspection inspection)
+    {
+        var property = await _unitOfWOrk.PropertyQueries.GetByAsync(x => x.Id == inspection.PropertyId);
+        if (property == null) return;
+
+        var customer = await _unitOfWOrk.CustomerQueries.GetByAsync(x => x.Id == inspection.CustomerId);
+        var customerName = customer is null ? "The renter" : $"{customer.FirstName} {customer.LastName}".Trim();
+
+        var toRenter = new Notification(
+            inspection.CustomerId,
+            inspection.Id,
+            NotificationType.InspectionExpired,
+            "Viewing closed",
+            $"We asked whether your viewing of \"{property.Title}\" went ahead and didn't hear back, so we've closed it. You can book another whenever you like.");
+
+        var toOwner = new Notification(
+            property.OwnerId,
+            inspection.Id,
+            NotificationType.InspectionExpired,
+            "Viewing closed",
+            $"{customerName} never confirmed whether their viewing of \"{property.Title}\" went ahead, so we've closed it.");
+
+        await _unitOfWOrk.NotificationCommands.InsertAsync(toRenter);
+        await _unitOfWOrk.NotificationCommands.InsertAsync(toOwner);
+        await PushRealtimeNotificationAsync(toRenter);
+        await PushRealtimeNotificationAsync(toOwner);
+    }
+
     public async Task<BaseResponse<int>> SendDueInspectionRemindersAsync()
     {
         try

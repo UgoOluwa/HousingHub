@@ -23,6 +23,30 @@ public interface IEmailService
     Task<bool> SendNewMessageAsync(string recipientEmail, string recipientName, string senderName, string messagePreview);
     /// <summary>Sent to both the owner and the customer ~24 hours before a confirmed inspection.</summary>
     Task<bool> SendInspectionReminderAsync(string recipientEmail, string recipientName, string otherPartyName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime);
+
+    /// <summary>
+    /// Asks the renter whether the viewing actually happened.
+    /// </summary>
+    /// <remarks>
+    /// Sent once, after the slot has passed. Nothing downstream can move until
+    /// somebody says the viewing took place, and the renter is the only party who
+    /// both booked it and knows — so this is the question the whole rail waits on.
+    /// </remarks>
+    Task<bool> SendInspectionCompletionFollowUpAsync(
+        string customerEmail, string customerName, string propertyTitle,
+        DateTime scheduledDate, TimeSpan scheduledTime, Guid inspectionId, int daysUntilItCloses);
+
+    /// <summary>
+    /// Tells the owner the viewing is confirmed done, and what they can do next.
+    /// </summary>
+    /// <remarks>
+    /// The owner has no reason to open the app at this point, and choosing a tenant
+    /// is gated on exactly this — so the nudge goes to them rather than waiting for
+    /// them to notice.
+    /// </remarks>
+    Task<bool> SendInspectionCompletedToOwnerAsync(
+        string ownerEmail, string ownerName, string customerName, string propertyTitle,
+        Guid propertyId, string? comment);
     /// <summary>One-time login code for the admin dashboard's OTP-only sign-in.</summary>
     Task<bool> SendAdminOtpAsync(string toEmail, string firstName, string otpCode);
     Task<bool> SendKycApprovedAsync(string toEmail, string firstName);

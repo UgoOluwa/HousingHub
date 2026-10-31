@@ -234,6 +234,19 @@ public static class ResponseMessages
     public const string InspectionCannotCancel = "Completed or already cancelled inspections can't be cancelled.";
 
     /// <summary>Worker summary. Pluralised properly rather than emitting "reminder(s)".</summary>
+    public const string InspectionCompleted = "Thanks — we've told the owner the viewing went ahead.";
+
+    /// <summary>
+    /// Names the three ways this can be refused rather than saying "can't do that",
+    /// because the renter can act on two of them.
+    /// </summary>
+    public const string InspectionCannotComplete = "Only a confirmed viewing can be marked as done, and not before the day it's booked for. If this one was cancelled or has already closed, book another.";
+
+    public const string InspectionCompleteNotCustomer = "Only the person who booked the viewing can say it happened.";
+
+    public static string InspectionFollowUpsRun(int asked, int expired) =>
+        $"Asked {asked} renter{(asked == 1 ? "" : "s")} whether their viewing happened; closed {expired} that were never answered.";
+
     public static string InspectionRemindersSent(int count) =>
         count == 1 ? "Sent 1 inspection reminder." : $"Sent {count} inspection reminders.";
 
