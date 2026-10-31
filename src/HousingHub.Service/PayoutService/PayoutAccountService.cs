@@ -36,13 +36,6 @@ public class PayoutAccountService : IPayoutAccountService
                 .Select(b => new BankDto(b.Name, b.Code))
                 .ToList();
 
-            // First in the list on a test key, and absent entirely on a live one.
-            // Put at the top rather than sorted in among the real banks because
-            // somebody looking for it should not have to hunt, and nobody choosing
-            // a real bank will reach for it by accident.
-            if (_gateway.IsTestMode)
-                banks.Insert(0, new BankDto(PaymentSimulation.TestBankName, PaymentSimulation.TestBankCode));
-
             return new BaseResponse<List<BankDto>>(banks, true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
@@ -64,7 +57,7 @@ public class PayoutAccountService : IPayoutAccountService
             if (!resolved.IsSuccessful || string.IsNullOrWhiteSpace(resolved.AccountName))
                 return Fail<ResolvedAccountDto>(resolved.Error ?? ResponseMessages.PayoutAccountNameUnavailable);
 
-            var (accountName, matches) = Judge(customer!, resolved.AccountName!, request.BankCode);
+            var (accountName, matches) = Judge(customer!, resolved.AccountName!);
 
             // Shown rather than judged. The owner sees whose account they have typed
             // and can correct a digit; the decision is still made at save, against
@@ -95,7 +88,7 @@ public class PayoutAccountService : IPayoutAccountService
             // The check the whole feature exists for. Re-run here rather than trusted
             // from the resolve call, because the two are separate requests and only
             // this one creates a destination money can reach.
-            var (accountName, matches) = Judge(customer!, resolved.AccountName!, request.BankCode);
+            var (accountName, matches) = Judge(customer!, resolved.AccountName!);
 
             if (!matches)
             {
@@ -112,10 +105,8 @@ public class PayoutAccountService : IPayoutAccountService
             if (!subaccount.IsSuccessful || string.IsNullOrWhiteSpace(subaccount.SubaccountCode))
                 return Fail<PayoutAccountDto>(subaccount.Error ?? ResponseMessages.UnexpectedError);
 
-            var bankName = PaymentSimulation.IsSimulated(request.BankCode, _gateway.IsTestMode)
-                ? PaymentSimulation.TestBankName
-                : (await _gateway.ListBanksAsync())
-                    .FirstOrDefault(b => b.Code == request.BankCode)?.Name ?? request.BankCode;
+            var banks = await _gateway.ListBanksAsync();
+            var bankName = banks.FirstOrDefault(b => b.Code == request.BankCode)?.Name ?? request.BankCode;
 
             var account = new PayoutAccount(
                 authenticatedUserId, request.BankCode, bankName,
@@ -190,33 +181,11 @@ public class PayoutAccountService : IPayoutAccountService
     /// Whether this account is the holder's, and under what name to record it.
     /// </summary>
     /// <remarks>
-    /// <para>
     /// One place, used by both the preview and the save, so the two can never
     /// disagree about whose account it is.
-    /// </para>
-    /// <para>
-    /// On the simulated bank it answers yes and records the holder's own name, so
-    /// the rest of the flow reads as it would in life. That only happens on a test
-    /// credential — see <see cref="PaymentSimulation"/> — and it is logged, because
-    /// a match nobody checked should leave a trace even in an environment where
-    /// nothing is real.
-    /// </para>
     /// </remarks>
-    private (string AccountName, bool Matches) Judge(Customer customer, string bankName, string bankCode)
-    {
-        var verified = VerifiedName(customer);
-
-        if (PaymentSimulation.IsSimulated(bankCode, _gateway.IsTestMode))
-        {
-            _logger.LogWarning(
-                "Simulated payout match for {CustomerId} on the test bank; the real name check was skipped",
-                customer.Id);
-
-            return (verified, true);
-        }
-
-        return (bankName, BankAccountNameMatcher.Matches(verified, bankName));
-    }
+    private static (string AccountName, bool Matches) Judge(Customer customer, string bankName) =>
+        (bankName, BankAccountNameMatcher.Matches(VerifiedName(customer), bankName));
 
     private static string VerifiedName(Customer customer) =>
         $"{customer.FirstName} {customer.LastName}".Trim();
