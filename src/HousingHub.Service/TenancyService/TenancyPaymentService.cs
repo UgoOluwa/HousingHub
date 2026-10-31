@@ -122,7 +122,7 @@ public class TenancyPaymentService : ITenancyPaymentService
 
             var reusable = await FindReusablePendingAttemptAsync(tenancyId, charge.TotalKobo);
             if (reusable is not null)
-                return new BaseResponse<PaymentDto>(ToDto(reusable), true, string.Empty, ResponseMessages.Successful);
+                return new BaseResponse<PaymentDto>(PaymentDto.From(reusable), true, string.Empty, ResponseMessages.Successful);
 
             // The whole total sits on the purpose fee: a tenancy charge has no
             // identity component, and the breakdown lives on the tenancy, where the
@@ -186,7 +186,7 @@ public class TenancyPaymentService : ITenancyPaymentService
                 "Started a tenancy payment {Reference} for {TotalKobo} kobo, of which we keep {PlatformKobo}",
                 payment.Reference, charge.TotalKobo, charge.PlatformKeepsKobo);
 
-            return new BaseResponse<PaymentDto>(ToDto(payment), true, string.Empty, ResponseMessages.Successful);
+            return new BaseResponse<PaymentDto>(PaymentDto.From(payment), true, string.Empty, ResponseMessages.Successful);
         }
         catch (Exception ex)
         {
@@ -263,11 +263,6 @@ public class TenancyPaymentService : ITenancyPaymentService
             _logger.LogError(ex, "Could not tell owner {OwnerId} to add a payout account", tenancy.LandlordCustomerId);
         }
     }
-
-    private static PaymentDto ToDto(Payment p) => new(
-        p.Id, p.Reference, p.Purpose, p.SubjectId, p.AmountKobo, p.PurposeFeeKobo,
-        p.IdentityFeeKobo, p.IncludesIdentityVerification, p.Currency, p.Status,
-        p.AuthorisationUrl, p.PaidAt, p.DateCreated);
 
     private static BaseResponse<T> Fail<T>(string message) =>
         new(default, false, string.Empty, message);
