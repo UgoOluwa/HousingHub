@@ -23,7 +23,41 @@ public record PaymentDto(
     DateTime? PaidAt,
     DateTime DateCreated,
     /// <summary>Where to send the payer. Null once the attempt is no longer payable.</summary>
-    string? AuthorisationUrl = null);
+    string? AuthorisationUrl = null)
+{
+    /// <summary>
+    /// The one place a payment is turned into its DTO.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A positional record is mapped by argument order, and two hand-written copies
+    /// of a fourteen-argument call will eventually disagree. One did: a second copy
+    /// passed the authorisation URL into <see cref="Channel"/> and left
+    /// <see cref="AuthorisationUrl"/> null, so a payment that had been registered
+    /// perfectly well came back with nowhere to send the payer — and the client,
+    /// finding no URL, showed the success message as an error.
+    /// </para>
+    /// <para>
+    /// The gateway link is offered only while the attempt is still payable. A stale
+    /// one on a settled or failed payment is an invitation to pay twice.
+    /// </para>
+    /// </remarks>
+    public static PaymentDto From(Model.Entities.Payment payment) => new(
+        payment.Id,
+        payment.Reference,
+        payment.Purpose,
+        payment.SubjectId,
+        payment.AmountKobo,
+        payment.PurposeFeeKobo,
+        payment.IdentityFeeKobo,
+        payment.IncludesIdentityVerification,
+        payment.Currency,
+        payment.Status,
+        payment.Channel,
+        payment.PaidAt,
+        payment.DateCreated,
+        payment.Status == Model.Enums.PaymentStatus.Pending ? payment.AuthorisationUrl : null);
+}
 
 /// <summary>
 /// What a verification case will cost, before anyone is asked to pay.

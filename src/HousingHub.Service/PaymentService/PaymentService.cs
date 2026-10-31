@@ -154,7 +154,7 @@ public class PaymentService : IPaymentService
             // Hand back an attempt already in flight rather than registering another.
             var reusable = await FindReusablePendingAttemptAsync(caseId, pricing);
             if (reusable is not null)
-                return Ok(ToDto(reusable));
+                return Ok(PaymentDto.From(reusable));
 
             var payment = new Payment(
                 reference: $"HH-{Guid.NewGuid():N}",
@@ -198,7 +198,7 @@ public class PaymentService : IPaymentService
             await _unitOfWork.PaymentCommands.UpdateAsync(payment);
             await _unitOfWork.SaveAsync();
 
-            return Ok(ToDto(payment));
+            return Ok(PaymentDto.From(payment));
         }
         catch (Exception ex)
         {
@@ -228,7 +228,7 @@ public class PaymentService : IPaymentService
             if (payment is null || payment.CustomerId != customerId)
                 return Fail<PaymentDto>(ResponseMessages.SetNotFoundMessage("payment"));
 
-            return Ok(ToDto(payment));
+            return Ok(PaymentDto.From(payment));
         }
         catch (Exception ex)
         {
@@ -260,7 +260,7 @@ public class PaymentService : IPaymentService
                 payment = await FindByReferenceAsync(reference) ?? payment;
             }
 
-            return Ok(ToDto(payment));
+            return Ok(PaymentDto.From(payment));
         }
         catch (Exception ex)
         {
@@ -277,7 +277,7 @@ public class PaymentService : IPaymentService
 
             var dtos = payments
                 .OrderByDescending(p => p.DateCreated)
-                .Select(ToDto)
+                .Select(PaymentDto.From)
                 .ToList();
 
             return Ok(dtos);
@@ -760,24 +760,6 @@ public class PaymentService : IPaymentService
             .OrderByDescending(p => p.DateCreated)
             .FirstOrDefault();
     }
-
-    private static PaymentDto ToDto(Payment payment) => new(
-        payment.Id,
-        payment.Reference,
-        payment.Purpose,
-        payment.SubjectId,
-        payment.AmountKobo,
-        payment.PurposeFeeKobo,
-        payment.IdentityFeeKobo,
-        payment.IncludesIdentityVerification,
-        payment.Currency,
-        payment.Status,
-        payment.Channel,
-        payment.PaidAt,
-        payment.DateCreated,
-        // Only offered while the attempt is still payable — a stale gateway link on a
-        // settled or failed payment is an invitation to pay twice.
-        payment.Status == PaymentStatus.Pending ? payment.AuthorisationUrl : null);
 
     private static BaseResponse<T> Ok<T>(T data) =>
         new(data, true, string.Empty, ResponseMessages.Successful);
