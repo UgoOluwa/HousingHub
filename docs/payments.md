@@ -27,6 +27,27 @@ renter side — affordability at shortlist — is Phase 4.
 
 ---
 
+## Testing payout accounts
+
+Paystack's account-resolution endpoint works on a **test** secret key, with two
+limits worth knowing before you lose an afternoon to them:
+
+- **Three live bank resolves per day.** Exceeding it returns
+  `"Test mode daily limit of 3 live bank resolves exceeded"` — an `api_error`, not a
+  bad-account error, so it surfaces to the owner as "we couldn't find that account"
+  and looks exactly like a wrong account number.
+- **Bank code `001` resolves without counting against that limit.** The name it
+  returns is Paystack's, not yours, so it will fail our name match — which is the
+  matcher working, not a bug. Use it to exercise the plumbing; use a real account of
+  your own to test a successful save.
+
+Saving an account costs one resolve. Checking it first costs another, which is why
+checking is optional rather than a required first step.
+
+**A subaccount created with a live key is a real payout destination.** If you ever
+test with live keys, use an account you control and delete the subaccount from the
+Paystack dashboard afterwards.
+
 ## The bundling rule
 
 From the lifecycle plan, and implemented in `PaymentService.TryPrice`:
