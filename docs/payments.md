@@ -59,6 +59,27 @@ with this active and no flag anybody can set wrongly. On a live key the entry is
 absent from the list and bank code `001` is treated as an ordinary bank whose name
 must match — there is a test for exactly that.
 
+### Walking a split payment end to end on test keys
+
+Paystack simulates splits in test mode, so once a subaccount exists the whole thing
+works without a change: the charge carries `subaccount`, `transaction_charge` and
+`bearer`, and the test dashboard shows the division on the transaction.
+
+The order that works:
+
+1. Owner adds a payout account — the simulated bank is fine, and the subaccount it
+   creates is a real test subaccount.
+2. Tenant pays with Paystack's test card. The amount is the quote's total.
+3. On return, the app asks the gateway directly rather than waiting for the
+   webhook — see `POST /api/v1/Payment/{reference}/reconcile`. Both routes settle
+   through the same path, so whichever lands second changes nothing.
+4. The tenancy turns Active, the tenant's receipt appears under Payments, and the
+   split shows on the admin tenancy screen and in the Finance report.
+
+**If the webhook is not configured on the dev environment the flow still completes**,
+because of step 3. Configure it anyway — a payer who closes the tab before the
+redirect has only the webhook left.
+
 It relaxes the name check and nothing else. An unverified identity still cannot add
 a payout account, a real bank code on a test key is still checked properly, and
 every simulated match is logged at warning level.

@@ -92,6 +92,25 @@ public class PaymentController : ControllerBase
     }
 
     /// <summary>Your payments, newest first.</summary>
+    /// <summary>
+    /// Asks the provider what happened, for the moment a payer comes back.
+    /// </summary>
+    /// <remarks>
+    /// The browser returning from the gateway is often ahead of the webhook, and a
+    /// payer who has just paid should not land on a page telling them they have
+    /// not — the obvious response to which is to pay again. Settles through the
+    /// same path the webhook uses, so whichever arrives second changes nothing.
+    /// </remarks>
+    [HttpPost("{reference}/reconcile")]
+    [ProducesResponseType(typeof(BaseResponse<PaymentDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Reconcile(string reference)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId is null) return Unauthorized();
+
+        return Ok(await _payments.ReconcileAsync(userId.Value, reference));
+    }
+
     [HttpGet("mine")]
     [ProducesResponseType(typeof(BaseResponse<List<PaymentDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMine()
