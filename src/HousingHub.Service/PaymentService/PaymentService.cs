@@ -700,11 +700,77 @@ public class PaymentService : IPaymentService
             _logger.LogInformation(
                 "Tenancy {TenancyId} is active: {Reference} settled for {AmountKobo} kobo",
                 tenancyId, payment.Reference, payment.AmountKobo);
+
+            await NotifyOwnerPaidAsync(tenancy, payment);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Could not activate tenancy {TenancyId} after payment {Reference}",
                 tenancyId, payment.Reference);
+        }
+    }
+
+    /// <summary>
+    /// Tells the owner their tenant has paid.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The end of the rail, and the only event in it the owner has no reason to be
+    /// watching for — everything before this they set in motion themselves. Without
+    /// it the tenancy goes active in silence and they find out by happening to open
+    /// the app.
+    /// </para>
+    /// <para>
+    /// Reports what reached them, not what the tenant was charged. Our service
+    /// charge and the card fee were added on top and were never theirs, so the
+    /// total would overstate what lands in their bank by exactly the part we kept.
+    /// </para>
+    /// <para>
+    /// Swallows its own failures, like every other notification on a settlement
+    /// path. The money has arrived and the tenancy is already active; a mail
+    /// provider having a bad minute must not undo that.
+    /// </para>
+    /// </remarks>
+    private async Task NotifyOwnerPaidAsync(Tenancy tenancy, Payment payment)
+    {
+        try
+        {
+            var property = await _unitOfWork.PropertyQueries.GetByIdAsync(tenancy.PropertyId);
+            var owner = await _unitOfWork.CustomerQueries.GetByIdAsync(tenancy.LandlordCustomerId);
+            var tenant = await _unitOfWork.CustomerQueries.GetByIdAsync(tenancy.TenantCustomerId);
+
+            if (owner is null) return;
+
+            var propertyTitle = property?.Title ?? "your property";
+            var tenantName = tenant is null
+                ? "Your tenant"
+                : $"{tenant.FirstName} {tenant.LastName}".Trim();
+
+            // Falls back to the whole charge when nothing was split off. A payment
+            // with no recorded platform share was all theirs.
+            var received = payment.SettledToOthersKobo > 0
+                ? payment.SettledToOthersKobo
+                : payment.AmountKobo;
+
+            var notification = Notification.ForTenancy(
+                tenancy.LandlordCustomerId,
+                tenancy.Id,
+                NotificationType.TenancyPaid,
+                "You have been paid",
+                $"{tenantName} has paid for \"{propertyTitle}\". {received / 100:N0} naira is on its way to your account — the rent and your fees in full.");
+
+            await _unitOfWork.NotificationCommands.InsertAsync(notification);
+            await _unitOfWork.SaveAsync();
+
+            if (!string.IsNullOrWhiteSpace(owner.Email))
+            {
+                await _emailService.SendTenancyPaidToOwnerAsync(
+                    owner.Email, owner.FirstName, tenantName, propertyTitle, received, tenancy.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not tell owner {OwnerId} they were paid", tenancy.LandlordCustomerId);
         }
     }
 

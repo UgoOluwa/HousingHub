@@ -27,6 +27,7 @@ public class PaymentReconcileTests
 
     private readonly Mock<IUnitOfWOrk> _unitOfWork = new() { DefaultValue = DefaultValue.Mock };
     private readonly Mock<IPaymentGateway> _gateway = new();
+    private readonly Mock<IEmailService> _email = new();
     private readonly PaymentService _sut;
 
     public PaymentReconcileTests()
@@ -40,7 +41,7 @@ public class PaymentReconcileTests
             _gateway.Object,
             new PaymentCallbackUrlResolver(configuration, NullLogger<PaymentCallbackUrlResolver>.Instance),
             new PaymentFeeCatalogue(configuration),
-            new Mock<IEmailService>().Object,
+            _email.Object,
             configuration,
             NullLogger<PaymentService>.Instance);
 
@@ -167,5 +168,79 @@ public class PaymentReconcileTests
 
         Assert.False(result.IsSuccessful);
         _gateway.Verify(g => g.GetTransactionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ── telling the owner ────────────────────────────────────────
+
+    private Tenancy SetupTenancy(Guid ownerId)
+    {
+        var tenancy = new Tenancy(
+            Guid.NewGuid(), ownerId, CustomerId, Guid.NewGuid(), 350_000_00, PropertyLeaseType.Rent)
+        {
+            Id = TenancyId,
+            Status = TenancyStatus.AwaitingPayment,
+        };
+
+        _unitOfWork.Setup(u => u.TenancyQueries.GetByIdAsync(TenancyId)).ReturnsAsync(tenancy);
+        _unitOfWork.Setup(u => u.CustomerQueries.GetByIdAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(new Customer("Ada", "Obi", "ada@example.com", "0800", CustomerType.HouseOwner, "h"));
+        _unitOfWork.Setup(u => u.NotificationCommands.InsertAsync(It.IsAny<Notification>())).ReturnsAsync(true);
+
+        return tenancy;
+    }
+
+    /// <summary>
+    /// The only event in the whole rail the owner has no reason to be watching for.
+    /// Everything before it they set in motion themselves.
+    /// </summary>
+    [Fact]
+    public async Task WhenTheTenantPays_TheOwnerIsTold()
+    {
+        var ownerId = Guid.NewGuid();
+        var payment = Setup(PaymentStatus.Pending, amountKobo: 569_500_00);
+        payment.PlatformChargeKobo = 19_500_00;
+        GatewaySays(GatewayTransactionStatus.Successful, amountKobo: 569_500_00);
+        SetupTenancy(ownerId);
+
+        await _sut.ReconcileAsync(CustomerId, Reference);
+
+        _unitOfWork.Verify(u => u.NotificationCommands.InsertAsync(
+            It.Is<Notification>(n => n.RecipientId == ownerId
+                && n.Type == NotificationType.TenancyPaid)), Times.Once);
+    }
+
+    /// <summary>
+    /// What reached them, not what the tenant was charged. The difference is the
+    /// part we kept, and reporting the total would overstate their bank balance by
+    /// exactly that much.
+    /// </summary>
+    [Fact]
+    public async Task TheOwnerIsToldWhatReachedThem_NotWhatWasCharged()
+    {
+        var payment = Setup(PaymentStatus.Pending, amountKobo: 569_500_00);
+        payment.PlatformChargeKobo = 19_500_00;
+        GatewaySays(GatewayTransactionStatus.Successful, amountKobo: 569_500_00);
+        SetupTenancy(Guid.NewGuid());
+
+        await _sut.ReconcileAsync(CustomerId, Reference);
+
+        // 569,500 charged less 19,500 kept is 550,000.
+        _email.Verify(e => e.SendTenancyPaidToOwnerAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            550_000_00, TenancyId), Times.Once);
+    }
+
+    /// <summary>A payment that did not settle is not news for anybody.</summary>
+    [Fact]
+    public async Task AFailedPayment_TellsTheOwnerNothing()
+    {
+        Setup(PaymentStatus.Pending);
+        GatewaySays(GatewayTransactionStatus.Abandoned);
+        SetupTenancy(Guid.NewGuid());
+
+        await _sut.ReconcileAsync(CustomerId, Reference);
+
+        _unitOfWork.Verify(u => u.NotificationCommands.InsertAsync(
+            It.Is<Notification>(n => n.Type == NotificationType.TenancyPaid)), Times.Never);
     }
 }

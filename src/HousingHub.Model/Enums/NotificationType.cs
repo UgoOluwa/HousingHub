@@ -113,5 +113,16 @@ public enum NotificationType
     /// owner, because the tenant has done nothing wrong and can do nothing about it.
     /// </remarks>
     [Description("Add A Payout Account")]
-    TenancyPayoutAccountRequired = 21
+    TenancyPayoutAccountRequired = 21,
+
+    /// <summary>
+    /// The tenant has paid and the money is on its way to the owner's account.
+    /// </summary>
+    /// <remarks>
+    /// The end of the rail, and the one event in it the owner has no reason to be
+    /// watching for. Everything before this they set in motion themselves; this
+    /// happens while they are elsewhere.
+    /// </remarks>
+    [Description("You Have Been Paid")]
+    TenancyPaid = 22
 }
