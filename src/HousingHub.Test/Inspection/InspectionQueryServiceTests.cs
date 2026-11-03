@@ -12,6 +12,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using System.Linq.Expressions;
 
+// Aliased because HousingHub.Test.CustomerAddress is a sibling test namespace, and
+// from inside HousingHub.Test.Inspection the namespace wins over the entity.
+using CustomerAddressEntity = HousingHub.Model.Entities.CustomerAddress;
+
 namespace HousingHub.Test.Inspection;
 
 public class InspectionQueryServiceTests
@@ -106,6 +110,60 @@ public class InspectionQueryServiceTests
         Assert.True(result.IsSuccessful);
         Assert.Equal("Jane Doe", result.Data!.CustomerName);
         Assert.Equal("John Smith", result.Data.PropertyOwnerName);
+    }
+
+    /// <summary>
+    /// The owner is deciding whether to meet somebody at their property, so how far
+    /// that person is travelling is useful. Where they live is not.
+    /// </summary>
+    [Fact]
+    public async Task GetInspectionAsync_GivesTheCityAndState_NeverTheStreet()
+    {
+        SetupInspectionWithAddress(new CustomerAddressEntity(
+            "14 Ogunlana Drive", "Surulere", "Lagos", "Nigeria", "101241", CustomerId));
+
+        var result = await _sut.GetInspectionAsync(InspectionId, OwnerId);
+
+        Assert.Equal("Surulere, Lagos", result.Data!.CustomerLocation);
+        Assert.DoesNotContain("Ogunlana", result.Data.CustomerLocation!);
+    }
+
+    /// <summary>
+    /// Null rather than an empty string, so the client renders no row at all instead
+    /// of a label with nothing after it.
+    /// </summary>
+    [Fact]
+    public async Task GetInspectionAsync_WhenTheCustomerHasNoAddress_LeavesTheLocationUnset()
+    {
+        SetupInspectionWithAddress(null);
+
+        var result = await _sut.GetInspectionAsync(InspectionId, OwnerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Null(result.Data!.CustomerLocation);
+    }
+
+    [Fact]
+    public async Task GetInspectionAsync_WhenTheAddressIsBlank_LeavesTheLocationUnset()
+    {
+        SetupInspectionWithAddress(new CustomerAddressEntity("", "", "", "Nigeria", "", CustomerId));
+
+        var result = await _sut.GetInspectionAsync(InspectionId, OwnerId);
+
+        Assert.Null(result.Data!.CustomerLocation);
+    }
+
+    private void SetupInspectionWithAddress(CustomerAddressEntity? address)
+    {
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetByAsync(
+            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync(CreateInspection());
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByAsync(
+            It.IsAny<Expression<Func<Property, bool>>>()))
+            .ReturnsAsync(CreateProperty());
+        _unitOfWorkMock.Setup(u => u.CustomerAddressQueries.GetByAsync(
+            It.IsAny<Expression<Func<CustomerAddressEntity, bool>>>()))
+            .ReturnsAsync(address);
     }
 
     [Fact]

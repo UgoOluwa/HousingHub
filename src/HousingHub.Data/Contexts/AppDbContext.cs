@@ -121,6 +121,31 @@ public class DynamoDbTableInitializer
             // every successful payment. See Payment.FlagWatch.
             CreateGsi("FlagWatch-index", "FlagWatch"),
         }),
+        ["Tenancies"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            // "Is this property taken, and by whom." Asked before every selection.
+            CreateGsi("PropertyId-index", "PropertyId"),
+            // "Everything I am letting." The owner or managing agent's view.
+            CreateGsi("LandlordCustomerId-index", "LandlordCustomerId"),
+            // "Everywhere I am the tenant."
+            CreateGsi("TenantCustomerId-index", "TenantCustomerId"),
+        }),
+        ["TenancyDocuments"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            // "Everything asked for on this tenancy." The only way these are read.
+            CreateGsi("TenancyId-index", "TenancyId"),
+        }),
+        ["TenancyFees"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            CreateGsi("TenancyId-index", "TenancyId"),
+        }),
+        ["PayoutAccounts"] = ("Id", new List<GlobalSecondaryIndex>
+        {
+            // "Where do I pay this owner." One row per customer, so this answers
+            // with one item — but it is a GSI rather than the key because the table
+            // is keyed by Id like every other.
+            CreateGsi("CustomerId-index", "CustomerId"),
+        }),
     };
 
     public DynamoDbTableInitializer(

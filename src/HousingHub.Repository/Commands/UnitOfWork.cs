@@ -36,6 +36,14 @@ public class UnitOfWork : IUnitOfWOrk
     public IVerificationDocumentQueryRepository VerificationDocumentQueries { get; }
     public IPaymentCommandRepository PaymentCommands { get; }
     public IPaymentQueryRepository PaymentQueries { get; }
+    public ITenancyCommandRepository TenancyCommands { get; }
+    public ITenancyQueryRepository TenancyQueries { get; }
+    public ITenancyDocumentCommandRepository TenancyDocumentCommands { get; }
+    public ITenancyDocumentQueryRepository TenancyDocumentQueries { get; }
+    public ITenancyFeeCommandRepository TenancyFeeCommands { get; }
+    public ITenancyFeeQueryRepository TenancyFeeQueries { get; }
+    public IPayoutAccountCommandRepository PayoutAccountCommands { get; }
+    public IPayoutAccountQueryRepository PayoutAccountQueries { get; }
 
     public UnitOfWork(
         ICustomerAddressCommandRepository customerAddressCommands,
@@ -67,7 +75,15 @@ public class UnitOfWork : IUnitOfWOrk
         IVerificationDocumentCommandRepository verificationDocumentCommands,
         IVerificationDocumentQueryRepository verificationDocumentQueries,
         IPaymentCommandRepository paymentCommands,
-        IPaymentQueryRepository paymentQueries)
+        IPaymentQueryRepository paymentQueries,
+        ITenancyCommandRepository tenancyCommands,
+        ITenancyQueryRepository tenancyQueries,
+        ITenancyDocumentCommandRepository tenancyDocumentCommands,
+        ITenancyDocumentQueryRepository tenancyDocumentQueries,
+        ITenancyFeeCommandRepository tenancyFeeCommands,
+        ITenancyFeeQueryRepository tenancyFeeQueries,
+        IPayoutAccountCommandRepository payoutAccountCommands,
+        IPayoutAccountQueryRepository payoutAccountQueries)
     {
         CustomerAddressCommands = customerAddressCommands;
         CustomerAddressQueries = customerAddressQueries;
@@ -99,6 +115,14 @@ public class UnitOfWork : IUnitOfWOrk
         VerificationDocumentQueries = verificationDocumentQueries;
         PaymentCommands = paymentCommands;
         PaymentQueries = paymentQueries;
+        TenancyCommands = tenancyCommands;
+        TenancyQueries = tenancyQueries;
+        TenancyDocumentCommands = tenancyDocumentCommands;
+        TenancyDocumentQueries = tenancyDocumentQueries;
+        TenancyFeeCommands = tenancyFeeCommands;
+        TenancyFeeQueries = tenancyFeeQueries;
+        PayoutAccountCommands = payoutAccountCommands;
+        PayoutAccountQueries = payoutAccountQueries;
     }
 
     public Task SaveAsync()

@@ -832,4 +832,119 @@ public class InspectionCommandServiceTests
         Assert.Equal(0, result.Data);
         _unitOfWorkMock.Verify(u => u.ChatMessageCommands.InsertAsync(It.IsAny<ChatMessage>()), Times.Never);
     }
+
+    // ── CompleteInspectionAsync ──────────────────────────────────
+
+    private PropertyInspection SetupCompletableInspection()
+    {
+        var slot = DateTime.UtcNow.AddHours(-8);
+        var inspection = new PropertyInspection(CustomerId, PropertyId, slot.Date, slot.TimeOfDay, null)
+        {
+            Id = InspectionId,
+            Status = InspectionStatus.Confirmed,
+        };
+
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetByAsync(
+            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync(inspection);
+        _unitOfWorkMock.Setup(u => u.PropertyQueries.GetByAsync(
+            It.IsAny<Expression<Func<Property, bool>>>()))
+            .ReturnsAsync(CreateProperty());
+        _unitOfWorkMock.Setup(u => u.CustomerQueries.GetByAsync(
+            It.IsAny<Expression<Func<Customer, bool>>>()))
+            .ReturnsAsync(CreateCustomer(CustomerId, "Bayo", "Eze"));
+
+        return inspection;
+    }
+
+    [Fact]
+    public async Task CompleteInspectionAsync_ByTheRenter_MarksItCompleted()
+    {
+        var inspection = SetupCompletableInspection();
+
+        var result = await _sut.CompleteInspectionAsync(InspectionId, "Lovely place.", CustomerId);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal(InspectionStatus.Completed, inspection.Status);
+        Assert.Equal("Lovely place.", inspection.CompletionComment);
+    }
+
+    /// <summary>
+    /// The gate the whole feature rests on. A completed viewing is what qualifies
+    /// somebody to be chosen as a tenant, so an owner marking their own viewings
+    /// attended would let them fill a candidate list with people who never came.
+    /// </summary>
+    [Fact]
+    public async Task CompleteInspectionAsync_ByTheOwner_IsRefused()
+    {
+        var inspection = SetupCompletableInspection();
+
+        var result = await _sut.CompleteInspectionAsync(InspectionId, "They came, honest.", OwnerId);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.InspectionCompleteNotCustomer, result.Message);
+        Assert.Equal(InspectionStatus.Confirmed, inspection.Status);
+    }
+
+    [Fact]
+    public async Task CompleteInspectionAsync_ByAStranger_IsRefused()
+    {
+        var inspection = SetupCompletableInspection();
+
+        var result = await _sut.CompleteInspectionAsync(InspectionId, null, Guid.NewGuid());
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(InspectionStatus.Confirmed, inspection.Status);
+    }
+
+    [Fact]
+    public async Task CompleteInspectionAsync_TellsTheOwner()
+    {
+        SetupCompletableInspection();
+
+        await _sut.CompleteInspectionAsync(InspectionId, "Lovely place.", CustomerId);
+
+        _unitOfWorkMock.Verify(u => u.NotificationCommands.InsertAsync(
+            It.Is<Notification>(n => n.RecipientId == OwnerId
+                && n.Type == NotificationType.InspectionCompleted)), Times.Once);
+    }
+
+    /// <summary>
+    /// The comment travels with the notification: it is the only written account of
+    /// the viewing, and the owner is about to decide on the strength of it.
+    /// </summary>
+    [Fact]
+    public async Task CompleteInspectionAsync_PutsTheRentersWordsInFrontOfTheOwner()
+    {
+        SetupCompletableInspection();
+
+        await _sut.CompleteInspectionAsync(InspectionId, "The gate was locked.", CustomerId);
+
+        _unitOfWorkMock.Verify(u => u.NotificationCommands.InsertAsync(
+            It.Is<Notification>(n => n.Message.Contains("The gate was locked."))), Times.Once);
+    }
+
+    [Fact]
+    public async Task CompleteInspectionAsync_WhenAlreadyCompleted_IsRefused()
+    {
+        var inspection = SetupCompletableInspection();
+        inspection.Status = InspectionStatus.Completed;
+
+        var result = await _sut.CompleteInspectionAsync(InspectionId, null, CustomerId);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(ResponseMessages.InspectionCannotComplete, result.Message);
+    }
+
+    [Fact]
+    public async Task CompleteInspectionAsync_WhenNotFound_Fails()
+    {
+        _unitOfWorkMock.Setup(u => u.PropertyInspectionQueries.GetByAsync(
+            It.IsAny<Expression<Func<PropertyInspection, bool>>>()))
+            .ReturnsAsync((PropertyInspection?)null);
+
+        var result = await _sut.CompleteInspectionAsync(Guid.NewGuid(), null, CustomerId);
+
+        Assert.False(result.IsSuccessful);
+    }
 }

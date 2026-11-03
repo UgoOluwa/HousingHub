@@ -28,7 +28,20 @@ looking for a feature they believe already exists.
 | Worker | Schedule | Endpoint |
 |---|---|---|
 | Inspection reminders | Every 30 min | `POST /api/Internal/inspection-reminders/run` |
+| Inspection follow-ups | Every 6 hours | `POST /api/Internal/inspection-followups/run` |
 | Verification maintenance | Daily, 06:07 UTC | `POST /api/Internal/verification-expiry/run` |
+
+**The follow-up worker is what makes a viewing count.** Nothing downstream moves
+until somebody says the viewing happened — an owner cannot choose a tenant from an
+inspection that only ever reached `Confirmed` — and the renter is the only party who
+both booked it and knows. This asks them once, six hours after the slot, and closes
+the booking as `Expired` if they have not answered in seven days.
+
+It deliberately ignores anything whose slot passed more than a fortnight ago. **On
+the first run there is a backlog of confirmed inspections going back months**, and
+neither emailing all of them nor quietly closing them is a call a worker should make
+by itself. Decide what to do with that backlog before or after the first run; the
+worker will not touch it either way.
 
 Both are idempotent. Inspections are reminded once each; a case already expired
 is skipped; a reminder threshold already sent is not sent again. So a duplicate

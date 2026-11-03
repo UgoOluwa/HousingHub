@@ -44,6 +44,14 @@ public static class ConfigureServices
         services.AddScoped<IVerificationDocumentQueryRepository, VerificationDocumentQueryRepository>();
         services.AddScoped<IPaymentCommandRepository, PaymentCommandRepository>();
         services.AddScoped<IPaymentQueryRepository, PaymentQueryRepository>();
+        services.AddScoped<ITenancyCommandRepository, TenancyCommandRepository>();
+        services.AddScoped<ITenancyQueryRepository, TenancyQueryRepository>();
+        services.AddScoped<ITenancyDocumentCommandRepository, TenancyDocumentCommandRepository>();
+        services.AddScoped<ITenancyDocumentQueryRepository, TenancyDocumentQueryRepository>();
+        services.AddScoped<ITenancyFeeCommandRepository, TenancyFeeCommandRepository>();
+        services.AddScoped<ITenancyFeeQueryRepository, TenancyFeeQueryRepository>();
+        services.AddScoped<IPayoutAccountCommandRepository, PayoutAccountCommandRepository>();
+        services.AddScoped<IPayoutAccountQueryRepository, PayoutAccountQueryRepository>();
 
         return services;
     }

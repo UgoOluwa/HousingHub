@@ -68,6 +68,16 @@ public class PaystackPaymentGateway : IPaymentGateway
     /// </remarks>
     public bool IsConfigured => !string.IsNullOrWhiteSpace(_secretKey);
 
+    /// <summary>
+    /// Paystack's test keys are prefixed <c>sk_test_</c> and its live keys
+    /// <c>sk_live_</c>, so the credential states which world it operates in.
+    /// </summary>
+    /// <remarks>
+    /// An unset key is not test mode. It is no mode at all, and reading it as test
+    /// would mean a misconfigured production environment quietly relaxed its checks.
+    /// </remarks>
+    public bool IsTestMode => _secretKey.StartsWith("sk_test_", StringComparison.Ordinal);
+
     public async Task<GatewayInitialisation> InitialiseAsync(
         GatewayChargeRequest request,
         CancellationToken cancellationToken = default)
@@ -90,6 +100,17 @@ public class PaystackPaymentGateway : IPaymentGateway
                 currency = request.Currency,
                 callback_url = request.CallbackUrl,
                 metadata = request.Metadata,
+
+                // Null on everything that is not a split, and Paystack ignores the
+                // fields when they are. subaccount names the destination;
+                // transaction_charge is the flat amount we keep out of it.
+                subaccount = request.SubaccountCode,
+                transaction_charge = request.PlatformChargeKobo,
+
+                // Our own share bears the provider's fee, which is where the
+                // tenant's contribution to it already sits — so the owner receives
+                // the rent in full rather than net of a deduction they never agreed.
+                bearer = request.SubaccountCode is null ? null : "account",
             };
 
             using var response = await _http.PostAsJsonAsync("transaction/initialize", body, JsonOptions, cancellationToken);
@@ -150,6 +171,149 @@ public class PaystackPaymentGateway : IPaymentGateway
             return null;
         }
     }
+
+    public async Task<IReadOnlyList<GatewayBank>> ListBanksAsync(CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured) return [];
+
+        try
+        {
+            using var response = await _http.GetAsync(
+                "bank?country=nigeria&currency=NGN&perPage=100", cancellationToken);
+
+            var payload = await response.Content
+                .ReadFromJsonAsync<PaystackEnvelope<List<BankData>>>(JsonOptions, cancellationToken);
+
+            if (!response.IsSuccessStatusCode || payload?.Data is null)
+            {
+                _logger.LogError("Paystack bank list failed: {StatusCode} {Message}",
+                    (int)response.StatusCode, payload?.Message);
+                return [];
+            }
+
+            return payload.Data
+                .Where(b => !string.IsNullOrWhiteSpace(b.Name) && !string.IsNullOrWhiteSpace(b.Code))
+                .Select(b => new GatewayBank(b.Name, b.Code))
+                .OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Paystack bank list threw");
+            return [];
+        }
+    }
+
+    public async Task<GatewayAccountName> ResolveAccountNameAsync(
+        string accountNumber, string bankCode, CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured)
+            return GatewayAccountName.Failed("Payouts are not configured on this environment.");
+
+        try
+        {
+            using var response = await _http.GetAsync(
+                $"bank/resolve?account_number={Uri.EscapeDataString(accountNumber)}"
+                + $"&bank_code={Uri.EscapeDataString(bankCode)}",
+                cancellationToken);
+
+            var payload = await response.Content
+                .ReadFromJsonAsync<PaystackEnvelope<ResolveData>>(JsonOptions, cancellationToken);
+
+            if (!response.IsSuccessStatusCode || payload is null || !payload.Status || payload.Data is null)
+            {
+                // Paystack says "Could not resolve account name. Check parameters or
+                // try again." for a wrong number, which is both true and useful, so
+                // it is passed through rather than replaced.
+                _logger.LogWarning(
+                    "Paystack could not resolve an account: {StatusCode} {Message}",
+                    (int)response.StatusCode, payload?.Message);
+
+                return GatewayAccountName.Failed(
+                    Explain("We couldn't find that account. Check the number and the bank, then try again.",
+                        payload?.Message));
+            }
+
+            return new GatewayAccountName(true, payload.Data.AccountName, null);
+        }
+        catch (Exception ex)
+        {
+            // Never logs the account number: it identifies a bank account and the
+            // call is retried from the screen anyway.
+            _logger.LogError(ex, "Paystack account resolution threw for bank {BankCode}", bankCode);
+            return GatewayAccountName.Failed("We couldn't check that account just now. Please try again.");
+        }
+    }
+
+    public async Task<GatewaySubaccount> CreateSubaccountAsync(
+        string businessName,
+        string bankCode,
+        string accountNumber,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured)
+            return GatewaySubaccount.Failed("Payouts are not configured on this environment.");
+
+        try
+        {
+            var body = new
+            {
+                business_name = businessName,
+                settlement_bank = bankCode,
+                account_number = accountNumber,
+                // Zero, deliberately. What we keep is sent per transaction, because
+                // the commission is a share of the rent and the fees differ on every
+                // let — a percentage fixed here would be a number chosen before it
+                // could be known.
+                percentage_charge = 0,
+            };
+
+            using var response = await _http.PostAsJsonAsync("subaccount", body, JsonOptions, cancellationToken);
+
+            var payload = await response.Content
+                .ReadFromJsonAsync<PaystackEnvelope<SubaccountData>>(JsonOptions, cancellationToken);
+
+            if (!response.IsSuccessStatusCode || payload is null || !payload.Status
+                || string.IsNullOrWhiteSpace(payload.Data?.SubaccountCode))
+            {
+                _logger.LogError(
+                    "Paystack subaccount creation failed: {StatusCode} {Message}",
+                    (int)response.StatusCode, payload?.Message);
+
+                return GatewaySubaccount.Failed(
+                    Explain("We couldn't set that account up for payouts. Please try again.", payload?.Message));
+            }
+
+            return new GatewaySubaccount(true, payload.Data.SubaccountCode, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Paystack subaccount creation threw for bank {BankCode}", bankCode);
+            return GatewaySubaccount.Failed("We couldn't set that account up for payouts. Please try again.");
+        }
+    }
+
+    /// <summary>
+    /// The provider's own reason, but only on a test credential.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Paystack's messages describe the request, not the credential, so they are
+    /// safe to log — but they are written for whoever built the integration, not
+    /// for the person who typed an account number. In production the owner gets our
+    /// sentence and the detail goes to the log.
+    /// </para>
+    /// <para>
+    /// On a test key that trade is the wrong way round. There is no owner, only a
+    /// developer, and sending them to CloudWatch to read one line is how an
+    /// afternoon disappears — which is exactly what happened to the first person to
+    /// try a subaccount on the simulated bank.
+    /// </para>
+    /// </remarks>
+    private string Explain(string ours, string? theirs) =>
+        IsTestMode && !string.IsNullOrWhiteSpace(theirs)
+            ? $"{ours} (Paystack said: {theirs})"
+            : ours;
 
     public async Task<GatewayRefund> RefundAsync(
         string transactionReference,
@@ -285,6 +449,19 @@ public class PaystackPaymentGateway : IPaymentGateway
         };
 
     private sealed record PaystackEnvelope<T>(bool Status, string? Message, T? Data);
+
+    private sealed record BankData(string Name, string Code);
+
+    // Paystack answers in snake_case and the serializer is configured for camelCase,
+    // so every multi-word field has to be named explicitly. A field that is not
+    // deserialises as null and the call looks like it succeeded with nothing in it,
+    // which is exactly how account resolution shipped broken.
+    private sealed record ResolveData(
+        [property: JsonPropertyName("account_name")] string? AccountName,
+        [property: JsonPropertyName("account_number")] string? AccountNumber);
+
+    private sealed record SubaccountData(
+        [property: JsonPropertyName("subaccount_code")] string? SubaccountCode);
 
     private sealed record InitialiseData(
         [property: JsonPropertyName("authorization_url")] string AuthorizationUrl,

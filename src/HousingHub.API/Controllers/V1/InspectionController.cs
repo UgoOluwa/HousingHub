@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Asp.Versioning;
 using HousingHub.Application.Commons.Bases;
 using HousingHub.Application.Inspection.Commands.Cancel;
+using HousingHub.Application.Inspection.Commands.Complete;
 using HousingHub.Application.Inspection.Commands.HandOff;
 using HousingHub.Application.Inspection.Commands.Reschedule;
 using HousingHub.Application.Inspection.Commands.Respond;
@@ -110,6 +111,27 @@ public class InspectionController : ControllerBase
     [HttpPut("{id:guid}/reschedule")]
     [ProducesResponseType(typeof(BaseResponse<InspectionDto?>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Reschedule(Guid id, RescheduleInspectionCommand command)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId == null) return Unauthorized();
+
+        var enrichedCommand = command with { InspectionId = id, AuthenticatedUserId = userId.Value };
+        var response = await _mediator.Send(enrichedCommand);
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// The renter confirms the viewing went ahead, optionally with a note.
+    /// </summary>
+    /// <remarks>
+    /// The renter alone. The owner is a participant on this inspection and must not
+    /// be able to mark their own viewings attended — a completed viewing is what
+    /// qualifies somebody to be chosen as a tenant, so self-certifying it is the
+    /// whole of the gate.
+    /// </remarks>
+    [HttpPut("{id:guid}/complete")]
+    [ProducesResponseType(typeof(BaseResponse<InspectionDto?>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Complete(Guid id, CompleteInspectionCommand command)
     {
         var userId = GetAuthenticatedUserId();
         if (userId == null) return Unauthorized();

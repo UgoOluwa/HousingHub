@@ -41,6 +41,12 @@ on:
     # Verification maintenance: daily at 06:07 UTC (07:07 WAT), so the email
     # arrives at the start of the working day rather than overnight.
     - cron: '7 6 * * *'
+    # Inspection follow-ups: four times a day, at 07:17 / 13:17 / 19:17 WAT. Until
+    # somebody says a viewing happened an owner cannot choose a tenant from it, so
+    # a renter who forgets blocks the property as surely as one who never came.
+    # Spread through the day rather than overnight, because the first thing the
+    # email asks for is an answer.
+    - cron: '17 6,12,18 * * *'
 
   # Manual trigger, for testing the wiring without waiting for a schedule and for
   # catching up after an outage.
@@ -54,6 +60,7 @@ on:
         options:
           - verification-expiry
           - inspection-reminders
+          - inspection-followups
       target:
         description: 'Which environment to run against'
         required: true
@@ -84,6 +91,8 @@ jobs:
             echo "path=${{ inputs.worker }}" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.schedule }}" = "7 6 * * *" ]; then
             echo "path=verification-expiry" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "17 6,12,18 * * *" ]; then
+            echo "path=inspection-followups" >> "$GITHUB_OUTPUT"
           else
             echo "path=inspection-reminders" >> "$GITHUB_OUTPUT"
           fi

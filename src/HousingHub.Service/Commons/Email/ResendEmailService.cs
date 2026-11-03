@@ -213,6 +213,77 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(recipientEmail, $"Reminder: Inspection for {propertyTitle} in 24 hours", text, html);
     }
 
+    public async Task<bool> SendInspectionCompletionFollowUpAsync(
+        string customerEmail, string customerName, string propertyTitle,
+        DateTime scheduledDate, TimeSpan scheduledTime, Guid inspectionId, int daysUntilItCloses)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        string body = $"""
+            {P($"Hi {customerName},")}
+            {P($"You had a viewing booked for <strong style=\"color:{Ink};\">{propertyTitle}</strong>. Did it go ahead?")}
+            {DetailRow("Property", propertyTitle)}
+            {DetailRow("Was booked for", $"{scheduledDate:dddd, d MMMM yyyy} &middot; {scheduledTime:hh\\:mm}")}
+            {P("Telling us takes a moment, and it is what lets the owner put you forward for the property. You can add a note about how it went at the same time.")}
+            {Button("Yes, the viewing happened", $"{baseUrl}/inspections/{inspectionId}")}
+            {Callout("If it didn't happen", $"You do not need to do anything. We will close this booking in {daysUntilItCloses} days, and you are free to book another viewing whenever you like.")}
+            """;
+
+        string html = WrapInLayout("Did your viewing happen?", body, Hero("&#127968;", "Did your viewing happen?"));
+        string text = $"Hi {customerName}, did your viewing of {propertyTitle} on {scheduledDate:yyyy-MM-dd} go ahead? Tell us at {baseUrl}/inspections/{inspectionId} — it is what lets the owner put you forward. If it did not happen, do nothing and we will close it in {daysUntilItCloses} days.";
+
+        return await SendAsync(customerEmail, $"Did your viewing of {propertyTitle} happen?", text, html);
+    }
+
+    public async Task<bool> SendTenancyPaidToOwnerAsync(
+        string ownerEmail, string ownerName, string tenantName, string propertyTitle,
+        long receivedKobo, Guid tenancyId)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        string body = $"""
+            {P($"Hi {ownerName},")}
+            {P($"<strong style=\"color:{Ink};\">{tenantName}</strong> has paid for <strong style=\"color:{Ink};\">{propertyTitle}</strong>. The let is now running.")}
+            {DetailRow("On its way to you", Naira(receivedKobo))}
+            {P("That is the rent and your own fees in full. It goes straight from your tenant to the account you gave us — we never hold it — and your bank usually shows it the next working day.")}
+            {Button("View the tenancy", $"{baseUrl}/tenancies/{tenancyId}")}
+            """;
+
+        string html = WrapInLayout("You have been paid", body, Hero("&#127881;", "You have been paid"));
+        string text = $"Hi {ownerName}, {tenantName} has paid for {propertyTitle}. {Naira(receivedKobo)} is on its way to your account — the rent and your fees in full. See it at {baseUrl}/tenancies/{tenancyId}.";
+
+        return await SendAsync(ownerEmail, $"You've been paid for {propertyTitle}", text, html);
+    }
+
+    public async Task<bool> SendInspectionCompletedToOwnerAsync(
+        string ownerEmail, string ownerName, string customerName, string propertyTitle,
+        Guid propertyId, string? comment)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        // The renter's own words, when they left any. It is the only written account
+        // of the viewing, and the owner is about to decide whether to offer them the
+        // property on the strength of it.
+        string note = string.IsNullOrWhiteSpace(comment)
+            ? string.Empty
+            : Callout($"What {customerName} said", comment);
+
+        string body = $"""
+            {P($"Hi {ownerName},")}
+            {P($"<strong style=\"color:{Ink};\">{customerName}</strong> has confirmed that their viewing of <strong style=\"color:{Ink};\">{propertyTitle}</strong> went ahead.")}
+            {note}
+            {P("You can now put them forward for the property if you want to. Nothing happens until you do.")}
+            {Button("Choose a tenant", $"{baseUrl}/properties/{propertyId}/tenancy")}
+            """;
+
+        string html = WrapInLayout("A viewing has been confirmed", body, Hero("&#9989;", "Viewing confirmed"));
+        string text = $"Hi {ownerName}, {customerName} has confirmed their viewing of {propertyTitle} went ahead."
+            + (string.IsNullOrWhiteSpace(comment) ? "" : $" They said: {comment}")
+            + $" You can put them forward at {baseUrl}/properties/{propertyId}/tenancy.";
+
+        return await SendAsync(ownerEmail, $"{customerName} confirmed their viewing of {propertyTitle}", text, html);
+    }
+
     public async Task<bool> SendAdminOtpAsync(string toEmail, string firstName, string otpCode)
     {
         string body = $"""
@@ -762,5 +833,69 @@ internal sealed class ResendEmailService : IEmailService
             + "within a few working days. If it hasn't arrived after ten working days, reply with the reference and we'll chase it.";
 
         return await SendAsync(toEmail, "Your Housing Hub Refund", text, html);
+    }
+
+    // ── Tenancies ───────────────────────────────────────────────
+
+    public async Task<bool> SendTenancyCandidateSelectedAsync(
+        string toEmail,
+        string firstName,
+        string propertyTitle,
+        long agreedRentKobo)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        string body = $"""
+            {P($"Hi {firstName},")}
+            {P($"Good news &mdash; the owner of <strong>{propertyTitle}</strong> has chosen you.")}
+            {DetailRow("Property", propertyTitle)}
+            {DetailRow("Rent", Naira(agreedRentKobo))}
+            {P("Nothing is agreed yet. The next step is the paperwork: the owner will send you the documents they need, and you'll see every cost in full before you're asked to sign or pay anything.")}
+            {P("<strong>We will never ask you to pay rent or a deposit by email, phone call or bank transfer.</strong> Everything happens on the Housing Hub website. If anyone contacts you asking for money another way, it isn't us &mdash; please report it.")}
+            {Button("View your property", $"{baseUrl}/dashboard")}
+            """;
+
+        string html = WrapInLayout("You've been chosen for a property", body, Hero("&#127969;", "You've been chosen"));
+
+        string text =
+            $"Hi {firstName}, the owner of {propertyTitle} has chosen you. Rent is {agreedRentKobo / 100m:N2} NGN. "
+            + "Nothing is agreed yet \u2014 the owner will send the documents they need next, and you will see every cost "
+            + "before signing or paying. We never ask for payment by email, phone or bank transfer.";
+
+        return await SendAsync(toEmail, "You've Been Chosen For A Property", text, html);
+    }
+
+    public async Task<bool> SendTenancyDocumentsRequestedAsync(
+        string toEmail,
+        string firstName,
+        string propertyTitle,
+        int documentCount,
+        long totalKobo)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        string what = documentCount == 1
+            ? "a document to complete"
+            : $"{documentCount} documents to complete";
+
+        string body = $"""
+            {P($"Hi {firstName},")}
+            {P($"The owner of <strong>{propertyTitle}</strong> has sent you {what}.")}
+            {DetailRow("Total to pay, once everything is agreed", Naira(totalKobo))}
+            {P("That total is the rent plus every fee the owner has listed, each one named and explained in the app. <strong>Check it before you sign anything</strong> &mdash; you won't be asked to pay until all the paperwork is agreed, and nothing will be added after this.")}
+            {P("Some documents you upload yourself; some you sign. Anything that can't be signed online you can download, sign on paper and send back.")}
+            {P("<strong>We will never ask you to pay by email, phone call or bank transfer.</strong> Payment happens on the Housing Hub website and nowhere else.")}
+            {Button("Open your documents", $"{baseUrl}/dashboard")}
+            """;
+
+        string html = WrapInLayout("Your documents are ready", body, Hero("&#128196;", "Your documents are ready"));
+
+        string text =
+            $"Hi {firstName}, the owner of {propertyTitle} has sent you {what}. "
+            + $"The total once everything is agreed is {totalKobo / 100m:N2} NGN, which is the rent plus every fee the owner listed. "
+            + "You will not be asked to pay until all the paperwork is agreed. "
+            + "We never ask for payment by email, phone or bank transfer.";
+
+        return await SendAsync(toEmail, "Your Housing Hub Documents Are Ready", text, html);
     }
 }

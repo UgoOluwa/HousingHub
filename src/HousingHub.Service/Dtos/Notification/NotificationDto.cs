@@ -11,4 +11,5 @@ public record NotificationDto(
     string Title,
     string Message,
     bool IsRead,
-    Guid? PropertyId = null);
+    Guid? PropertyId = null,
+    Guid? TenancyId = null);

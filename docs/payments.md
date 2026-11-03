@@ -27,6 +27,120 @@ renter side — affordability at shortlist — is Phase 4.
 
 ---
 
+## Verified against Paystack's documentation
+
+Read 31 Oct 2026. Their docs refuse automated fetching, so this was read in a
+browser — recorded here so the next person does not have to.
+
+**Split parameters, on `transaction/initialize`:**
+
+- `subaccount` — the destination that owns the payment.
+- `transaction_charge` — *"An amount used to override the split configuration for a
+  single split payment. If set, the amount specified goes to the main account
+  regardless of the split configuration."* Exactly how we use it: a flat figure in
+  kobo that we keep, with the remainder going to the owner.
+- `bearer` — *"Allowed values are: account or subaccount (defaults to account)."*
+  We send `account`, which is both valid and the default. Explicit anyway, because
+  the owner receiving rent net of a fee they never agreed to would be a quiet bug.
+- `percentage_charge` on the subaccount is *"the percentage the main account
+  receives"*, not the subaccount's share. We set zero and decide per transaction.
+
+**Creating a subaccount does not absolve us of checking the account.** Paystack's
+split guide says plainly: *"Please endeavour to verify that the bank account details
+matches what you intended. Paystack won't be liable for payouts to the wrong bank
+account."* The explicit `bank/resolve` before creation is ours to keep, whatever the
+creation endpoint happens to validate today.
+
+The prose and the sample disagree on the field name — the parameter table says
+`bank_code`, the cURL example says `settlement_bank`. We send `settlement_bank`,
+which works.
+
+**Webhooks:** `x-paystack-signature`, HMAC SHA512 over the payload signed with the
+secret key; return 200 OK. Retries are every 3 minutes for 4 tries then hourly for
+72 hours in live mode, and hourly for 10 hours with a 30-second timeout in test.
+There is a Webhook Events API that lists past deliveries and **resends** them, which
+is the first thing to reach for when a dev event goes missing.
+
+Paystack sends only from `52.31.139.75`, `52.49.173.169` and `52.214.14.220`, and
+*"the IP addresses listed above are applicable to both test and live"* — which makes
+the allowlisting the pen test asked for cheap to do.
+
+**Fees** are as configured: 1.5% + ₦100, the ₦100 waived under ₦2,500, capped at
+₦2,000.
+
+**Test card** (no validation, reusable): `4084 0840 8408 4081`, expiry `10/27`,
+CVV `408`.
+
+**A documented Nigerian test bank account** exists for transfer recipients — Zenith,
+code `057`, number `0000000000`. Whether a subaccount accepts it is untested.
+
+## Testing payout accounts
+
+Paystack's account-resolution endpoint works on a **test** secret key, with two
+limits worth knowing before you lose an afternoon to them:
+
+- **Three live bank resolves per day.** Exceeding it returns
+  `"Test mode daily limit of 3 live bank resolves exceeded"` — an `api_error`, not a
+  bad-account error, so it surfaces to the owner as "we couldn't find that account"
+  and looks exactly like a wrong account number.
+- **Bank code `001` resolves without counting against that limit.** The name it
+  returns is Paystack's, not yours, so it will fail our name match — which is the
+  matcher working, not a bug. Use it to exercise the plumbing; use a real account of
+  your own to test a successful save.
+
+Saving an account costs one resolve. Checking it first costs another, which is why
+checking is optional rather than a required first step.
+
+### Why there is no simulated bank
+
+There was one briefly. Paystack's test bank code `001` resolves an account name
+without counting against the daily limit, which looked like a way to walk the payout
+flow with no real bank account — so a dev-only dropdown entry skipped the name check
+for it.
+
+It does not work. **Creating a subaccount with `001` is refused** — `"Account
+details are invalid"` — because Paystack verifies the account as part of creating a
+payout destination, and `001` has no real account behind it. Resolution is the only
+thing that code supports.
+
+Stubbing the subaccount instead would be worse: a made-up `subaccount_code` is
+rejected at `transaction/initialize`, so the flow would get all the way to checkout
+before failing, further from the cause.
+
+**Use a real account, once.** The `subaccount_code` it returns is the payout
+destination and outlives the lookup, so every payment after that splits without
+another resolve. The name check is forgiving about middle names the bank holds and
+we do not — see `BankAccountNameMatcher` — so an ordinary personal account passes.
+
+### Walking a split payment end to end on test keys
+
+Paystack simulates splits in test mode, so once a subaccount exists the whole thing
+works without a change: the charge carries `subaccount`, `transaction_charge` and
+`bearer`, and the test dashboard shows the division on the transaction.
+
+The order that works:
+
+1. Owner adds a payout account — the simulated bank is fine, and the subaccount it
+   creates is a real test subaccount.
+2. Tenant pays with Paystack's test card. The amount is the quote's total.
+3. On return, the app asks the gateway directly rather than waiting for the
+   webhook — see `POST /api/v1/Payment/{reference}/reconcile`. Both routes settle
+   through the same path, so whichever lands second changes nothing.
+4. The tenancy turns Active, the tenant's receipt appears under Payments, and the
+   split shows on the admin tenancy screen and in the Finance report.
+
+**If the webhook is not configured on the dev environment the flow still completes**,
+because of step 3. Configure it anyway — a payer who closes the tab before the
+redirect has only the webhook left.
+
+It relaxes the name check and nothing else. An unverified identity still cannot add
+a payout account, a real bank code on a test key is still checked properly, and
+every simulated match is logged at warning level.
+
+**A subaccount created with a live key is a real payout destination.** If you ever
+test with live keys, use an account you control and delete the subaccount from the
+Paystack dashboard afterwards.
+
 ## The bundling rule
 
 From the lifecycle plan, and implemented in `PaymentService.TryPrice`:

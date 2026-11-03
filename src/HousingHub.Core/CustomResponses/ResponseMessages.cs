@@ -22,16 +22,37 @@ public static class ResponseMessages
     public const string EmailAlreadyVerified = "Email is already verified.";
     public const string EmailNotVerified = "Please verify your email before logging in.";
     public const string EmailVerificationSuccess = "Email verified successfully.";
-    public const string EmailVerificationFailed = "Invalid or expired verification token.";
-    public const string PasswordResetTokenSent = "If an account with that email exists, a password reset token has been generated.";
+    /// <summary>
+    /// Covers a wrong link, an expired one and an already-used one alike.
+    /// </summary>
+    /// <remarks>
+    /// One message for all three on purpose — telling somebody which it was tells
+    /// anybody who asks which addresses are registered. The action is the same in
+    /// every case, so the sentence names the action.
+    /// </remarks>
+    public const string EmailVerificationFailed = "That link has expired or has already been used. Sign in and we'll send you a new one.";
+    /// <summary>
+    /// Says the same thing whether the address is registered, not registered, or
+    /// asked a moment ago — the three cases this endpoint must not distinguish.
+    /// </summary>
+    /// <remarks>
+    /// The second sentence earns its place: a second request inside the cooldown
+    /// sends no new email, so somebody waiting for one needs to know the link they
+    /// already have is the one to use.
+    /// </remarks>
+    public const string PasswordResetTokenSent = "If that email is registered, we've sent a link to it. If you asked a moment ago, use the link we already sent — it's still the right one.";
     public const string PasswordResetSuccess = "Password reset successfully.";
-    public const string PasswordResetFailed = "Invalid or expired reset token.";
+    /// <summary>
+    /// The commonest cause is an older email: asking for a second link retires the
+    /// first, so the newest message in the inbox is the one that works.
+    /// </summary>
+    public const string PasswordResetFailed = "This link has expired, has already been used, or has been replaced by a newer one. Check for a more recent email, or ask for a new link.";
     public const string PasswordChangeSuccess = "Password changed successfully.";
     public const string CurrentPasswordIncorrect = "Current password is incorrect.";
-    public const string GoogleSignInFailed = "Google sign-in failed. Invalid token.";
-    public const string InvalidRefreshToken = "Invalid or expired refresh token. Please log in again.";
+    public const string GoogleSignInFailed = "We couldn't sign you in with Google. Please try again.";
+    public const string InvalidRefreshToken = "Your session has ended. Please sign in again.";
     public const string OtpSent = "If that email is registered, a login code has been sent.";
-    public const string OtpInvalidOrExpired = "Invalid or expired code. Please check the code or request a new one.";
+    public const string OtpInvalidOrExpired = "That code is wrong or has expired. Check it again, or ask for a new one.";
     public const string OtpTooManyAttempts = "Too many incorrect attempts. Please request a new code.";
     public const string AccountUsesGoogleAuth = "This account uses Google sign-in. Please use Google to log in.";
     public const string AccountUsesLocalAuth = "This account uses email/password sign-in. Please log in with your password.";
@@ -88,6 +109,37 @@ public static class ResponseMessages
     public const string PaymentCouldNotStart = "We couldn't start that payment. Please try again.";
     public const string PaymentAlreadySettled = "This has already been paid for.";
     public const string PaymentCaseNotPayable = "This verification request isn't awaiting payment.";
+
+    // ── Tenancies ────────────────────────────────────────────────
+
+    public const string TenancyCandidateNotInspected = "You can only choose someone who has completed an inspection for this property.";
+    public const string TenancyAlreadyLive = "You've already chosen someone for this property. Withdraw that first if you want to pick somebody else.";
+    public const string TenancyPriceNotSet = "Set a price on this listing before choosing a tenant — it's what the agreement and the payment are based on.";
+    public const string TenancyNotCancellable = "This can no longer be cancelled from here.";
+    public const string TenancyCandidateSelected = "Chosen. We've let them know, and the listing is now marked under offer.";
+    public const string TenancyWithdrawn = "Withdrawn. The listing is available again and we've told them.";
+    public const string TenancyDeclined = "You've let them know you're not going ahead.";
+
+    // ── Tenancy documents ────────────────────────────────────────
+
+    public const string TenancyNotComposing = "This request has already been sent. You can't change what's being asked for.";
+    public const string TenancyAgreementRequired = "Add the tenancy agreement before sending — every let needs one.";
+    public const string TenancyOneAgreementOnly = "There can only be one tenancy agreement in a request.";
+    public const string TenancySignDocumentMissingFile = "Upload the document you want them to sign.";
+
+    public const string TenancySignDocumentUnsupportedType = "A document to be signed in the app has to be a PDF or a photo. Use 'print, sign and upload' for anything else.";
+    public const string TenancyUploadDocumentHasFile = "You don't attach a file to a document you're asking them to provide.";
+    public const string TenancyNoDocumentsRequested = "Add at least the tenancy agreement before sending.";
+    public const string TenancyDocumentNotYours = "We couldn't find that document.";
+    public const string TenancyDocumentNotAwaitingYou = "That document isn't waiting on you.";
+    public const string TenancyDocumentNotAwaitingReview = "That document isn't waiting for a decision.";
+    public const string TenancyRejectionReasonRequired = "Give a reason. It's the only thing telling them what to change.";
+    public const string TenancyCannotESignThisLease = "A lease of this kind can't be signed electronically in Nigeria. Ask them to download it, sign it and send it back.";
+    public const string TenancyDocumentsSent = "Sent. They've been emailed and can start straight away.";
+    public const string TenancyDocumentSubmitted = "Sent to the owner for review.";
+    public const string TenancyDocumentAccepted = "Accepted.";
+    public const string TenancyDocumentRejected = "Sent back with your reason.";
+    public const string TenancyAllDocumentsAccepted = "Everything's agreed. The next step is payment.";
 
     // Refunds. Shown to staff rather than customers, so these can name the actual
     // obstacle — an admin who is told "something went wrong" cannot act on it.
@@ -182,6 +234,49 @@ public static class ResponseMessages
     public const string InspectionCannotCancel = "Completed or already cancelled inspections can't be cancelled.";
 
     /// <summary>Worker summary. Pluralised properly rather than emitting "reminder(s)".</summary>
+    // ── Payout accounts ──────────────────────────────────────────
+
+    public const string PayoutAccountSaved = "Saved. Rent for your properties will be paid into this account.";
+
+    /// <summary>
+    /// Names what is wrong and what to do, without saying whose account it is.
+    /// </summary>
+    /// <remarks>
+    /// The resolved name is deliberately absent. Somebody probing account numbers
+    /// would otherwise get a name lookup out of a refusal, which is a directory of
+    /// account holders built one guess at a time.
+    /// </remarks>
+    public const string PayoutAccountNameMismatch = "That account isn't in your name. Rent can only be paid into an account belonging to the verified account holder — use one of your own, or update your name with us if it has changed.";
+
+    /// <summary>
+    /// The bank answered without a name on it.
+    /// </summary>
+    /// <remarks>
+    /// Its own message rather than the generic one, because "something went wrong
+    /// on our end" sent somebody hunting a server fault when the answer was that
+    /// the provider had returned a shape we were not reading.
+    /// </remarks>
+    public const string PayoutAccountNameUnavailable = "The bank didn't give us a name for that account. Check the number and the bank, then try again.";
+
+    public const string PayoutAccountNeedsIdentity = "Verify your identity before adding a payout account. We check that the account belongs to you, and we can't do that until we know who you are.";
+
+    public const string TenancyNotPayable = "This tenancy isn't ready to be paid for. Every document has to be accepted first.";
+
+    public const string PayoutAccountRequired = "The owner hasn't set up an account to be paid into yet. We've let them know.";
+
+    public const string InspectionCompleted = "Thanks — we've told the owner the viewing went ahead.";
+
+    /// <summary>
+    /// Names the three ways this can be refused rather than saying "can't do that",
+    /// because the renter can act on two of them.
+    /// </summary>
+    public const string InspectionCannotComplete = "Only a confirmed viewing can be marked as done, and not before the day it's booked for. If this one was cancelled or has already closed, book another.";
+
+    public const string InspectionCompleteNotCustomer = "Only the person who booked the viewing can say it happened.";
+
+    public static string InspectionFollowUpsRun(int asked, int expired) =>
+        $"Asked {asked} renter{(asked == 1 ? "" : "s")} whether their viewing happened; closed {expired} that were never answered.";
+
     public static string InspectionRemindersSent(int count) =>
         count == 1 ? "Sent 1 inspection reminder." : $"Sent {count} inspection reminders.";
 

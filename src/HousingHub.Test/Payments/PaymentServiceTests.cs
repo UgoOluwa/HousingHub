@@ -82,6 +82,10 @@ public class PaymentServiceTests
         return new PaymentServiceImpl(
             _unitOfWork.Object,
             _gateway.Object,
+            // The real one, not a stub: these tests already assert which callback
+            // URLs survive, and that rule is the point of the class.
+            new PaymentCallbackUrlResolver(
+                configuration, NullLogger<PaymentCallbackUrlResolver>.Instance),
             new PaymentFeeCatalogue(configuration),
             _email.Object,
             configuration,

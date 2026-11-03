@@ -45,5 +45,84 @@ public enum NotificationType
     /// it drops is telling them too late.
     /// </summary>
     [Description("Verification Expiring Soon")]
-    VerificationExpiringSoon = 10
+    VerificationExpiringSoon = 10,
+
+    /// <summary>
+    /// An owner has chosen this person for a property.
+    /// </summary>
+    /// <remarks>
+    /// The one notification in this list that changes somebody's housing situation,
+    /// so it goes out in-app and by email rather than relying on them opening the app.
+    /// </remarks>
+    [Description("Selected For Property")]
+    TenancyCandidateSelected = 11,
+
+    /// <summary>The owner pulled out before the let completed.</summary>
+    [Description("Selection Withdrawn")]
+    TenancyWithdrawn = 12,
+
+    /// <summary>The candidate is no longer interested. Sent to the owner.</summary>
+    [Description("Candidate Declined")]
+    TenancyDeclinedByCandidate = 13,
+
+    /// <summary>The owner has sent the documents they need. Emailed as well.</summary>
+    [Description("Documents Requested")]
+    TenancyDocumentsRequested = 14,
+
+    /// <summary>The tenant has returned or signed a document. Sent to the owner.</summary>
+    [Description("Document Submitted")]
+    TenancyDocumentSubmitted = 15,
+
+    /// <summary>The owner accepted a document.</summary>
+    [Description("Document Accepted")]
+    TenancyDocumentAccepted = 16,
+
+    /// <summary>
+    /// The owner sent a document back.
+    /// </summary>
+    /// <remarks>
+    /// Held apart from an acceptance because it is the one the tenant has to act on,
+    /// and the reason travels with it.
+    /// </remarks>
+    [Description("Document Returned")]
+    TenancyDocumentRejected = 17,
+
+    /// <summary>Every document has been accepted. The next step is payment.</summary>
+    [Description("Documents Complete")]
+    TenancyDocumentsComplete = 18,
+
+    /// <summary>
+    /// The renter confirmed the viewing happened. Sent to the owner.
+    /// </summary>
+    /// <remarks>
+    /// The owner's cue that they can now choose this person as a tenant, which is
+    /// why it carries any comment the renter left with it.
+    /// </remarks>
+    [Description("Inspection Completed")]
+    InspectionCompleted = 19,
+
+    /// <summary>Nobody ever said whether the viewing happened, so it was closed.</summary>
+    [Description("Inspection Expired")]
+    InspectionExpired = 20,
+
+    /// <summary>
+    /// The tenant is ready to pay and the owner has nowhere to be paid into.
+    /// </summary>
+    /// <remarks>
+    /// The one notification that tells somebody they are the obstacle. Sent to the
+    /// owner, because the tenant has done nothing wrong and can do nothing about it.
+    /// </remarks>
+    [Description("Add A Payout Account")]
+    TenancyPayoutAccountRequired = 21,
+
+    /// <summary>
+    /// The tenant has paid and the money is on its way to the owner's account.
+    /// </summary>
+    /// <remarks>
+    /// The end of the rail, and the one event in it the owner has no reason to be
+    /// watching for. Everything before this they set in motion themselves; this
+    /// happens while they are elsewhere.
+    /// </remarks>
+    [Description("You Have Been Paid")]
+    TenancyPaid = 22
 }

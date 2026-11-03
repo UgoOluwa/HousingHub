@@ -62,6 +62,7 @@ public class PaymentService : IPaymentService
 
     private readonly IUnitOfWOrk _unitOfWork;
     private readonly IPaymentGateway _gateway;
+    private readonly ICallbackUrlResolver _callbacks;
     private readonly PaymentFeeCatalogue _fees;
     private readonly IEmailService _emailService;
     private readonly IConfiguration _configuration;
@@ -70,6 +71,7 @@ public class PaymentService : IPaymentService
     public PaymentService(
         IUnitOfWOrk unitOfWork,
         IPaymentGateway gateway,
+        ICallbackUrlResolver callbacks,
         PaymentFeeCatalogue fees,
         IEmailService emailService,
         IConfiguration configuration,
@@ -77,6 +79,7 @@ public class PaymentService : IPaymentService
     {
         _unitOfWork = unitOfWork;
         _gateway = gateway;
+        _callbacks = callbacks;
         _fees = fees;
         _emailService = emailService;
         _configuration = configuration;
@@ -151,7 +154,7 @@ public class PaymentService : IPaymentService
             // Hand back an attempt already in flight rather than registering another.
             var reusable = await FindReusablePendingAttemptAsync(caseId, pricing);
             if (reusable is not null)
-                return Ok(ToDto(reusable));
+                return Ok(PaymentDto.From(reusable));
 
             var payment = new Payment(
                 reference: $"HH-{Guid.NewGuid():N}",
@@ -175,7 +178,7 @@ public class PaymentService : IPaymentService
                 AmountKobo: payment.AmountKobo,
                 CustomerEmail: customer.Email,
                 Currency: payment.Currency,
-                CallbackUrl: ResolveCallbackUrl(callbackUrl),
+                CallbackUrl: _callbacks.Resolve(callbackUrl),
                 Metadata: new Dictionary<string, string>
                 {
                     ["purpose"] = pricing.Purpose.ToString(),
@@ -195,7 +198,7 @@ public class PaymentService : IPaymentService
             await _unitOfWork.PaymentCommands.UpdateAsync(payment);
             await _unitOfWork.SaveAsync();
 
-            return Ok(ToDto(payment));
+            return Ok(PaymentDto.From(payment));
         }
         catch (Exception ex)
         {
@@ -225,11 +228,43 @@ public class PaymentService : IPaymentService
             if (payment is null || payment.CustomerId != customerId)
                 return Fail<PaymentDto>(ResponseMessages.SetNotFoundMessage("payment"));
 
-            return Ok(ToDto(payment));
+            return Ok(PaymentDto.From(payment));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error reading payment {Reference}", reference);
+            return Fail<PaymentDto>(ResponseMessages.UnexpectedError);
+        }
+    }
+
+    public async Task<BaseResponse<PaymentDto>> ReconcileAsync(Guid customerId, string reference)
+    {
+        try
+        {
+            var payment = await FindByReferenceAsync(reference);
+
+            // Same answer for "no such payment" and "somebody else's payment", as
+            // everywhere else a reference is accepted from a client.
+            if (payment is null || payment.CustomerId != customerId)
+                return Fail<PaymentDto>(ResponseMessages.SetNotFoundMessage("payment"));
+
+            // Only a payment still waiting has anything to learn from the provider.
+            // Re-asking about a settled one would spend a call to be told what we
+            // already acted on, and a refunded one would be reported as paid.
+            if (payment.Status == PaymentStatus.Pending)
+            {
+                await SettleFromGatewayAsync(payment, CancellationToken.None);
+
+                // Re-read: settling writes through the repository, and the instance
+                // above is not necessarily the one that was updated.
+                payment = await FindByReferenceAsync(reference) ?? payment;
+            }
+
+            return Ok(PaymentDto.From(payment));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reconciling payment {Reference}", reference);
             return Fail<PaymentDto>(ResponseMessages.UnexpectedError);
         }
     }
@@ -242,7 +277,7 @@ public class PaymentService : IPaymentService
 
             var dtos = payments
                 .OrderByDescending(p => p.DateCreated)
-                .Select(ToDto)
+                .Select(PaymentDto.From)
                 .ToList();
 
             return Ok(dtos);
@@ -326,6 +361,28 @@ public class PaymentService : IPaymentService
         if (handled is "refund.processed" or "refund.failed")
             return await HandleRefundEventAsync(payment, handled, rawBody);
 
+        return await SettleFromGatewayAsync(payment, cancellationToken);
+    }
+
+    /// <summary>
+    /// Asks the provider what happened, and acts on the answer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Shared by the webhook and by the reconcile a payer's own return triggers,
+    /// so the two can never settle a payment under different rules. Both routes
+    /// land on <c>TrySettle</c>, which only ever moves a payment out of Pending —
+    /// so whichever arrives second changes nothing.
+    /// </para>
+    /// <para>
+    /// Returns false only when the provider could not be reached, which is the
+    /// webhook's signal to ask for redelivery.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> SettleFromGatewayAsync(Payment payment, CancellationToken cancellationToken)
+    {
+        var reference = payment.Reference;
+
         // Re-read from the gateway rather than trusting the amount in the payload.
         // The signature proves the body came from the provider; asking the provider
         // directly is what proves it is still true and was not a replay of an
@@ -363,6 +420,12 @@ public class PaymentService : IPaymentService
                 _logger.LogInformation(
                     "Settled payment {Reference} for {AmountKobo} kobo, purpose {Purpose}, subject {SubjectId}",
                     payment.Reference, payment.AmountKobo, payment.Purpose, payment.SubjectId);
+
+                // The thing the payment was for. Before the receipt, because the
+                // receipt is a courtesy and this is the entitlement — a tenant who
+                // has paid should not be able to read their receipt while the
+                // tenancy still says it is waiting for money.
+                await FulfilAsync(payment);
 
                 // After the save, and never in front of it. The payment is the
                 // record; the receipt is a courtesy. A failing mail provider must
@@ -588,60 +651,127 @@ public class PaymentService : IPaymentService
     }
 
     /// <summary>
-    /// Accepts a client-supplied return URL only if it points at a front end we
-    /// already trust.
+    /// Hands over whatever the payment was for.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Unchecked, this is an open redirect with a payment attached. The gateway sends
-    /// the payer wherever this says once they have paid, so an attacker who can get
-    /// someone to start a payment with their URL lands that person on a page of their
-    /// choosing at the exact moment they are expecting a receipt — which is the most
-    /// credible phishing context this product has.
+    /// Only a tenancy has anything to hand over here. A verification payment is
+    /// read back by the verification service when the case is submitted, so there
+    /// is nothing for this to do — the entitlement is a question that gets asked,
+    /// not a flag that gets set.
     /// </para>
     /// <para>
-    /// Validated against <c>Cors:AllowedOrigins</c> rather than a new setting: that
-    /// list already answers "is this one of our front ends", it is required in
-    /// production, and a second list would drift from it. A URL that does not match
-    /// is dropped rather than rejected — the payment is still perfectly valid
-    /// without a return URL, and the gateway shows its own receipt page.
+    /// Swallows its own failures. The money has arrived and the payment is already
+    /// recorded as settled; throwing here would turn a successful payment into a
+    /// failed webhook that the provider then retries, and the retry would find the
+    /// payment already settled and do nothing at all.
     /// </para>
     /// </remarks>
-    private string? ResolveCallbackUrl(string? requested)
+    private async Task FulfilAsync(Payment payment)
     {
-        if (string.IsNullOrWhiteSpace(requested)) return null;
+        if (payment.Purpose != PaymentPurpose.TenancyRent || payment.SubjectId is not { } tenancyId) return;
 
-        if (!Uri.TryCreate(requested, UriKind.Absolute, out var candidate))
+        try
         {
-            _logger.LogWarning("Discarded a payment callback URL that is not absolute");
-            return null;
-        }
+            var tenancy = await _unitOfWork.TenancyQueries.GetByIdAsync(tenancyId);
 
-        if (candidate.Scheme != Uri.UriSchemeHttps && !candidate.IsLoopback)
-        {
-            _logger.LogWarning("Discarded a non-HTTPS payment callback URL");
-            return null;
-        }
-
-        var allowed = _configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
-
-        foreach (var origin in allowed)
-        {
-            if (!Uri.TryCreate(origin, UriKind.Absolute, out var trusted)) continue;
-
-            // Scheme, host and port must all match. Comparing the string prefix
-            // instead would let "https://housinghub.ng.attacker.example" through.
-            if (candidate.Scheme == trusted.Scheme
-                && string.Equals(candidate.Host, trusted.Host, StringComparison.OrdinalIgnoreCase)
-                && candidate.Port == trusted.Port)
+            if (tenancy is null)
             {
-                return requested;
+                // Paid for something that is not there. Loud, because somebody is
+                // out of pocket and no amount of retrying will fix it.
+                _logger.LogError(
+                    "Payment {Reference} settled against tenancy {TenancyId}, which does not exist",
+                    payment.Reference, tenancyId);
+                return;
+            }
+
+            if (!tenancy.TryActivate())
+            {
+                // Expected on a replay — an already-active tenancy stays active.
+                _logger.LogInformation(
+                    "Tenancy {TenancyId} was not activated by {Reference}; it is {Status}",
+                    tenancyId, payment.Reference, tenancy.Status);
+                return;
+            }
+
+            await _unitOfWork.TenancyCommands.UpdateAsync(tenancy);
+            await _unitOfWork.SaveAsync();
+
+            _logger.LogInformation(
+                "Tenancy {TenancyId} is active: {Reference} settled for {AmountKobo} kobo",
+                tenancyId, payment.Reference, payment.AmountKobo);
+
+            await NotifyOwnerPaidAsync(tenancy, payment);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not activate tenancy {TenancyId} after payment {Reference}",
+                tenancyId, payment.Reference);
+        }
+    }
+
+    /// <summary>
+    /// Tells the owner their tenant has paid.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The end of the rail, and the only event in it the owner has no reason to be
+    /// watching for — everything before this they set in motion themselves. Without
+    /// it the tenancy goes active in silence and they find out by happening to open
+    /// the app.
+    /// </para>
+    /// <para>
+    /// Reports what reached them, not what the tenant was charged. Our service
+    /// charge and the card fee were added on top and were never theirs, so the
+    /// total would overstate what lands in their bank by exactly the part we kept.
+    /// </para>
+    /// <para>
+    /// Swallows its own failures, like every other notification on a settlement
+    /// path. The money has arrived and the tenancy is already active; a mail
+    /// provider having a bad minute must not undo that.
+    /// </para>
+    /// </remarks>
+    private async Task NotifyOwnerPaidAsync(Tenancy tenancy, Payment payment)
+    {
+        try
+        {
+            var property = await _unitOfWork.PropertyQueries.GetByIdAsync(tenancy.PropertyId);
+            var owner = await _unitOfWork.CustomerQueries.GetByIdAsync(tenancy.LandlordCustomerId);
+            var tenant = await _unitOfWork.CustomerQueries.GetByIdAsync(tenancy.TenantCustomerId);
+
+            if (owner is null) return;
+
+            var propertyTitle = property?.Title ?? "your property";
+            var tenantName = tenant is null
+                ? "Your tenant"
+                : $"{tenant.FirstName} {tenant.LastName}".Trim();
+
+            // Falls back to the whole charge when nothing was split off. A payment
+            // with no recorded platform share was all theirs.
+            var received = payment.SettledToOthersKobo > 0
+                ? payment.SettledToOthersKobo
+                : payment.AmountKobo;
+
+            var notification = Notification.ForTenancy(
+                tenancy.LandlordCustomerId,
+                tenancy.Id,
+                NotificationType.TenancyPaid,
+                "You have been paid",
+                $"{tenantName} has paid for \"{propertyTitle}\". {received / 100:N0} naira is on its way to your account — the rent and your fees in full.");
+
+            await _unitOfWork.NotificationCommands.InsertAsync(notification);
+            await _unitOfWork.SaveAsync();
+
+            if (!string.IsNullOrWhiteSpace(owner.Email))
+            {
+                await _emailService.SendTenancyPaidToOwnerAsync(
+                    owner.Email, owner.FirstName, tenantName, propertyTitle, received, tenancy.Id);
             }
         }
-
-        _logger.LogWarning(
-            "Discarded a payment callback URL for untrusted origin {Origin}", candidate.GetLeftPart(UriPartial.Authority));
-        return null;
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not tell owner {OwnerId} they were paid", tenancy.LandlordCustomerId);
+        }
     }
 
     private async Task<(VerificationCase? Case, Customer? Customer, string? Error)> LoadOwnedCaseAsync(
@@ -696,24 +826,6 @@ public class PaymentService : IPaymentService
             .OrderByDescending(p => p.DateCreated)
             .FirstOrDefault();
     }
-
-    private static PaymentDto ToDto(Payment payment) => new(
-        payment.Id,
-        payment.Reference,
-        payment.Purpose,
-        payment.SubjectId,
-        payment.AmountKobo,
-        payment.PurposeFeeKobo,
-        payment.IdentityFeeKobo,
-        payment.IncludesIdentityVerification,
-        payment.Currency,
-        payment.Status,
-        payment.Channel,
-        payment.PaidAt,
-        payment.DateCreated,
-        // Only offered while the attempt is still payable — a stale gateway link on a
-        // settled or failed payment is an invitation to pay twice.
-        payment.Status == PaymentStatus.Pending ? payment.AuthorisationUrl : null);
 
     private static BaseResponse<T> Ok<T>(T data) =>
         new(data, true, string.Empty, ResponseMessages.Successful);

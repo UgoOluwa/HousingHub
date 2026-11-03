@@ -23,6 +23,42 @@ public interface IEmailService
     Task<bool> SendNewMessageAsync(string recipientEmail, string recipientName, string senderName, string messagePreview);
     /// <summary>Sent to both the owner and the customer ~24 hours before a confirmed inspection.</summary>
     Task<bool> SendInspectionReminderAsync(string recipientEmail, string recipientName, string otherPartyName, string propertyTitle, DateTime scheduledDate, TimeSpan scheduledTime);
+
+    /// <summary>
+    /// Asks the renter whether the viewing actually happened.
+    /// </summary>
+    /// <remarks>
+    /// Sent once, after the slot has passed. Nothing downstream can move until
+    /// somebody says the viewing took place, and the renter is the only party who
+    /// both booked it and knows — so this is the question the whole rail waits on.
+    /// </remarks>
+    Task<bool> SendInspectionCompletionFollowUpAsync(
+        string customerEmail, string customerName, string propertyTitle,
+        DateTime scheduledDate, TimeSpan scheduledTime, Guid inspectionId, int daysUntilItCloses);
+
+    /// <summary>
+    /// Tells the owner the viewing is confirmed done, and what they can do next.
+    /// </summary>
+    /// <remarks>
+    /// The owner has no reason to open the app at this point, and choosing a tenant
+    /// is gated on exactly this — so the nudge goes to them rather than waiting for
+    /// them to notice.
+    /// </remarks>
+    /// <summary>
+    /// Tells an owner their tenant has paid and what is on its way to them.
+    /// </summary>
+    /// <remarks>
+    /// Names what reached them rather than what the tenant was charged. Our service
+    /// charge and the card fee were added on top and were never theirs, so the
+    /// total would overstate what lands in their bank.
+    /// </remarks>
+    Task<bool> SendTenancyPaidToOwnerAsync(
+        string ownerEmail, string ownerName, string tenantName, string propertyTitle,
+        long receivedKobo, Guid tenancyId);
+
+    Task<bool> SendInspectionCompletedToOwnerAsync(
+        string ownerEmail, string ownerName, string customerName, string propertyTitle,
+        Guid propertyId, string? comment);
     /// <summary>One-time login code for the admin dashboard's OTP-only sign-in.</summary>
     Task<bool> SendAdminOtpAsync(string toEmail, string firstName, string otpCode);
     Task<bool> SendKycApprovedAsync(string toEmail, string firstName);
@@ -105,4 +141,33 @@ public interface IEmailService
         string reference,
         long amountKobo,
         string reason);
+
+    /// <summary>
+    /// Tells somebody an owner has chosen them for a property.
+    /// </summary>
+    /// <remarks>
+    /// Emailed as well as shown in-app because it is the one message in this product
+    /// that changes where somebody is going to live. Carries the rent so the figure
+    /// they were chosen at is on the record from the start.
+    /// </remarks>
+    Task<bool> SendTenancyCandidateSelectedAsync(
+        string toEmail,
+        string firstName,
+        string propertyTitle,
+        long agreedRentKobo);
+
+    /// <summary>
+    /// Tells the tenant the owner has sent the paperwork.
+    /// </summary>
+    /// <remarks>
+    /// Carries the total — rent plus every fee — because the whole point of showing
+    /// fees before signing is that nobody meets a number for the first time at the
+    /// payment step.
+    /// </remarks>
+    Task<bool> SendTenancyDocumentsRequestedAsync(
+        string toEmail,
+        string firstName,
+        string propertyTitle,
+        int documentCount,
+        long totalKobo);
 }
