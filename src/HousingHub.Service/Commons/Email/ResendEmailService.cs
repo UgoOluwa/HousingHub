@@ -235,6 +235,26 @@ internal sealed class ResendEmailService : IEmailService
         return await SendAsync(customerEmail, $"Did your viewing of {propertyTitle} happen?", text, html);
     }
 
+    public async Task<bool> SendTenancyPaidToOwnerAsync(
+        string ownerEmail, string ownerName, string tenantName, string propertyTitle,
+        long receivedKobo, Guid tenancyId)
+    {
+        string baseUrl = _configuration["Email:BaseUrl"] ?? "https://localhost";
+
+        string body = $"""
+            {P($"Hi {ownerName},")}
+            {P($"<strong style=\"color:{Ink};\">{tenantName}</strong> has paid for <strong style=\"color:{Ink};\">{propertyTitle}</strong>. The let is now running.")}
+            {DetailRow("On its way to you", Naira(receivedKobo))}
+            {P("That is the rent and your own fees in full. It goes straight from your tenant to the account you gave us — we never hold it — and your bank usually shows it the next working day.")}
+            {Button("View the tenancy", $"{baseUrl}/tenancies/{tenancyId}")}
+            """;
+
+        string html = WrapInLayout("You have been paid", body, Hero("&#127881;", "You have been paid"));
+        string text = $"Hi {ownerName}, {tenantName} has paid for {propertyTitle}. {Naira(receivedKobo)} is on its way to your account — the rent and your fees in full. See it at {baseUrl}/tenancies/{tenancyId}.";
+
+        return await SendAsync(ownerEmail, $"You've been paid for {propertyTitle}", text, html);
+    }
+
     public async Task<bool> SendInspectionCompletedToOwnerAsync(
         string ownerEmail, string ownerName, string customerName, string propertyTitle,
         Guid propertyId, string? comment)

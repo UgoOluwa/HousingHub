@@ -44,6 +44,18 @@ public interface IEmailService
     /// is gated on exactly this — so the nudge goes to them rather than waiting for
     /// them to notice.
     /// </remarks>
+    /// <summary>
+    /// Tells an owner their tenant has paid and what is on its way to them.
+    /// </summary>
+    /// <remarks>
+    /// Names what reached them rather than what the tenant was charged. Our service
+    /// charge and the card fee were added on top and were never theirs, so the
+    /// total would overstate what lands in their bank.
+    /// </remarks>
+    Task<bool> SendTenancyPaidToOwnerAsync(
+        string ownerEmail, string ownerName, string tenantName, string propertyTitle,
+        long receivedKobo, Guid tenancyId);
+
     Task<bool> SendInspectionCompletedToOwnerAsync(
         string ownerEmail, string ownerName, string customerName, string propertyTitle,
         Guid propertyId, string? comment);
